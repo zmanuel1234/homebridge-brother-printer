@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 - 2026-11-03
+
+### Changed
+- Added the `supports-hap` keyword, which Homebridge plugin verification requires.
+
 ## 0.2.1 - 2026-11-03
 
 ### Fixed

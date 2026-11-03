@@ -1,7 +1,7 @@
 {
   "name": "homebridge-brother-printer",
   "displayName": "Brother Printer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Brother laser and inkjet printers in HomeKit: printing state, problem alerts and toner or ink levels, read locally over SNMP.",
   "author": "Manuel Zamfir",
   "license": "MIT",
@@ -33,6 +33,7 @@
   "keywords": [
     "homebridge-plugin",
     "homebridge",
+    "supports-hap",
     "homekit",
     "brother",
     "printer",
