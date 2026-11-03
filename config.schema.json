@@ -2,7 +2,7 @@
   "pluginAlias": "BrotherPrinter",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Shows a Brother laser printer's printing state, toner and drum life in HomeKit. SNMP must be on in the printer's web page (Network > Protocol).",
+  "headerDisplay": "Shows Brother laser and inkjet printers in HomeKit: printing state, problems, and toner or ink levels. SNMP must be on in the printer's web page (Network > Protocol).",
   "schema": {
     "type": "object",
     "properties": {
@@ -40,6 +40,31 @@
               "minimum": 1,
               "maximum": 65535
             },
+            "snmpVersion": {
+              "title": "SNMP version",
+              "type": "string",
+              "default": "auto",
+              "oneOf": [
+                {
+                  "title": "Automatic (v2c, then v1)",
+                  "enum": [
+                    "auto"
+                  ]
+                },
+                {
+                  "title": "v2c",
+                  "enum": [
+                    "2c"
+                  ]
+                },
+                {
+                  "title": "v1 (older printers)",
+                  "enum": [
+                    "1"
+                  ]
+                }
+              ]
+            },
             "pollInterval": {
               "title": "Poll every (seconds)",
               "type": "integer",
@@ -48,11 +73,12 @@
               "maximum": 3600
             },
             "lowTonerThreshold": {
-              "title": "Toner low at (%)",
+              "title": "Toner / ink low at (%)",
               "type": "integer",
               "default": 10,
               "minimum": 0,
-              "maximum": 100
+              "maximum": 100,
+              "description": "On color printers, the battery shows the lowest color and turns low when any color reaches this."
             },
             "showDrum": {
               "title": "Show drum life as a second battery",
@@ -61,18 +87,16 @@
               "description": "Apple's Home app shows only one battery per accessory, and may pick the drum over the toner. Leave off unless you use Eve or another app that shows both."
             },
             "lowDrumThreshold": {
-              "title": "Drum low at (%)",
+              "title": "Drum and parts low at (%)",
               "type": "integer",
               "default": 10,
               "minimum": 0,
               "maximum": 100,
-              "condition": {
-                "functionBody": "return model.printers[arrayIndices].showDrum === true;"
-              }
+              "description": "Logs a warning when the drum, belt, fuser, laser unit, paper feed kit or ink waste box reaches this."
             },
             "tonerTile": {
-              "title": "Show toner % on its own tile",
-              "description": "Adds a humidity sensor whose value is the toner level, so it's visible on the Home tile. It also appears in Home's climate summary.",
+              "title": "Show toner / ink % on tiles",
+              "description": "Adds a humidity sensor whose value is the level: one for a mono printer, one per color for a color printer. They also count in Home's climate summary.",
               "type": "boolean",
               "default": false
             },
@@ -128,6 +152,7 @@
           "items": [
             "printers[].community",
             "printers[].port",
+            "printers[].snmpVersion",
             "printers[].pollInterval",
             "printers[].offlineAfter",
             "printers[].debug"

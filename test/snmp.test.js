@@ -38,3 +38,24 @@ test('reads a fake MFC-L2750DW over real SNMP', async (t) => {
 test('unreachable printer rejects instead of hanging', async () => {
   await assert.rejects(query({ host: '127.0.0.1', port: 16199, timeout: 300, retries: 0 }));
 });
+
+test('SNMP v1: drops OIDs the printer lacks and still reads the rest', async (t) => {
+  // An old printer: no Host Resources printer table, no device ID
+  const printer = await startFakePrinter(16170, { printerStatus: undefined, errorState: undefined, model: undefined });
+  t.after(() => printer.close());
+  const state = {};
+  const r = await query({ host: '127.0.0.1', port: 16170, version: '1', state });
+  assert.equal(r.snmpVersion, '1');
+  assert.equal(r.tonerPercent, 70);
+  assert.equal(r.printerStatus, null);
+  assert.equal(r.model, null);
+});
+
+test('auto: uses v2c when it answers and remembers it', async (t) => {
+  const printer = await startFakePrinter(16171);
+  t.after(() => printer.close());
+  const state = {};
+  const r = await query({ host: '127.0.0.1', port: 16171, state });
+  assert.equal(r.snmpVersion, '2c');
+  assert.equal(state.version, '2c');
+});

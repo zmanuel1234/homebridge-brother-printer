@@ -7,23 +7,31 @@ const { parse } = require('../lib/snmp');
 const fx = require('./fixtures');
 
 test('maintenance blob matches the printer web page', () => {
-  const m = d.decodeMaintenance(fx.maintenance);
-  assert.equal(m.tonerPercent, 70);
-  assert.equal(m.drumPercent, 60);
-  assert.equal(m.drumPagesUsed, 4886);
-  assert.equal(m.tonerPercentFine, 63);
-  assert.equal(m.unknown, undefined);
+  const m = d.decodeMaintenance(fx.maintenance, fx.nextCare);
+  assert.deepEqual(m.supplies.black, { level: 70, fine: 63, status: 7 });
+  assert.equal(m.drums.black.percent, 60);
+  assert.equal(m.drums.black.pagesUsed, 4886);
+  assert.deepEqual(m.unknown, {});
+  assert.deepEqual(d.supplyList(m.supplies), [{ color: 'black', level: 70, fine: 63 }]);
 });
 
 test('counters and next-care', () => {
   assert.deepEqual(d.decodeCounters(fx.counters), { totalPages: 4886, duplexPages: 1630 });
-  assert.deepEqual(d.decodeNextCare(fx.nextCare), { drumPagesRemaining: 7114 });
+  assert.equal(d.decodeMaintenance(fx.maintenance, fx.nextCare).drums.black.pagesRemaining, 7114);
 });
 
 test('drum used + remaining equals the 12,000 page rating', () => {
-  const used = d.decodeMaintenance(fx.maintenance).drumPagesUsed;
-  const left = d.decodeNextCare(fx.nextCare).drumPagesRemaining;
-  assert.equal(used + left, 12000);
+  const drum = d.decodeMaintenance(fx.maintenance, fx.nextCare).drums.black;
+  assert.equal(drum.pagesUsed + drum.pagesRemaining, 12000);
+});
+
+test('MFC-L2750DW is a mono laser', () => {
+  const raw = {};
+  for (const [k, v] of Object.entries(fx)) { raw[k] = d.toBuffer(v); }
+  const r = parse(raw);
+  assert.equal(r.type, 'laser');
+  assert.equal(r.supplies.length, 1);
+  assert.equal(r.lowestSupply.level, 70);
 });
 
 test('text fields', () => {

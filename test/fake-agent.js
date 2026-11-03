@@ -20,6 +20,9 @@ function startFakePrinter(port, overrides = {}) {
     errorState: Buffer.from([0x00]),
     ...overrides,
   };
+  for (const k of Object.keys(values)) {
+    if (values[k] === undefined) { delete values[k]; }
+  }
 
   const agent = snmp.createAgent({ port, address: '127.0.0.1' }, () => {});
   agent.getAuthorizer().addCommunity('public');

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0 - 2026-11-03
+
+### Added
+- Color lasers: toner per color, drum per color, belt, fuser, laser unit and paper feed kits.
+- Inkjets: ink per color and the ink waste box. Toner wording becomes Ink.
+- The battery shows the lowest color, and turns low when any color reaches the threshold by
+  either reading, or when the printer flags low toner.
+- Toner / ink tiles: one per color on color printers.
+- SNMP v1 for older printers (`snmpVersion`, automatic by default).
+- Printers that report no levels (older and ink tank models) get no battery instead of 0%.
+- Warnings in the log when the drum or another part nears end of life.
+- Problem log lines name the condition (cover open, paper jam...).
+
+### Changed
+- Status text is decoded in the printer's character set, so non-English displays read
+  correctly. Problems and printing rely on language-neutral status codes first.
+- Model and serial also read from Brother's own records, for printers without the
+  standard ones; page count falls back to the Printer MIB.
+- Tested against SNMP captures from 14 Brother models.
+
 ## 0.1.4 - 2026-11-03
 
 First public release.

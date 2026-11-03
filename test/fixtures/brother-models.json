@@ -1,0 +1,372 @@
+{
+ "dcp-l3550cdw": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "76010400000001790104000023f07301040000064b770104000000017a0104000023f07401040000064b780104000000017b0104000023f07501040000064b7f010400000001800104000023f07e01040000064b680104000000015501040000000132010400000001700104000003e88201040000000a33010400000002710104000003208301040000000a34010400000002720104000000c88401040000000a310104000000016f010400000a288101040000001e690104000025e4350104000000016d010400002648540104000000016a0104000025e4ff",
+   "counters": "0001040000064b02010400000386010104000002c50601040000021a080104000000ed0701040000012dff",
+   "nextCare": "a4010400004005a5010400004005a6010400004005a70104000040058801040000bd347301040000bd057701040000be65ff",
+   "statusText": "4d61b36f20746f6e6572752028592920",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4443502d4c333535304344573b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 5,
+   "printerStatus": 3,
+   "errorState": "2800"
+  },
+  "expected": {
+   "belt_unit_remaining_life": 97,
+   "belt_unit_remaining_pages": 48436,
+   "black_drum_counter": 1611,
+   "black_drum_remaining_life": 92,
+   "black_drum_remaining_pages": 16389,
+   "black_toner": 30,
+   "black_toner_remaining": 26,
+   "black_toner_status": 1,
+   "bw_counter": 709,
+   "color_counter": 902,
+   "cyan_drum_counter": 1611,
+   "cyan_drum_remaining_life": 92,
+   "cyan_drum_remaining_pages": 16389,
+   "cyan_toner": 10,
+   "cyan_toner_remaining": 10,
+   "cyan_toner_status": 1,
+   "device_status": "warning",
+   "duplex_unit_pages_counter": 538,
+   "fuser_remaining_life": 97,
+   "laser_unit_remaining_pages": 48389,
+   "magenta_drum_counter": 1611,
+   "magenta_drum_remaining_life": 92,
+   "magenta_drum_remaining_pages": 16389,
+   "magenta_toner": 10,
+   "magenta_toner_remaining": 8,
+   "magenta_toner_status": 2,
+   "page_counter": 1611,
+   "pf_kit_1_remaining_life": 98,
+   "pf_kit_1_remaining_pages": 48741,
+   "printer_status": "idle",
+   "status": "ma\u0142o toneru (y)",
+   "yellow_drum_counter": 1611,
+   "yellow_drum_remaining_life": 92,
+   "yellow_drum_remaining_pages": 16389,
+   "yellow_toner": 10,
+   "yellow_toner_remaining": 2,
+   "yellow_toner_status": 2
+  }
+ },
+ "hl-l2340dw": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "63010400000001110104000003da410104000023f0310104000000016f010400001d4c810104000000508601040000000aff",
+   "counters": "000104000003daff",
+   "nextCare": "82010400002b06ff",
+   "statusText": "4f435a454b4957414e49452020202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a484c2d4c323334304457207365726965733b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b5552463a57382c4350312c4953342d312c4d54312d332d342d352d382c4f4231302c5051342c52533330302d3630302c56312e332c444d313b",
+   "charset": 5,
+   "pageCount": 1279
+  },
+  "expected": {
+   "black_toner": 80,
+   "black_toner_remaining": 75,
+   "black_toner_status": 1,
+   "drum_counter": 986,
+   "drum_remaining_life": 92,
+   "drum_remaining_pages": 11014,
+   "drum_status": 1,
+   "page_counter": 986,
+   "status": "oczekiwanie",
+   "uptime": "FakeDatetime(2019"
+  }
+ },
+ "dcp-l2540dn": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "630104000000011101040000014d41010400002648310104000000016f01040000157c8101040000003c86010400000010ff",
+   "counters": "0001040000014dff",
+   "nextCare": "82010400002d93ff",
+   "statusText": "c1dfefe9d8d920e0d5d6d8dc20202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4443502d4c32353430444e207365726965733b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 8,
+   "pageCount": 333
+  },
+  "expected": {}
+ },
+ "dcp-7070dw": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "630104000000011101040000064341010400002260310104000000016f010400001c20ff",
+   "counters": "00010400000a5cff",
+   "nextCare": "8201040000289dff",
+   "statusText": "537461702e204b6f706965eb6e3a3031",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c50434c2c50434c584c3b4d444c3a4443502d3730373044573b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 2004,
+   "pageCount": 2652
+  },
+  "expected": {
+   "black_toner_remaining": 72,
+   "black_toner_status": 1,
+   "drum_counter": 1603,
+   "drum_remaining_life": 88,
+   "drum_remaining_pages": 10397,
+   "drum_status": 1,
+   "page_counter": 2652,
+   "status": "stap. kopie\u00ebn:01",
+   "uptime": "FakeDatetime(2018"
+  }
+ },
+ "dcp-9020cdw": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "7601040000000177010400000001780104000000017f010400000001680104000000015501040000000131010400000001320104000000013301040000000134010400000001700104000017d4820104000000467101040000170c8301040000003c720104000007d0840104000000146f01040000238c8101040000006479010400001a907a010400001a907b010400001a9080010400001a906901040000206c7301040000134b7401040000134b7501040000134b7e01040000134b54010400000001350104000000016a01040000238c6d0104000023f0ff",
+   "counters": "0001040000134b02010400000c69010104000006e21601040000348313010400000a9114010400000aa415010400000c331201040000131bff",
+   "nextCare": "a401040000274da501040000274da601040000274da701040000274d8801040000a0c87301040000b0057701040000b2b6ff",
+   "statusText": "545259422055a65049454e4941202020202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4443502d39303230434457207365726965733b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 5,
+   "pageCount": 4939
+  },
+  "expected": {
+   "belt_unit_remaining_life": 83,
+   "belt_unit_remaining_pages": 41160,
+   "black_counter": 4891,
+   "black_drum_counter": 4939,
+   "black_drum_remaining_life": 68,
+   "black_drum_remaining_pages": 10061,
+   "black_toner": 100,
+   "black_toner_remaining": 91,
+   "black_toner_status": 1,
+   "bw_counter": 1762,
+   "color_counter": 3177,
+   "cyan_counter": 2705,
+   "cyan_drum_counter": 4939,
+   "cyan_drum_remaining_life": 68,
+   "cyan_drum_remaining_pages": 10061,
+   "cyan_toner": 70,
+   "cyan_toner_remaining": 61,
+   "cyan_toner_status": 1,
+   "fuser_remaining_life": 91,
+   "image_counter": 13443,
+   "laser_unit_remaining_pages": 45061,
+   "magenta_counter": 2724,
+   "magenta_drum_counter": 4939,
+   "magenta_drum_remaining_life": 68,
+   "magenta_drum_remaining_pages": 10061,
+   "magenta_toner": 60,
+   "magenta_toner_remaining": 59,
+   "magenta_toner_status": 1,
+   "page_counter": 4939,
+   "pf_kit_1_remaining_life": 92,
+   "pf_kit_1_remaining_pages": 45750,
+   "status": "tryb u\u015bpienia",
+   "uptime": "FakeDatetime(2019",
+   "yellow_counter": 3123,
+   "yellow_drum_counter": 4939,
+   "yellow_drum_remaining_life": 68,
+   "yellow_drum_remaining_pages": 10061,
+   "yellow_toner": 20,
+   "yellow_toner_remaining": 20,
+   "yellow_toner_status": 1
+  }
+ },
+ "hl-2270dw": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "ff",
+   "nextCare": "82010400001e81ff",
+   "statusText": "534c4545502020202020202020202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c50434c2c50434c584c3b4d444c3a484c2d323237304457207365726965733b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 2004,
+   "pageCount": 4191
+  },
+  "expected": {
+   "drum_remaining_pages": 7809,
+   "page_counter": 4191,
+   "status": "sleep",
+   "uptime": "FakeDatetime(2019"
+  }
+ },
+ "hl-5350dn": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "110104000061a83101010141010103630101035401010166010101350101013601010162010101ff",
+   "counters": "00010400010f23ff",
+   "nextCare": "41010400000000820104000000007301040000777d8601040000961e7701040001205a78010400010af68101040000777d8901040000777dff",
+   "statusText": "454e455247494553504152454e2020200d54524f4d4d454c2045525345545a2e20",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c50434c2c50434c584c3b4d444c3a484c2d35333530444e207365726965733b434c533a5052494e5445523b",
+   "charset": 2004,
+   "pageCount": 69411
+  },
+  "expected": {
+   "black_toner_status": 21037313,
+   "drum_counter": 25000,
+   "drum_remaining_pages": 0,
+   "fuser_unit_remaining_pages": 30589,
+   "laser_unit_remaining_pages": 30589,
+   "page_counter": 69411,
+   "pf_kit_1_remaining_pages": 73818,
+   "pf_kit_mp_remaining_pages": 38430,
+   "status": "energiesparen trommel ersetz.",
+   "uptime": "FakeDatetime(2019"
+  }
+ },
+ "dcp-1618w": {
+  "type": "laser",
+  "raw": {
+   "maintenance": "6301040000000111010400000138410104000025e4310104000000016f010400001e148101040000005086010400000000ff",
+   "counters": "00010400000f4aff",
+   "nextCare": "820104000025d8ff",
+   "statusText": "e8afb7e7ad89e5be8520202020202020202020202020202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842503b4d444c3a4443502d31363138573b434c533a5052494e5445523b4349443a42726f74686572204c617365722054797065313b",
+   "charset": 106,
+   "pageCount": 3914
+  },
+  "expected": {
+   "black_toner": 80,
+   "black_toner_remaining": 77,
+   "black_toner_status": 1,
+   "drum_counter": 312,
+   "drum_remaining_life": 97,
+   "drum_remaining_pages": 9688,
+   "drum_status": 1,
+   "page_counter": 3914,
+   "status": "\u8bf7\u7b49\u5f85",
+   "uptime": "FakeDatetime(2019"
+  }
+ },
+ "mfc-j680dw": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "310104000000013201040000000133010400000001340104000000016f01040000125c70010400000dac71010400002134720104000011948101040000002f82010400000023830104000000558401040000002d86010400000012870104000000128801040000001289010400000012ff",
+   "counters": "010104000001cd020104000001ebff",
+   "nextCare": "ff",
+   "statusText": "75796b75",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4d46432d4a36383044573b434c533a5052494e5445523b",
+   "charset": 12
+  },
+  "expected": {
+   "black_ink": 47,
+   "black_ink_remaining": 47,
+   "black_ink_status": 1,
+   "bw_counter": 461,
+   "color_counter": 491,
+   "cyan_ink": 35,
+   "cyan_ink_remaining": 35,
+   "cyan_ink_status": 1,
+   "magenta_ink": 85,
+   "magenta_ink_remaining": 85,
+   "magenta_ink_status": 1,
+   "status": "uyku",
+   "yellow_ink": 45,
+   "yellow_ink_remaining": 45,
+   "yellow_ink_status": 1
+  }
+ },
+ "dcp-j132w": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "630104000000011101040000036f41010400002454310104000000016f010400001bbc810104000000508601040000000aff",
+   "counters": "0001040000036fff",
+   "nextCare": "82010400002b71ff",
+   "statusText": "52656164792020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4443502d4a313332573b434c533a5052494e5445523b",
+   "charset": 2004
+  },
+  "expected": {
+   "black_ink": 80,
+   "black_ink_remaining": 71,
+   "black_ink_status": 1,
+   "page_counter": 879,
+   "status": "ready"
+  }
+ },
+ "mfc-5490cn": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "a101020414a201020c14a301020614a401020b14ff",
+   "counters": "ff",
+   "nextCare": "ff",
+   "statusText": "536c656570204d6f6465202020202020",
+   "deviceId": "4d46473a42726f746865723b434d443a504a4c2c4842502c5552463b4d444c3a4d46432d35343930434e3b434c533a5052494e5445523b",
+   "pageCount": 8989
+  },
+  "expected": {
+   "black_ink_remaining": 20,
+   "cyan_ink_remaining": 60,
+   "magenta_ink_remaining": 30,
+   "page_counter": 8989,
+   "status": "sleep mode",
+   "uptime": "FakeDatetime(2019",
+   "yellow_ink_remaining": 55
+  }
+ },
+ "mfc-t910dw": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "31010400000001320104000000013301040000000134010400000001ff",
+   "counters": "00010400000d3802010400000c7f010104000000b9060104000005a50801040000059f07010400000006ff",
+   "nextCare": "ff",
+   "statusText": "4f637a656b6977616e6965",
+   "deviceId": "4d46473a42726f746865723b434d443a4842502c504a4c3b4d444c3a4d46432d5439313044573b434c533a5052494e5445523b4349443a42726f746865722047656e65726963204a7065672054797065323b",
+   "charset": 5,
+   "pageCount": 3384
+  },
+  "expected": {
+   "black_ink_status": 1,
+   "bw_counter": 185,
+   "color_counter": 3199,
+   "cyan_ink_status": 1,
+   "duplex_unit_pages_counter": 1445,
+   "magenta_ink_status": 1,
+   "page_counter": 3384,
+   "status": "oczekiwanie",
+   "uptime": "FakeDatetime(2019",
+   "yellow_ink_status": 1
+  }
+ },
+ "mfc-j5110dw": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "310104000000013201040000000133010400000001340104000000016f0104000026ac700104000026ac710104000026ac720104000026ac810104000000638201040000006383010400000063840104000000638501040000004bff",
+   "counters": "00010400000d38010104000000b902010400000c7fff",
+   "nextCare": "ff",
+   "statusText": "5265616479",
+   "deviceId": "4d46473a42726f746865723b434d443a4842502c504a4c3b4d444c3a4d46432d4a3531313044573b434c533a5052494e5445523b",
+   "charset": 106,
+   "pageCount": 3384,
+   "printerStatus": 3,
+   "errorState": "00"
+  },
+  "expected": {
+   "black_ink": 99,
+   "black_ink_remaining": 99,
+   "black_ink_status": 1,
+   "bw_counter": 185,
+   "color_counter": 3199,
+   "cyan_ink": 99,
+   "cyan_ink_remaining": 99,
+   "cyan_ink_status": 1,
+   "device_status": "running",
+   "ink_capture_box_remaining_life": 75,
+   "magenta_ink": 99,
+   "magenta_ink_remaining": 99,
+   "magenta_ink_status": 1,
+   "page_counter": 3384,
+   "printer_status": "idle",
+   "status": "ready",
+   "uptime": "FakeDatetime(2019",
+   "yellow_ink": 99,
+   "yellow_ink_remaining": 99,
+   "yellow_ink_status": 1
+  }
+ },
+ "dcp-t735dw": {
+  "type": "ink",
+  "raw": {
+   "maintenance": "310104000000013201040000000133010400000001340104000000016f010400002648700104000025e4710104000025e47201040000251c8101040000006282010400000061830104000000618401040000005fff",
+   "counters": "0001040000051e0201040000040701010400000117060104000002de08010400000231070104000000adff",
+   "nextCare": "ff",
+   "statusText": "3f3f",
+   "deviceId": "4d46473a42726f746865723b434d443a4842502c504a4c2c5552463b4d444c3a4443502d5437333544573b434c533a5052494e5445523b4349443a42726f746865722047656e65726963204a7065672054797065323b5552463a5352474232342c57382c4350312c4953312c4d54312d382d31312c4f42392c5051332d342d352c52533330302d3630302c4f4655302c56312e352c444d333b",
+   "charset": 2004,
+   "pageCount": 1310
+  },
+  "expected": {}
+ }
+}
