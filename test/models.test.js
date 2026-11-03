@@ -77,10 +77,12 @@ for (const [model, fx] of Object.entries(models)) {
   });
 }
 
-test('dcp-l3550cdw: color laser battery is the lowest color, low by the finer reading', () => {
+test('dcp-l3550cdw: color laser battery is the lowest color, ties broken by the finer reading', () => {
   const r = parse(models['dcp-l3550cdw'].raw);
   assert.deepEqual(r.supplies.map((s) => s.color), ['black', 'cyan', 'magenta', 'yellow']);
-  assert.equal(r.lowestSupply.color, 'cyan'); // 10% coarse; yellow is also 10% coarse but 2% fine
+  // C, M and Y all read 10% coarse; yellow is 2% fine, and the display says yellow is low
+  assert.equal(r.lowestSupply.color, 'yellow');
+  assert.equal(r.lowestSupply.level, 10);
   assert.equal(r.supplies.find((s) => s.color === 'yellow').fine, 2);
   assert.deepEqual(r.errors.map(camel), ['lowToner', 'doorOpen']);
   assert.equal(r.statusText, 'Mało toneru (Y)');
@@ -105,4 +107,9 @@ test('hl-5350dn: old laser with short records and page count from the Printer MI
   assert.equal(r.totalPages, 69411);
   assert.equal(r.drums.black.pagesRemaining, 0);
   assert.deepEqual(r.supplies, []);
+});
+
+test('mfc-j680dw: page count from mono + color when there is no total', () => {
+  const r = parse(models['mfc-j680dw'].raw);
+  assert.equal(r.totalPages, 0x1cd + 0x1eb);
 });

@@ -12,12 +12,15 @@
 - Printers that report no levels (older and ink tank models) get no battery instead of 0%.
 - Warnings in the log when the drum or another part nears end of life.
 - Problem log lines name the condition (cover open, paper jam...).
+- Page count from mono + color counts on inkjets that don't report a total.
 
 ### Changed
 - Status text is decoded in the printer's character set, so non-English displays read
   correctly. Problems and printing rely on language-neutral status codes first.
 - Model and serial also read from Brother's own records, for printers without the
   standard ones; page count falls back to the Printer MIB.
+- When coarse levels tie (they move in 10% steps), the finer reading picks the lowest
+  color, so the battery names the color that is actually running out.
 - Tested against SNMP captures from 14 Brother models.
 
 ## 0.1.4 - 2026-11-03
