@@ -45,7 +45,7 @@ function startFakePrinter(port, overrides = {}) {
       parts.pop();
       const column = Number(parts.pop());
       const entry = parts.join('.');
-      if (!tables.has(entry)) tables.set(entry, []);
+      if (!tables.has(entry)) { tables.set(entry, []); }
       tables.get(entry).push({ name, column });
     }
   }
@@ -70,7 +70,7 @@ function startFakePrinter(port, overrides = {}) {
     mib.addTableRow(tname, [1, ...cols.map((c) => values[c.name])]);
   }
 
-  for (const name of scalars) mib.setScalarValue(name, values[name]);
+  for (const name of scalars) { mib.setScalarValue(name, values[name]); }
 
   const set = (name, value) => {
     if (scalars.includes(name)) {
@@ -79,7 +79,7 @@ function startFakePrinter(port, overrides = {}) {
     }
     for (const [tname, cols] of tableNames) {
       const idx = cols.findIndex((c) => c.name === name);
-      if (idx >= 0) mib.setTableSingleCell(tname, cols[idx].column, [1], value);
+      if (idx >= 0) { mib.setTableSingleCell(tname, cols[idx].column, [1], value); }
     }
   };
 

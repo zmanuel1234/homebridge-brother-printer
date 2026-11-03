@@ -1,8 +1,18 @@
 {
   "name": "homebridge-brother-printer",
   "displayName": "Brother Printer",
-  "version": "0.1.3",
-  "description": "Brother laser printer status, toner and drum life in HomeKit, read locally over SNMP.",
+  "version": "0.1.4",
+  "description": "Brother laser printers in HomeKit: printing state, problem alerts and toner level, read locally over SNMP.",
+  "author": "Manuel Zamfir",
+  "license": "MIT",
+  "homepage": "https://github.com/zmanuel1234/homebridge-brother-printer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zmanuel1234/homebridge-brother-printer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zmanuel1234/homebridge-brother-printer/issues"
+  },
   "main": "index.js",
   "bin": {
     "brother-printer-probe": "bin/brother-printer-probe.js"
@@ -17,6 +27,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "lint": "eslint .",
     "test": "node --test test/*.test.js"
   },
   "keywords": [
@@ -28,24 +39,17 @@
     "snmp",
     "homekit"
   ],
-  "author": "zmanuel1234",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/zmanuel1234/homebridge-brother-printer.git"
-  },
-  "bugs": {
-    "url": "https://github.com/zmanuel1234/homebridge-brother-printer/issues"
-  },
-  "homepage": "https://github.com/zmanuel1234/homebridge-brother-printer#readme",
   "engines": {
-    "node": "^18.20.4 || ^20.18.0 || ^22.10.0 || ^24.0.0",
-    "homebridge": "^1.8.0 || ^2.0.0"
+    "node": "^18.20.0 || ^20.15.0 || ^22.0.0 || ^24.0.0",
+    "homebridge": "^1.6.0 || ^2.0.0"
   },
   "dependencies": {
     "net-snmp": "^3.29.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
     "homebridge": "^2.5.0"
   }
 }

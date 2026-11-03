@@ -34,7 +34,7 @@ test('text fields', () => {
 
 test('parse() with Buffers like net-snmp returns', () => {
   const raw = {};
-  for (const [k, v] of Object.entries(fx)) raw[k] = d.toBuffer(v);
+  for (const [k, v] of Object.entries(fx)) { raw[k] = d.toBuffer(v); }
   raw.printerStatus = 3;
   raw.errorState = Buffer.from([0x00]);
   const r = parse(raw);
