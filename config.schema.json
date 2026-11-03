@@ -1,0 +1,139 @@
+{
+  "pluginAlias": "BrotherPrinter",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Shows a Brother laser printer's printing state, toner and drum life in HomeKit. SNMP must be on in the printer's web page (Network > Protocol).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform name",
+        "type": "string",
+        "default": "Brother Printer"
+      },
+      "printers": {
+        "title": "Printers",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "default": "Printer"
+            },
+            "host": {
+              "title": "IP address or hostname",
+              "type": "string",
+              "placeholder": "10.0.4.150",
+              "description": "Required. Printers without an address are ignored."
+            },
+            "community": {
+              "title": "SNMP community",
+              "type": "string",
+              "default": "public"
+            },
+            "port": {
+              "title": "SNMP port",
+              "type": "integer",
+              "default": 161,
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "pollInterval": {
+              "title": "Poll every (seconds)",
+              "type": "integer",
+              "default": 60,
+              "minimum": 10,
+              "maximum": 3600
+            },
+            "lowTonerThreshold": {
+              "title": "Toner low at (%)",
+              "type": "integer",
+              "default": 10,
+              "minimum": 0,
+              "maximum": 100
+            },
+            "showDrum": {
+              "title": "Show drum life as a second battery",
+              "type": "boolean",
+              "default": false,
+              "description": "Apple's Home app shows only one battery per accessory, and may pick the drum over the toner. Leave off unless you use Eve or another app that shows both."
+            },
+            "lowDrumThreshold": {
+              "title": "Drum low at (%)",
+              "type": "integer",
+              "default": 10,
+              "minimum": 0,
+              "maximum": 100,
+              "condition": {
+                "functionBody": "return model.printers[arrayIndices].showDrum === true;"
+              }
+            },
+            "tonerTile": {
+              "title": "Show toner % on its own tile",
+              "description": "Adds a humidity sensor whose value is the toner level, so it's visible on the Home tile. It also appears in Home's climate summary.",
+              "type": "boolean",
+              "default": false
+            },
+            "faultSensor": {
+              "title": "Problem sensor",
+              "description": "Adds a contact sensor that opens on a jam, open cover, empty tray or other error, so Home can show and notify it.",
+              "type": "boolean",
+              "default": true
+            },
+            "offlineAfter": {
+              "title": "Mark offline after (failed polls)",
+              "type": "integer",
+              "default": 3,
+              "minimum": 1,
+              "maximum": 20
+            },
+            "debug": {
+              "title": "Log every poll",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    }
+  },
+  "layout": [
+    "name",
+    {
+      "key": "printers",
+      "type": "array",
+      "orderable": false,
+      "buttonText": "Add printer",
+      "items": [
+        "printers[].name",
+        "printers[].host",
+        {
+          "type": "fieldset",
+          "title": "Sensors",
+          "expandable": true,
+          "items": [
+            "printers[].lowTonerThreshold",
+            "printers[].showDrum",
+            "printers[].lowDrumThreshold",
+            "printers[].tonerTile",
+            "printers[].faultSensor"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "title": "Advanced",
+          "expandable": true,
+          "items": [
+            "printers[].community",
+            "printers[].port",
+            "printers[].pollInterval",
+            "printers[].offlineAfter",
+            "printers[].debug"
+          ]
+        }
+      ]
+    }
+  ]
+}
