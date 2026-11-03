@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-11-03
+
+### Fixed
+- Settings screen: each printer's fields now form one group. Before, Sensors, Advanced and
+  the name/host fields each acted as a separate printer, so the screen showed values from a
+  blank entry (for example a 60 s poll interval when 10 was saved) and saved empty printer
+  rows. Remove any empty printer rows left in your config.
+- Port, poll interval and offline count are number boxes instead of sliders.
+
 ## 0.2.0 - 2026-11-03
 
 ### Added

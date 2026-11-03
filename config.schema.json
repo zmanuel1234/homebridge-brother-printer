@@ -131,31 +131,45 @@
       "orderable": false,
       "buttonText": "Add printer",
       "items": [
-        "printers[].name",
-        "printers[].host",
         {
-          "type": "fieldset",
-          "title": "Sensors",
-          "expandable": true,
+          "type": "section",
           "items": [
-            "printers[].lowTonerThreshold",
-            "printers[].showDrum",
-            "printers[].lowDrumThreshold",
-            "printers[].tonerTile",
-            "printers[].faultSensor"
-          ]
-        },
-        {
-          "type": "fieldset",
-          "title": "Advanced",
-          "expandable": true,
-          "items": [
-            "printers[].community",
-            "printers[].port",
-            "printers[].snmpVersion",
-            "printers[].pollInterval",
-            "printers[].offlineAfter",
-            "printers[].debug"
+            "printers[].name",
+            "printers[].host",
+            {
+              "type": "fieldset",
+              "title": "Sensors",
+              "expandable": true,
+              "items": [
+                "printers[].lowTonerThreshold",
+                "printers[].showDrum",
+                "printers[].lowDrumThreshold",
+                "printers[].tonerTile",
+                "printers[].faultSensor"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Advanced",
+              "expandable": true,
+              "items": [
+                "printers[].community",
+                {
+                  "key": "printers[].port",
+                  "type": "number"
+                },
+                "printers[].snmpVersion",
+                {
+                  "key": "printers[].pollInterval",
+                  "type": "number"
+                },
+                {
+                  "key": "printers[].offlineAfter",
+                  "type": "number"
+                },
+                "printers[].debug"
+              ]
+            }
           ]
         }
       ]

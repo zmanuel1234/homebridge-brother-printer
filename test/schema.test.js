@@ -28,3 +28,23 @@ test('settings screen: every default matches its type', () => {
     if (v.maximum !== undefined) {assert.ok(v.default <= v.maximum, `${k} above maximum`);}
   }
 });
+
+test('settings screen: each printer is one group, not one entry per section', () => {
+  // A list layout with several top-level items makes the UI treat each as its
+  // own printer: values show from the wrong entry and blank rows get saved.
+  const { layout } = require('../config.schema.json');
+  const list = layout.find((l) => l && l.key === 'printers');
+  assert.equal(list.items.length, 1);
+  assert.ok(Array.isArray(list.items[0].items) && list.items[0].items.length > 1);
+});
+
+test('settings screen: ports and counts are number boxes, not sliders', () => {
+  const { layout } = require('../config.schema.json');
+  const flat = [];
+  const walk = (items) => items.forEach((i) => (i && i.items ? walk(i.items) : flat.push(i)));
+  walk(layout);
+  for (const key of ['printers[].port', 'printers[].pollInterval', 'printers[].offlineAfter']) {
+    const item = flat.find((i) => i && i.key === key);
+    assert.ok(item && item.type === 'number', `${key} should be a number box`);
+  }
+});
