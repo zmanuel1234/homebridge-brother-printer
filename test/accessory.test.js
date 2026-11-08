@@ -2,7 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const hap = require('@homebridge/hap-nodejs');
+
+// These tests use Homebridge's HAP library, whose current release needs a newer
+// Node than the plugin supports. At runtime Homebridge brings its own copy, so
+// on an older Node only these tests are skipped; the decoder and SNMP tests run.
+let hap;
+try {
+  hap = require('@homebridge/hap-nodejs');
+} catch (err) {
+  test('accessory tests', { skip: `HAP library doesn't load on Node ${process.version}: ${err.message.split('\n')[0]}` }, () => {});
+  return;
+}
+
 const snmp = require('../lib/snmp');
 const models = require('./fixtures/brother-models.json');
 
