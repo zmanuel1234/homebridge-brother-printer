@@ -20,6 +20,8 @@ Each printer gets these sensors:
 - **Toner / Ink** (battery level on the Printer accessory): the toner or ink %, with Home's
   native low-battery alert at or below your threshold. On color printers it shows the
   lowest color, so the alert fires when any color runs low.
+- **Toner Low** (optional contact sensor): Opens when the toner or ink is low, so Home
+  notifies "Printer Toner Low opened" instead of "battery is low".
 - **Toner / ink tiles** (optional humidity sensors): the level as a number on its own tile,
   one per color on color printers.
 
@@ -81,6 +83,7 @@ Set it up in the plugin's settings screen, or in `config.json`:
 | `snmpVersion` | `auto` | `auto` tries v2c, then v1. Set `1` for older printers that only answer v1. |
 | `pollInterval` | `60` | Seconds between polls (10–3600). |
 | `lowTonerThreshold` | `10` | Toner or ink % at or below which Home shows it as low (any color, on color printers). |
+| `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
 | `faultSensor` | `true` | Add the Printer Problem contact sensor. |
 | `tonerTile` | `false` | Add humidity sensors showing the toner or ink %, one per color on color printers. They also count in Home's climate summary. |
 | `showDrum` | `false` | Add drum life as a second battery. See below. |
@@ -94,8 +97,9 @@ HomeKit has no printer accessory type, so the plugin uses the closest sensors an
 words them its own way:
 
 - The printing sensor reads **Detected** / **Not Detected**.
-- Low toner or ink is announced as **"battery is low"**. For a clearer message, add a Home
-  automation on that trigger that sends your own notification.
+- Low toner or ink is announced as **"battery is low"**. For a clearer message, turn on
+  `lowTonerSensor`: its contact sensor opens at the same point and Home notifies it by
+  name ("Printer Toner Low opened"). Turn on its notifications in the Home app.
 - Home shows only one battery per accessory. With `showDrum` on, it may show the drum
   instead of the toner, which is why the drum is off by default. It's still read, and the
   plugin logs a warning when it nears end of life. Apps like Eve show both.
