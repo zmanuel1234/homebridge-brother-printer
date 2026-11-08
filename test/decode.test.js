@@ -2,8 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const d = require('../lib/decode');
-const { parse } = require('../lib/snmp');
+const d = require('../dist/decode');
+const { parse } = require('../dist/snmp');
 const fx = require('./fixtures');
 
 test('maintenance blob matches the printer web page', () => {

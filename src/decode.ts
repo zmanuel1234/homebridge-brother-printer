@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Brother printers pack maintenance data into OctetString "blobs" of records:
  *   [code(1)] [0x01] [length(1)] [value(length bytes, big-endian)]
@@ -11,10 +9,67 @@
  * MFC-L2750DW.
  */
 
-const COLORS = ['black', 'cyan', 'magenta', 'yellow'];
+export const COLORS = ['black', 'cyan', 'magenta', 'yellow'] as const;
+export type Color = typeof COLORS[number];
+
+export type PartKey = 'belt' | 'fuser' | 'laser' | 'paperFeedMP' | 'paperFeed1' | 'inkWasteBox';
+export type PrinterType = 'laser' | 'ink';
+
+/** Raw SNMP value as net-snmp or a capture gives it */
+export type RawValue = Buffer | string | string[] | number | null | undefined;
+
+export interface SupplyReading {
+  level: number | null;
+  fine: number | null;
+  status: number | null;
+}
+
+export interface Supply {
+  color: Color;
+  level: number;
+  fine: number | null;
+}
+
+export interface Drum {
+  percent?: number;
+  pagesUsed?: number;
+  pagesRemaining?: number;
+}
+
+export interface Part {
+  percent?: number;
+  pagesRemaining?: number;
+}
+
+export interface Maintenance {
+  supplies: Record<Color, SupplyReading>;
+  drums: Partial<Record<Color, Drum>>;
+  parts: Partial<Record<PartKey, Part>>;
+  misc: { legacy?: boolean; drumStatus?: number };
+  unknown: Record<string, number>;
+}
+
+export interface Counters {
+  totalPages?: number;
+  monoPages?: number;
+  colorPages?: number;
+  duplexPages?: number;
+}
+
+export interface ParsedRecord {
+  code: number;
+  value: number;
+  legacy: boolean;
+  len: number;
+}
+
+type MaintenanceDef =
+  | { group: 'level' | 'fine' | 'supplyStatus' | 'drum' | 'drumPagesUsed'; color: Color; percent?: boolean }
+  | { group: 'parts'; key: PartKey; percent?: boolean }
+  | { group: 'misc'; key: 'drumStatus'; percent?: boolean };
 
 // Maintenance blob (brInfoMaintenance)
-const MAINTENANCE = {
+const MAINTENANCE: Record<number, MaintenanceDef> = {
   0x81: { group: 'level', color: 'black' },
   0x82: { group: 'level', color: 'cyan' },
   0x83: { group: 'level', color: 'magenta' },
@@ -51,15 +106,19 @@ const MAINTENANCE = {
 };
 
 // Counter blob (brInfoCounter)
-const COUNTERS = {
+const COUNTERS: Record<number, keyof Counters> = {
   0x00: 'totalPages',
   0x01: 'monoPages',
   0x02: 'colorPages',
   0x06: 'duplexPages',
 };
 
+type NextCareDef =
+  | { group: 'drumPagesRemaining'; color: Color }
+  | { group: 'partPagesRemaining'; key: PartKey };
+
 // Next-care blob (brInfoNextCare), laser only: pages left
-const NEXT_CARE = {
+const NEXT_CARE: Record<number, NextCareDef> = {
   0x82: { group: 'drumPagesRemaining', color: 'black' },
   0xa4: { group: 'drumPagesRemaining', color: 'black' },
   0xa5: { group: 'drumPagesRemaining', color: 'cyan' },
@@ -72,7 +131,7 @@ const NEXT_CARE = {
   0x89: { group: 'partPagesRemaining', key: 'fuser' },
 };
 
-function toBuffer(value) {
+export function toBuffer(value: RawValue): Buffer | null {
   if (value === null || value === undefined) { return null; }
   if (Buffer.isBuffer(value)) { return value; }
   if (Array.isArray(value)) { return toBuffer(value.join('')); }
@@ -84,9 +143,9 @@ function toBuffer(value) {
 }
 
 /** Parse a Brother record blob into [{ code, value, legacy }] */
-function parseRecords(input) {
+export function parseRecords(input: RawValue): ParsedRecord[] {
   const buf = toBuffer(input);
-  const records = [];
+  const records: ParsedRecord[] = [];
   if (!buf) { return records; }
 
   let i = 0;
@@ -115,23 +174,23 @@ function parseRecords(input) {
 
 // Percent records are hundredths of a % in 4-byte form; short records with a
 // percent code (seen on old models) aren't levels, so they're skipped.
-const pct = (rec, def) => {
+const pct = (rec: ParsedRecord, def: MaintenanceDef): number | null => {
   if (!def.percent || rec.legacy) { return rec.value; }
   return rec.len >= 4 ? Math.round(rec.value / 100) : null;
 };
-const finite = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const finite = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-function emptySupplies() {
-  return Object.fromEntries(COLORS.map((c) => [c, { level: null, fine: null, status: null }]));
+function emptySupplies(): Record<Color, SupplyReading> {
+  return Object.fromEntries(COLORS.map((c) => [c, { level: null, fine: null, status: null }])) as Record<Color, SupplyReading>;
 }
 
 /** Decode the maintenance and next-care blobs */
-function decodeMaintenance(maintenance, nextCare) {
+export function decodeMaintenance(maintenance: RawValue, nextCare?: RawValue): Maintenance {
   const supplies = emptySupplies();
-  const drums = {};
-  const parts = {};
-  const misc = {};
-  const unknown = {};
+  const drums: Maintenance['drums'] = {};
+  const parts: Maintenance['parts'] = {};
+  const misc: Maintenance['misc'] = {};
+  const unknown: Record<string, number> = {};
 
   for (const rec of parseRecords(maintenance)) {
     if (rec.legacy) { misc.legacy = true; }
@@ -177,31 +236,34 @@ function decodeMaintenance(maintenance, nextCare) {
   }
 
   // Drum entries that only carry a page count aren't useful on their own
-  for (const [color, d] of Object.entries(drums)) {
+  for (const [color, d] of Object.entries(drums) as [Color, Drum][]) {
     if (d.percent === undefined && d.pagesRemaining === undefined) { delete drums[color]; }
   }
 
   return { supplies, drums, parts, misc, unknown };
 }
 
-function decodeCounters(input) {
-  const out = {};
+export function decodeCounters(input: RawValue): Counters {
+  const out: Counters = {};
   for (const { code, value } of parseRecords(input)) {
-    if (COUNTERS[code]) { out[COUNTERS[code]] = value; }
+    const key = COUNTERS[code];
+    if (key) { out[key] = value; }
   }
   return out;
 }
 
 /** prtLocalizationCharacterSet (IANA MIBenum) to a TextDecoder label */
-const CHARSETS = { 3: 'ascii', 4: 'latin1', 5: 'iso-8859-2', 8: 'iso-8859-5', 12: 'iso-8859-9', 106: 'utf-8' };
+const CHARSETS: Record<number, string> = {
+  3: 'ascii', 4: 'latin1', 5: 'iso-8859-2', 8: 'iso-8859-5', 12: 'iso-8859-9', 106: 'utf-8',
+};
 
 /** Decode an SNMP OctetString that holds text */
-function decodeText(input, charset) {
+export function decodeText(input: RawValue, charset?: number | null): string {
   const buf = toBuffer(input);
   if (!buf) { return typeof input === 'string' ? input.trim() : ''; }
-  let text;
+  let text: string;
   try {
-    text = new TextDecoder(CHARSETS[charset] || 'latin1', { fatal: true }).decode(buf);
+    text = new TextDecoder((charset && CHARSETS[charset]) || 'latin1', { fatal: true }).decode(buf);
   } catch {
     text = buf.toString('latin1');
   }
@@ -210,13 +272,14 @@ function decodeText(input, charset) {
 }
 
 /** Model from the PJL device ID, e.g. "MFG:Brother;CMD:PJL;MDL:DCP-L3550CDW;CLS:PRINTER;" */
-function modelFromDeviceId(text) {
+export function modelFromDeviceId(text: string | null | undefined): string | null {
   const m = /MDL:([^;]+)/.exec(text || '');
   return m ? m[1].trim() : null;
 }
 
 /** "laser" or "ink", from what the printer reports */
-function printerType(model, decoded, deviceId) {
+export function printerType(model: string | null | undefined, decoded: Maintenance | null | undefined,
+  deviceId?: string | null): PrinterType {
   if (decoded && decoded.parts.inkWasteBox) { return 'ink'; }
   if (/CID:[^;]*Laser/i.test(deviceId || '')) { return 'laser'; }
   if (/\b(?:DCP|MFC|HL)-[JT]/i.test(model || '')) { return 'ink'; }
@@ -226,8 +289,8 @@ function printerType(model, decoded, deviceId) {
 }
 
 /** One entry per supply the printer reports a level for */
-function supplyList(supplies) {
-  const list = [];
+export function supplyList(supplies: Record<Color, SupplyReading>): Supply[] {
+  const list: Supply[] = [];
   for (const color of COLORS) {
     const s = supplies[color];
     const level = finite(s.level) ?? finite(s.fine);
@@ -243,11 +306,12 @@ const ERROR_BITS = [
   'doorOpen', 'jammed', 'offline', 'serviceRequested',
   'inputTrayMissing', 'outputTrayMissing', 'markerSupplyMissing', 'outputNearFull',
   'outputFull', 'inputTrayEmpty', 'overduePreventMaint',
-];
+] as const;
+export type PrinterError = typeof ERROR_BITS[number];
 
-function decodeErrorState(input) {
+export function decodeErrorState(input: RawValue): PrinterError[] {
   const buf = toBuffer(input);
-  const errors = [];
+  const errors: PrinterError[] = [];
   if (!buf) { return errors; }
   for (let bit = 0; bit < ERROR_BITS.length; bit++) {
     const byte = buf[bit >> 3];
@@ -258,7 +322,7 @@ function decodeErrorState(input) {
 }
 
 /** Errors that stop the printer and deserve the Problem sensor */
-const FAULT_ERRORS = new Set([
+const FAULT_ERRORS = new Set<PrinterError>([
   'noPaper', 'noToner', 'doorOpen', 'jammed', 'serviceRequested',
   'inputTrayMissing', 'outputTrayMissing', 'markerSupplyMissing', 'outputFull',
 ]);
@@ -269,8 +333,19 @@ const FAULT_TEXT = /jam|cover is open|open|no paper|paper empty|replace|no toner
 const WARNING_TEXT = /\blow\b|end soon|soon/i;
 const PRINTING_TEXT = /printing|receiving|copying/i;
 
+export interface StatusSummary {
+  printing: boolean;
+  fault: boolean;
+  faults: PrinterError[];
+  sleeping: boolean;
+}
+
 /** hrPrinterStatus: 1 other, 2 unknown, 3 idle, 4 printing, 5 warmup */
-function summarizeStatus({ statusText = '', printerStatus = null, errors = [] }) {
+export function summarizeStatus({ statusText = '', printerStatus = null, errors = [] }: {
+  statusText?: string;
+  printerStatus?: number | null;
+  errors?: PrinterError[];
+}): StatusSummary {
   const text = statusText || '';
   const faults = errors.filter((e) => FAULT_ERRORS.has(e));
   // "Toner Low" / "Drum End Soon" are warnings handled by the battery services
@@ -283,17 +358,3 @@ function summarizeStatus({ statusText = '', printerStatus = null, errors = [] })
     sleeping: /sleep/i.test(text),
   };
 }
-
-module.exports = {
-  COLORS,
-  parseRecords,
-  decodeMaintenance,
-  decodeCounters,
-  decodeText,
-  decodeErrorState,
-  modelFromDeviceId,
-  printerType,
-  supplyList,
-  summarizeStatus,
-  toBuffer,
-};

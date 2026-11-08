@@ -14,7 +14,7 @@ try {
   return;
 }
 
-const snmp = require('../lib/snmp');
+const snmp = require('../dist/snmp');
 const models = require('./fixtures/brother-models.json');
 
 // Polls are driven by hand: by default the accessory's own first poll never
@@ -22,7 +22,7 @@ const models = require('./fixtures/brother-models.json');
 const never = () => new Promise(() => {});
 let respond = never;
 snmp.query = (options) => respond(options);
-const { PrinterAccessory } = require('../lib/accessory');
+const { PrinterAccessory } = require('../dist/accessory');
 
 const { Service, Characteristic: C } = hap;
 const OPEN = C.ContactSensorState.CONTACT_NOT_DETECTED;

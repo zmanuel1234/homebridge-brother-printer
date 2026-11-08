@@ -1,7 +1,7 @@
 {
   "name": "homebridge-brother-printer",
   "displayName": "Brother Printer",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Brother laser and inkjet printers in HomeKit: printing state, problem alerts and toner or ink levels, read locally over SNMP.",
   "author": "Manuel Zamfir",
   "license": "MIT",
@@ -13,22 +13,23 @@
   "bugs": {
     "url": "https://github.com/zmanuel1234/homebridge-brother-printer/issues"
   },
-  "main": "index.js",
+  "main": "dist/index.js",
   "bin": {
-    "brother-printer-probe": "bin/brother-printer-probe.js"
+    "brother-printer-probe": "dist/bin/brother-printer-probe.js"
   },
   "files": [
-    "index.js",
-    "lib/",
-    "bin/",
+    "dist/",
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p .",
     "lint": "eslint .",
-    "test": "node --test test/*.test.js"
+    "pretest": "npm run build",
+    "test": "node --test test/*.test.js",
+    "prepublishOnly": "npm run lint && npm test"
   },
   "keywords": [
     "homebridge-plugin",
@@ -52,8 +53,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@types/net-snmp": "^3.23.0",
+    "@types/node": "^18.19.130",
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
-    "homebridge": "^2.5.0"
+    "homebridge": "^2.5.0",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.72.1"
   }
 }
