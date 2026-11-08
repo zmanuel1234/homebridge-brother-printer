@@ -2,8 +2,8 @@
 
 // A tiny SNMP agent that answers like an MFC-L2750DW, for tests.
 const snmp = require('net-snmp');
-const { OID } = require('../lib/snmp');
-const { toBuffer } = require('../lib/decode');
+const { OID } = require('../dist/snmp');
+const { toBuffer } = require('../dist/decode');
 const fx = require('./fixtures');
 
 const typeOf = (v) => (typeof v === 'number' ? snmp.ObjectType.Integer : snmp.ObjectType.OctetString);

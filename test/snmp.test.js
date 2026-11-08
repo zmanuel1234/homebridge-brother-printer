@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { query } = require('../lib/snmp');
+const { query } = require('../dist/snmp');
 const { startFakePrinter } = require('./fake-agent');
 
 const PORT = 16161;

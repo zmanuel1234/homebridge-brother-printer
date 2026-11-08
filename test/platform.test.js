@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { BrotherPrinterPlatform } = require('../lib/platform');
+const { BrotherPrinterPlatform } = require('../dist/platform');
 
 function fakeHomebridge() {
   const api = new EventEmitter();

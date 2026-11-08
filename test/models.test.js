@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parse } = require('../lib/snmp');
+const { parse } = require('../dist/snmp');
 const models = require('./fixtures/brother-models.json');
 
 const camel = (s) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());

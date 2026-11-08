@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2026-11-08
+
+### Changed
+- Rewritten in TypeScript. The published package is compiled JavaScript in `dist/`;
+  behavior, settings and supported Node and Homebridge versions are unchanged.
+- `npm publish` lints, builds and tests first.
+
 ## 0.3.1 - 2026-11-07
 
 ### Fixed

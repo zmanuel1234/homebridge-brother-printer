@@ -178,6 +178,20 @@ Printing and problem state come from the standard Host Resources MIB (`hrPrinter
 The record codes follow the [brother](https://github.com/bieniu/brother) Python library
 by Maciej Bieniek (Apache-2.0), and the tests use SNMP captures from its test suite.
 
+## Development
+
+The plugin is written in TypeScript (`src/`) and published as compiled JavaScript (`dist/`).
+
+```
+npm ci
+npm test        # builds, then runs the tests
+npm run lint
+npm run build   # build only
+```
+
+`npm publish` lints, builds and tests first. The accessory tests are skipped on Node 18,
+where Homebridge's current HAP library can't be loaded; everything else runs there.
+
 ## License
 
 MIT
