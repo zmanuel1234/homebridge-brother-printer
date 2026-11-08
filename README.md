@@ -21,7 +21,7 @@ Each printer gets these sensors:
   native low-battery alert at or below your threshold. On color printers it shows the
   lowest color, so the alert fires when any color runs low.
 - **Toner Low** (optional contact sensor): Opens when the toner or ink is low, so Home
-  notifies "Printer Toner Low opened" instead of "battery is low".
+  notifies it by name instead of "battery is low".
 - **Toner / ink tiles** (optional humidity sensors): the level as a number on its own tile,
   one per color on color printers.
 
@@ -76,7 +76,7 @@ Set it up in the plugin's settings screen, or in `config.json`:
 
 | Option | Default | Description |
 |---|---|---|
-| `name` | `Printer` | Accessory name. Must be unique per printer. |
+| `name` | `Printer` | Accessory name. Must be unique per printer. Changing it later creates a new accessory: its room, automations and notification settings in Home start over. |
 | `host` | | Printer IP address or hostname. Printers without one are ignored. |
 | `community` | `public` | SNMP community string. |
 | `port` | `161` | SNMP port. |
@@ -99,7 +99,8 @@ words them its own way:
 - The printing sensor reads **Detected** / **Not Detected**.
 - Low toner or ink is announced as **"battery is low"**. For a clearer message, turn on
   `lowTonerSensor`: its contact sensor opens at the same point and Home notifies it by
-  name ("Printer Toner Low opened"). Turn on its notifications in the Home app.
+  name, as it does for any contact sensor that opens. Turn on its notifications in the
+  Home app.
 - Home shows only one battery per accessory. With `showDrum` on, it may show the drum
   instead of the toner, which is why the drum is off by default. It's still read, and the
   plugin logs a warning when it nears end of life. Apps like Eve show both.
@@ -124,6 +125,10 @@ The time before a printer shows No Response is about
 defaults that's about 3.5 minutes; `pollInterval: 30` with `offlineAfter: 1` brings it to
 about 40 s. With `offlineAfter: 1`, a single lost packet can make it flash No Response for
 one poll.
+
+If the printer hasn't answered since Homebridge started and `snmpVersion` is `auto`, each
+poll tries v2c and then v1, so the timeout counts twice (about 20 s per poll). Once it has
+answered, the version that worked is used.
 
 Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 

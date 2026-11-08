@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1 - 2026-11-07
+
+### Fixed
+- Inkjets: the battery is now named Ink instead of Toner, unless you renamed it in Home.
+- Printers that report no levels no longer get a battery added and removed again on every
+  restart.
+- Settings that aren't numbers (for example in a hand-edited `config.json`) fall back to
+  their defaults. Before, a non-numeric low toner threshold meant the low alert never fired.
+- Numeric settings are kept within the ranges the settings screen allows.
+
+### Changed
+- README: notes that renaming a printer creates a new accessory, and how long going
+  offline takes before the printer has answered.
+- Tests for the battery, settings, No Response and the Problem sensor; tests and lint run
+  on GitHub Actions for every push and pull request.
+
 ## 0.3.0 - 2026-11-07
 
 ### Added
