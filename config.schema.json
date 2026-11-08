@@ -80,6 +80,12 @@
               "maximum": 100,
               "description": "On color printers, the battery shows the lowest color and turns low when any color reaches this."
             },
+            "lowTonerSensor": {
+              "title": "Low toner sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds a contact sensor that opens when toner or ink is low, so Home notifies \"Printer Toner Low opened\" instead of \"battery is low\". Turn on notifications for it in the Home app."
+            },
             "showDrum": {
               "title": "Show drum life as a second battery",
               "type": "boolean",
@@ -142,6 +148,7 @@
               "expandable": true,
               "items": [
                 "printers[].lowTonerThreshold",
+                "printers[].lowTonerSensor",
                 "printers[].showDrum",
                 "printers[].lowDrumThreshold",
                 "printers[].tonerTile",

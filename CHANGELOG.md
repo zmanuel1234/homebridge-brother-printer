@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-11-07
+
+### Added
+- Optional Toner Low contact sensor (`lowTonerSensor`, Ink Low on inkjets). It opens when
+  the toner or ink is low, by the same rule as the battery, so Home sends a notification
+  with its own name instead of "battery is low". Off by default.
+
 ## 0.2.2 - 2026-11-03
 
 ### Changed
