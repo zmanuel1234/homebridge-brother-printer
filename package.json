@@ -25,10 +25,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p .",
-    "lint": "eslint .",
-    "pretest": "npm run build",
-    "test": "node --test test/*.test.js",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p .",
+    "lint": "eslint . && npm run typecheck",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm test"
   },
   "keywords": [
@@ -58,6 +59,7 @@
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
     "homebridge": "^2.5.0",
+    "tsx": "^4.23.15",
     "typescript": "~5.9",
     "typescript-eslint": "^8.72.1"
   }

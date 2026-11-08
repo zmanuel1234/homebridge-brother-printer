@@ -1,9 +1,8 @@
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { query } = require('../dist/snmp');
-const { startFakePrinter } = require('./fake-agent');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { query } from '../src/snmp';
+import type { QueryOptions } from '../src/snmp';
+import { startFakePrinter } from './fake-agent';
 
 const PORT = 16161;
 
@@ -43,7 +42,7 @@ test('SNMP v1: drops OIDs the printer lacks and still reads the rest', async (t)
   // An old printer: no Host Resources printer table, no device ID
   const printer = await startFakePrinter(16170, { printerStatus: undefined, errorState: undefined, model: undefined });
   t.after(() => printer.close());
-  const state = {};
+  const state: QueryOptions['state'] = {};
   const r = await query({ host: '127.0.0.1', port: 16170, version: '1', state });
   assert.equal(r.snmpVersion, '1');
   assert.equal(r.tonerPercent, 70);
@@ -54,7 +53,7 @@ test('SNMP v1: drops OIDs the printer lacks and still reads the rest', async (t)
 test('auto: uses v2c when it answers and remembers it', async (t) => {
   const printer = await startFakePrinter(16171);
   t.after(() => printer.close());
-  const state = {};
+  const state: QueryOptions['state'] = {};
   const r = await query({ host: '127.0.0.1', port: 16171, state });
   assert.equal(r.snmpVersion, '2c');
   assert.equal(state.version, '2c');

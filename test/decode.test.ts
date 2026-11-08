@@ -1,37 +1,42 @@
-'use strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as d from '../src/decode';
+import { parse } from '../src/snmp';
+import type { RawReadings } from '../src/snmp';
+import fx from './fixtures';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const d = require('../dist/decode');
-const { parse } = require('../dist/snmp');
-const fx = require('./fixtures');
+/** The capture as net-snmp would return it */
+const buffers = (): RawReadings => {
+  const raw: RawReadings = {};
+  for (const [k, v] of Object.entries(fx) as [keyof typeof fx, string][]) { raw[k] = d.toBuffer(v); }
+  return raw;
+};
 
 test('maintenance blob matches the printer web page', () => {
   const m = d.decodeMaintenance(fx.maintenance, fx.nextCare);
   assert.deepEqual(m.supplies.black, { level: 70, fine: 63, status: 7 });
-  assert.equal(m.drums.black.percent, 60);
-  assert.equal(m.drums.black.pagesUsed, 4886);
+  assert.equal(m.drums.black?.percent, 60);
+  assert.equal(m.drums.black?.pagesUsed, 4886);
   assert.deepEqual(m.unknown, {});
   assert.deepEqual(d.supplyList(m.supplies), [{ color: 'black', level: 70, fine: 63 }]);
 });
 
 test('counters and next-care', () => {
   assert.deepEqual(d.decodeCounters(fx.counters), { totalPages: 4886, duplexPages: 1630 });
-  assert.equal(d.decodeMaintenance(fx.maintenance, fx.nextCare).drums.black.pagesRemaining, 7114);
+  assert.equal(d.decodeMaintenance(fx.maintenance, fx.nextCare).drums.black?.pagesRemaining, 7114);
 });
 
 test('drum used + remaining equals the 12,000 page rating', () => {
   const drum = d.decodeMaintenance(fx.maintenance, fx.nextCare).drums.black;
+  assert.ok(drum && drum.pagesUsed !== undefined && drum.pagesRemaining !== undefined);
   assert.equal(drum.pagesUsed + drum.pagesRemaining, 12000);
 });
 
 test('MFC-L2750DW is a mono laser', () => {
-  const raw = {};
-  for (const [k, v] of Object.entries(fx)) { raw[k] = d.toBuffer(v); }
-  const r = parse(raw);
+  const r = parse(buffers());
   assert.equal(r.type, 'laser');
   assert.equal(r.supplies.length, 1);
-  assert.equal(r.lowestSupply.level, 70);
+  assert.equal(r.lowestSupply?.level, 70);
 });
 
 test('text fields', () => {
@@ -41,8 +46,7 @@ test('text fields', () => {
 });
 
 test('parse() with Buffers like net-snmp returns', () => {
-  const raw = {};
-  for (const [k, v] of Object.entries(fx)) { raw[k] = d.toBuffer(v); }
+  const raw = buffers();
   raw.printerStatus = 3;
   raw.errorState = Buffer.from([0x00]);
   const r = parse(raw);
@@ -76,7 +80,8 @@ test('error-state bits', () => {
 });
 
 test('status summary', () => {
-  const s = (statusText, extra = {}) => d.summarizeStatus({ statusText, ...extra });
+  const s = (statusText: string, extra: Partial<Parameters<typeof d.summarizeStatus>[0]> = {}) =>
+    d.summarizeStatus({ statusText, ...extra });
   assert.equal(s('Printing').printing, true);
   assert.equal(s('Ready').printing, false);
   assert.equal(s('Sleep').printing, false);

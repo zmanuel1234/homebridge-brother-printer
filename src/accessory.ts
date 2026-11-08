@@ -44,6 +44,9 @@ export interface PrinterHost {
   api: API;
 }
 
+/** Reads the printer; tests pass their own */
+export type QueryFn = (options: QueryOptions) => Promise<QueryResult>;
+
 type Kind = 'Toner' | 'Ink';
 type ServiceType = WithUUID<typeof Service>;
 
@@ -138,7 +141,11 @@ export class PrinterAccessory {
   problem: Service | null = null;
   lowSensor: Service | null = null;
 
-  constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig) {
+  private readonly query: QueryFn;
+
+  constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
+    deps: { query?: QueryFn } = {}) {
+    this.query = deps.query || query;
     this.platform = platform;
     this.log = platform.log;
     this.api = platform.api;
@@ -363,7 +370,7 @@ export class PrinterAccessory {
     if (this.stopped) { return; }
     let data: QueryResult | undefined;
     try {
-      data = await query(this.options);
+      data = await this.query(this.options);
     } catch (err) {
       this.failures += 1;
       const msg = errorText(err);

@@ -180,17 +180,17 @@ by Maciej Bieniek (Apache-2.0), and the tests use SNMP captures from its test su
 
 ## Development
 
-The plugin is written in TypeScript (`src/`) and published as compiled JavaScript (`dist/`).
+The plugin and its tests are written in TypeScript (`src/`, `test/`). It's published as
+compiled JavaScript (`dist/`), which npm builds on `npm ci`, `npm pack` and `npm publish`.
 
 ```
-npm ci
-npm test        # builds, then runs the tests
-npm run lint
+npm ci          # installs and builds
+npm test        # runs the tests against the TypeScript sources
+npm run lint    # ESLint and type checking
 npm run build   # build only
 ```
 
-`npm publish` lints, builds and tests first. The accessory tests are skipped on Node 18,
-where Homebridge's current HAP library can't be loaded; everything else runs there.
+`npm publish` lints and tests first.
 
 ## License
 
