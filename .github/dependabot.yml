@@ -3,7 +3,7 @@
 # copies the same apart from the "This repository" notes.
 # Weekly update pull requests; CI runs on each one, and each still needs a review before merging.
 #
-# This repository: @types/node stays on Node 18, the oldest Node in engines.
+# This repository: nothing special.
 version: 2
 
 updates:
