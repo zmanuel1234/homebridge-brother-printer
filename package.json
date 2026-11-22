@@ -27,7 +27,7 @@
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p .",
-    "lint": "eslint . && npm run typecheck",
+    "lint": "eslint . --max-warnings=0 && npm run typecheck",
     "test": "node --import tsx --test test/*.test.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm test"
@@ -53,14 +53,14 @@
     "net-snmp": "^3.29.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^10.0.1",
     "@types/net-snmp": "^3.23.0",
     "@types/node": "^18.19.130",
-    "eslint": "^9.17.0",
-    "globals": "^15.14.0",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
     "homebridge": "^2.5.0",
     "tsx": "^4.23.15",
-    "typescript": "~5.9",
-    "typescript-eslint": "^8.72.1"
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0"
   }
 }
