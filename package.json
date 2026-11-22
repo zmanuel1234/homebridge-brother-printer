@@ -60,7 +60,7 @@
     "globals": "^15.14.0",
     "homebridge": "^2.5.0",
     "tsx": "^4.23.15",
-    "typescript": "~5.9",
+    "typescript": "~7.0",
     "typescript-eslint": "^8.72.1"
   }
 }
