@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  # ESLint 10 needs Node 20.19 or later, so linting and type checking run once, on Node 24.
+  # Linting and type checking run once, on Node 24.
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [18, 20, 22, 24]
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

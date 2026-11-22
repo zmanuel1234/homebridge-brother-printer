@@ -46,7 +46,7 @@ While the printer can't be reached, all of them show No Response.
   read-only is enough). The default community is `public`.
 - A fixed address for the printer: reserve its IP in your router, or use its mDNS
   hostname (for example `brn3c2af4919dfc.local`).
-- Homebridge 1.6 or later (including 2.x), Node.js 18, 20, 22 or 24.
+- Homebridge 1.6 or later (including 2.x), Node.js 22, 24 or 26.
 
 ## Installation
 
