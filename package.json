@@ -57,7 +57,7 @@
     "@types/net-snmp": "^3.23.0",
     "@types/node": "^18.19.130",
     "eslint": "^9.17.0",
-    "globals": "^15.14.0",
+    "globals": "^17.14.0",
     "homebridge": "^2.5.0",
     "tsx": "^4.23.15",
     "typescript": "~5.9",
