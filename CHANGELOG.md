@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Development only, nothing changes for users: TypeScript 6.0 and the same ESLint and
+  Dependabot setup as the author's other plugins. ESLint checks for likely bugs (unhandled
+  promises and similar) instead of formatting; it runs once in CI, on Node 24, while the tests
+  still run on every supported Node version.
+
 ## 0.4.0 - 2026-11-08
 
 ### Changed

@@ -5,9 +5,10 @@ import { PrinterAccessory } from '../src/accessory';
 import type { PrinterConfig, PrinterContext, QueryFn } from '../src/accessory';
 import * as snmp from '../src/snmp';
 import type { QueryResult } from '../src/snmp';
+import type * as HapNodejs from '@homebridge/hap-nodejs';
 import modelsJson from './fixtures/brother-models.json';
 
-type Hap = typeof import('@homebridge/hap-nodejs');
+type Hap = typeof HapNodejs;
 const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }>;
 
 // These tests use Homebridge's HAP library, an ES module whose current release
