@@ -1,17 +1,24 @@
+# Shared by homebridge-brother-printer, homebridge-comelit-doorbell, homebridge-ir-patio-heater,
+# homebridge-ring-secure-video and wyze-robovac-matterbridge: the same file in all five. What a
+# repository checks is in its package.json: "verify" (everything, on Node 24) and "test:matrix"
+# (the tests, on every supported Node version).
 name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays: catches breakage from new releases of what the plugins use
 
+# CI only reads the repository.
 permissions:
   contents: read
 
 jobs:
-  # Linting and type checking run once, on Node 24.
-  lint:
+  check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -20,12 +27,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install ffmpeg (for tests that use a real one; REQUIRE_FFMPEG makes them fail, not skip, without it)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npm ci
-      - run: npm run lint
+      - name: This repository's checks (package.json "verify")
+        run: npm run verify
+        env:
+          REQUIRE_FFMPEG: '1'
+      - name: The package
+        run: npm pack --dry-run --ignore-scripts
+      - name: The release tag check works for this version
+        run: .github/scripts/check-release-tag.sh "v$(node -p "require('./package.json').version")"
 
-  # Every Node version the plugin supports.
-  test:
+  # Every Node version the plugins support. Not a required check.
+  node-versions:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -39,4 +56,5 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: This repository's tests (package.json "test:matrix")
+        run: npm run test:matrix

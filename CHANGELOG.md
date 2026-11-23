@@ -16,6 +16,7 @@ before updating (below).
   accessories through the platform: registering, reusing cached ones, duplicate names, removing
   printers taken out of the config, a printer that fails to set up, shutdown, cached toner tiles,
   and an error while updating HomeKit.
+- Development only: the same release and CI workflows as the author's other plugins. Publishing a GitHub release publishes it to npm (with trusted publishing; the package and its checksum are added to the release); each repository's checks are its `verify`, `test:matrix` and `release:check` scripts.
 
 ## 0.4.0 - 2026-11-08
 
