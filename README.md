@@ -6,6 +6,7 @@
 
 [![npm](https://badgen.net/npm/v/homebridge-brother-printer)](https://www.npmjs.com/package/homebridge-brother-printer)
 [![license](https://badgen.net/github/license/zmanuel1234/homebridge-brother-printer)](LICENSE)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-zmanuel-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/zmanuel)
 
 Shows a Brother laser or inkjet printer in HomeKit: whether it's printing, whether it
 needs attention, and how much toner or ink is left. Everything is read locally over SNMP,
