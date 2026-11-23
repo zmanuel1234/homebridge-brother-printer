@@ -21,7 +21,7 @@ query({ host, port: Number(port) || 161, community })
   })
   .catch((err: unknown) => {
     const e = err as { message?: string } | null;
-    console.error(`Couldn't read ${host}: ${e?.message || err}`);
+    console.error(`Couldn't read ${host}: ${e?.message || String(err)}`);
     console.error('Check the address, and that SNMP is enabled on the printer (Network > Protocol).');
     process.exit(1);
   });
