@@ -1,3 +1,7 @@
+<p align="center">
+  <img alt="Brother Printer" src="https://raw.githubusercontent.com/zmanuel1234/homebridge-brother-printer/main/branding/homebridge-brother-printer.svg" width="150">
+</p>
+
 # homebridge-brother-printer
 
 [![npm](https://badgen.net/npm/v/homebridge-brother-printer)](https://www.npmjs.com/package/homebridge-brother-printer)
