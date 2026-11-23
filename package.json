@@ -13,7 +13,16 @@
   "bugs": {
     "url": "https://github.com/zmanuel1234/homebridge-brother-printer/issues"
   },
-  "funding": "https://www.buymeacoffee.com/zmanuel",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/zmanuel1234"
+    },
+    {
+      "type": "buymeacoffee",
+      "url": "https://www.buymeacoffee.com/zmanuel"
+    }
+  ],
   "main": "dist/index.js",
   "bin": {
     "brother-printer-probe": "dist/bin/brother-printer-probe.js"
