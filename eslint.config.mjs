@@ -15,6 +15,18 @@ const ignores = ['dist/**'];
 const extra = [
   // The probe is a command-line tool: it prints its results.
   { files: ['src/bin/**'], rules: { 'no-console': 'off' } },
+  // No `any`: values from the printer, HAP and the config get a type (or `unknown`, checked).
+  {
+    files: tsFiles,
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+    },
+  },
 ];
 // -------------------------
 

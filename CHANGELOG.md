@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-22
+
+No new settings; with your current config, 0.5.0 behaves like 0.4.0. Check your Node.js version
+before updating (below).
 
 ### Changed
 - **Requires Node.js 22.19 or later, 24 or 26** (dropped 18 and 20, which no longer get security updates; on Node 22, 22.19 is the minimum across the author's plugins). Check with `node -v` or on the Homebridge UI's status page before updating.
@@ -8,6 +11,11 @@
   Dependabot setup as the author's other plugins. ESLint checks for likely bugs (unhandled
   promises and similar) instead of formatting; it runs once in CI, on Node 24, while the tests
   still run on every supported Node version.
+- Development only: lint refuses `any` in the plugin's code (the config's printer list is read as
+  `unknown` and each entry checked, as it already was). New tests set up real printer
+  accessories through the platform: registering, reusing cached ones, duplicate names, removing
+  printers taken out of the config, a printer that fails to set up, shutdown, cached toner tiles,
+  and an error while updating HomeKit.
 
 ## 0.4.0 - 2026-11-08
 

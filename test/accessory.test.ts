@@ -248,4 +248,23 @@ function defineTests(hap: Hap): void {
     const { acc } = setup({ faultSensor: false });
     assert.equal(problem(acc), undefined);
   });
+  test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {
+    const first = setup({ tonerTile: true });
+    first.printer.apply(reading(40));
+    const tile = first.acc.getServiceById(S.HumiditySensor, 'tonerTile');
+    assert.ok(tile, 'a tile for the black toner');
+    const again = setup({ tonerTile: true }, first.acc);
+    assert.equal(again.printer.tiles.black, tile, 'the cached tile is reused');
+    setup({ tonerTile: false }, first.acc);
+    assert.equal(first.acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'removed when turned off');
+  });
+
+  test('an error while updating HomeKit is logged, and polling goes on', async () => {
+    const lines: string[] = [];
+    const { printer } = setup({}, null, lines);
+    printer.apply = () => { throw new Error('bad reading'); };
+    await pollWith(printer, fromModel(Object.keys(models)[0]));
+    assert.ok(lines.some((l) => l.startsWith('error: [Printer] Couldn\'t update HomeKit: ') && l.includes('bad reading')), lines.join('\n'));
+    assert.equal(printer.failures, 0, 'the poll itself counts as a success');
+  });
 }

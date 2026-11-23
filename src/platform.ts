@@ -34,7 +34,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         this.setup();
       } catch (err) {
         const e = err as { stack?: string } | null;
-        this.log.error(`Setup failed: ${e?.stack || err}`);
+        this.log.error(`Setup failed: ${e?.stack || String(err)}`);
       }
     });
     this.api.on('shutdown', () => this.printers.forEach((p) => p.stop()));
@@ -45,7 +45,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
   }
 
   setup(): void {
-    const entries: (PrinterEntry | null | undefined)[] = Array.isArray(this.config.printers) ? this.config.printers : [];
+    // Homebridge types the config as any: a list of entries, each checked below
+    const printers: unknown = this.config.printers;
+    const entries = Array.isArray(printers) ? (printers as (PrinterEntry | null | undefined)[]) : [];
     const active = new Set<string>();
 
     entries.forEach((rawEntry, idx) => {
@@ -76,7 +78,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         this.printers.push(new PrinterAccessory(this, accessory, { ...rawEntry, host, name }));
       } catch (err) {
         const e = err as { message?: string } | null;
-        this.log.error(`[${name}] Couldn't set up this printer: ${e?.message || err}`);
+        this.log.error(`[${name}] Couldn't set up this printer: ${e?.message || String(err)}`);
         return;
       }
 

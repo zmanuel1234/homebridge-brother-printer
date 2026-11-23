@@ -76,7 +76,7 @@ for (const [model, fx] of Object.entries(models)) {
       assert.notEqual(got, undefined, `${field} isn't decoded (expected ${want})`);
       if (typeof want === 'number' && /remaining(_life)?$|_toner$|_ink$/.test(field)) {
         // The reference rounds half to even, we round half up
-        assert.ok(Math.abs((got as number) - want) <= 1, `${field}: got ${got}, expected ${want}`);
+        assert.ok(Math.abs((got as number) - want) <= 1, `${field}: got ${String(got)}, expected ${want}`);
       } else {
         assert.equal(got, want, field);
       }
