@@ -26,8 +26,8 @@
   ],
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p .",
-    "lint": "eslint . --max-warnings=0 && npm run typecheck",
+    "check": "tsc -p .",
+    "lint": "eslint . --max-warnings=0 && npm run check",
     "test": "node --import tsx --test test/*.test.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm test",
