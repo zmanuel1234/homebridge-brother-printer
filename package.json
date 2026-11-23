@@ -30,7 +30,10 @@
     "lint": "eslint . --max-warnings=0 && npm run typecheck",
     "test": "node --import tsx --test test/*.test.ts",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run lint && npm test"
+    "prepublishOnly": "npm run lint && npm test",
+    "verify": "npm run lint && npm run build && npm test",
+    "test:matrix": "npm run build && npm test",
+    "release:check": "npm run verify"
   },
   "keywords": [
     "homebridge-plugin",
