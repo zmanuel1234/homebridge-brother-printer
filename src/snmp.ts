@@ -34,6 +34,22 @@ export interface V3User {
   authPassword?: string;
   privProtocol?: PrivProtocol;
   privPassword?: string;
+  /** SNMPv3 context name; empty unless the printer has one set */
+  context?: string;
+}
+
+const ALIASES: Record<string, string> = { sha1: 'sha', aes128: 'aes' };
+
+/**
+ * A protocol setting as typed by a user ("SHA-256", "aes128", ...): unset gives the
+ * default, anything not supported throws, so it can't fail later as "can't reach".
+ */
+export function protocolSetting<T extends string>(value: unknown, allowed: readonly T[], def: T, what: string): T {
+  if (value === undefined || value === null || String(value).trim() === '') { return def; }
+  const key = String(value).trim().toLowerCase().replace(/[-_\s]/g, '');
+  const name = ALIASES[key] ?? key;
+  if ((allowed as readonly string[]).includes(name)) { return name as T; }
+  throw new Error(`SNMPv3 ${what} "${String(value)}" isn't supported; use one of ${allowed.join(', ')}`);
 }
 
 export interface QueryOptions {
@@ -122,7 +138,9 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
     idBitsSize: 32 as const,
   };
   const session = version === '3'
-    ? snmp.createV3Session(options.host, v3User(options.v3), { ...common, version: snmp.Version3 })
+    ? snmp.createV3Session(options.host, v3User(options.v3), {
+      ...common, version: snmp.Version3, ...(options.v3?.context ? { context: options.v3.context } : {}),
+    })
     : snmp.createSession(options.host, options.community || 'public', { ...common, version: VERSIONS[version] });
   (session as unknown as EventEmitter).on('error', () => { /* surfaced through the request callback */ });
 

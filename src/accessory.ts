@@ -2,8 +2,8 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { query } from './snmp';
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, v3User } from './snmp';
-import type { AuthProtocol, PrinterData, PrivProtocol, QueryOptions, QueryResult } from './snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from './snmp';
+import type { PrinterData, QueryOptions, QueryResult } from './snmp';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 
 // Resolved from dist/ at runtime, like the published package
@@ -33,6 +33,7 @@ export interface PrinterConfig {
   v3AuthPassword?: unknown;
   v3PrivProtocol?: unknown;
   v3PrivPassword?: unknown;
+  v3Context?: unknown;
   pollInterval?: unknown;
   lowTonerThreshold?: unknown;
   lowTonerSensor?: unknown;
@@ -179,14 +180,13 @@ export class PrinterAccessory {
       state: {},
     };
     if (this.options.version === '3') {
-      const auth = String(config.v3AuthProtocol ?? 'sha');
-      const priv = String(config.v3PrivProtocol ?? 'aes');
       this.options.v3 = {
         user: String(config.v3User ?? '').trim(),
-        authProtocol: (AUTH_PROTOCOLS as readonly string[]).includes(auth) ? auth as AuthProtocol : 'sha',
+        authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
         authPassword: String(config.v3AuthPassword ?? ''),
-        privProtocol: (PRIV_PROTOCOLS as readonly string[]).includes(priv) ? priv as PrivProtocol : 'aes',
+        privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
         privPassword: String(config.v3PrivPassword ?? ''),
+        context: String(config.v3Context ?? '').trim(),
       };
       v3User(this.options.v3); // a setting that can't work is reported at startup, not as "can't reach"
     }

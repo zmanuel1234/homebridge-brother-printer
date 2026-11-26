@@ -80,6 +80,7 @@
               "title": "SNMPv3 authentication",
               "type": "string",
               "default": "sha",
+              "description": "None also needs encryption set to None.",
               "oneOf": [
                 { "title": "None", "enum": ["none"] },
                 { "title": "MD5", "enum": ["md5"] },
@@ -111,6 +112,11 @@
               "title": "SNMPv3 encryption password",
               "type": "string",
               "description": "At least 8 characters."
+            },
+            "v3Context": {
+              "title": "SNMPv3 context name",
+              "type": "string",
+              "description": "Leave empty unless one is set in the printer's SNMPv3 settings."
             },
             "pollInterval": {
               "title": "Poll every (seconds)",
@@ -239,6 +245,7 @@
                 { "key": "printers[].v3AuthPassword", "type": "password", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
                 { "key": "printers[].v3PrivProtocol", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
                 { "key": "printers[].v3PrivPassword", "type": "password", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
+                { "key": "printers[].v3Context", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
                 {
                   "key": "printers[].pollInterval",
                   "type": "number"

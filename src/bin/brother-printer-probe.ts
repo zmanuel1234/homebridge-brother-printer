@@ -7,13 +7,16 @@
  * Prints what the plugin would read from the printer.
  */
 
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, query } from '../snmp';
-import type { AuthProtocol, PrivProtocol, QueryOptions } from '../snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../snmp';
+import type { QueryOptions } from '../snmp';
 
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
-                             [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>]
-SNMPv3 defaults to SHA authentication and AES encryption; use --auth none or --priv none to turn them off.`;
+                             [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
+SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
+--auth none needs --priv none too. The passwords can also come from the environment
+variables BROTHER_SNMP_AUTH_PASS and BROTHER_SNMP_PRIV_PASS, which keeps them out of your
+shell history.`;
 
 function fail(message: string): never {
   console.error(message);
@@ -26,34 +29,39 @@ const flags: Record<string, string> = {};
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '-h' || a === '--help') { console.log(USAGE); process.exit(0); }
-  if (!a.startsWith('--')) { positional.push(a); continue; }
+  if (!a.startsWith('-')) { positional.push(a); continue; }
+  if (!a.startsWith('--')) { fail(`Unknown option ${a} (options start with --).\n${USAGE}`); }
   const value = args[i + 1];
-  if (value === undefined || value.startsWith('--')) { fail(`${a} needs a value.\n${USAGE}`); }
+  if (value === undefined) { fail(`${a} needs a value.\n${USAGE}`); }
   flags[a.slice(2)] = value;
   i++;
 }
-const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass'];
+const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass', 'context'];
 const unknown = Object.keys(flags).find((k) => !known.includes(k));
 if (unknown) { fail(`Unknown option --${unknown}.\n${USAGE}`); }
 
+if (positional.length > 2) { fail(`Too many arguments.\n${USAGE}`); }
 const [target, community = 'public'] = positional;
 const [host, port] = (target || '').split(':');
 if (!host) { fail(USAGE); }
 
 const options: QueryOptions = { host, port: Number(port) || 161, community };
 if (flags.v3 !== undefined) {
-  const auth = flags.auth ?? 'sha';
-  const priv = flags.priv ?? 'aes';
-  if (!(AUTH_PROTOCOLS as readonly string[]).includes(auth)) { fail(`--auth must be one of ${AUTH_PROTOCOLS.join(', ')}.`); }
-  if (!(PRIV_PROTOCOLS as readonly string[]).includes(priv)) { fail(`--priv must be one of ${PRIV_PROTOCOLS.join(', ')}.`); }
+  if (positional.length > 1) { fail('A community string is for SNMP v1/v2c; leave it out with --v3.'); }
   options.version = '3';
-  options.v3 = {
-    user: flags.v3,
-    authProtocol: auth as AuthProtocol,
-    authPassword: flags['auth-pass'] ?? '',
-    privProtocol: priv as PrivProtocol,
-    privPassword: flags['priv-pass'] ?? '',
-  };
+  try {
+    options.v3 = {
+      user: flags.v3,
+      authProtocol: protocolSetting(flags.auth, AUTH_PROTOCOLS, 'sha', 'authentication'),
+      authPassword: flags['auth-pass'] ?? process.env.BROTHER_SNMP_AUTH_PASS ?? '',
+      privProtocol: protocolSetting(flags.priv, PRIV_PROTOCOLS, 'aes', 'encryption'),
+      privPassword: flags['priv-pass'] ?? process.env.BROTHER_SNMP_PRIV_PASS ?? '',
+      context: flags.context ?? '',
+    };
+    v3User(options.v3);
+  } catch (err) {
+    fail(`${(err as Error).message}.\n${USAGE}`);
+  }
 } else if (Object.keys(flags).length) {
   fail(`--auth, --priv and their passwords need --v3 <user>.\n${USAGE}`);
 }
