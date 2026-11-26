@@ -229,7 +229,7 @@ compiled JavaScript (`dist/`), which npm builds on `npm ci`, `npm pack` and `npm
 ```
 npm ci          # installs and builds
 npm test        # runs the tests against the TypeScript sources
-npm run lint    # ESLint and type checking
+npm run lint    # oxlint and type checking
 npm run build   # build only
 ```
 
