@@ -320,6 +320,35 @@ function defineTests(hap: Hap): void {
     assert.equal(acc.context.noLevels, false, 'not taken for a printer without levels');
   });
 
+  test('supplies that keep not reading: a warning after offlineAfter polls, the printer\'s own low flag still counts', async () => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({ lowTonerSensor: true, offlineAfter: 2 }, null, lines);
+    await pollWith(printer, reading(50));
+    assert.equal(state(acc), CLOSED);
+    const unread = { ...reading(50), supplies: [], lowestSupply: null, suppliesUnread: true };
+    await pollWith(printer, unread);
+    assert.equal(lines.filter((l) => /haven't been readable/.test(l)).length, 0);
+    await pollWith(printer, { ...unread, errors: ['lowToner'] });
+    assert.equal(lines.filter((l) => l.startsWith('warn') && /haven't been readable for 2 polls/.test(l)).length, 1);
+    assert.equal(state(acc), OPEN, 'the printer says toner low');
+    assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+    await pollWith(printer, unread);
+    assert.equal(lines.filter((l) => /haven't been readable/.test(l)).length, 1, 'warned once');
+    await pollWith(printer, reading(50));
+    assert.ok(lines.some((l) => /Supply levels read again/.test(l)));
+    assert.equal(state(acc), CLOSED);
+  });
+
+  test('the first poll after a restart: supplies unread, the Connected line still logged', async () => {
+    const first = setup({});
+    first.printer.apply(reading(50));
+    const lines: string[] = [];
+    const again = setup({}, first.acc, lines);
+    await pollWith(again.printer, { ...reading(50), supplies: [], lowestSupply: null, suppliesUnread: true });
+    assert.ok(lines.some((l) => /Connected to .*supply levels not readable this time/.test(l)));
+    assert.equal(battery(first.acc)?.getCharacteristic(C.BatteryLevel).value, 50);
+  });
+
   test('a printer whose maker can\'t be named shows as "Printer", never Brother', () => {
     const { acc, printer } = setup({});
     printer.apply({ ...reading(50), model: null, manufacturer: null });

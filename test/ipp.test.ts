@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { TAG, getPrinterAttributes, ippEndpoint, ippMessage, ippQuery, parseResponse, reasonErrors, toPrinterData } from '../src/ipp';
 import type { IppAttribute, IppAttributes } from '../src/ipp';
-import { defaultIppUrl, readPrinter } from '../src/read';
+import { defaultIppUrl, readPrinter, readers } from '../src/read';
+import { parse } from '../src/snmp';
 import { queryOptions } from '../src/accessory';
 import { startFakePrinter } from './fake-agent';
 
@@ -314,6 +315,23 @@ test('reading: IPP only, SNMP only, and auto falling back to IPP', async (t) => 
   const viaSnmp = await readPrinter({ host: '127.0.0.1', port: 16196, protocol: 'auto', ippUrl: ipp.url, state: {} });
   assert.equal(viaSnmp.via, undefined);
   assert.equal(viaSnmp.snmpVersion, '2c');
+});
+
+test('reading: auto reads IPP when SNMP answers but its supplies table doesn\'t', async (t) => {
+  const ipp = await fakeIppPrinter((body) => ({ body: response(COLOR, 0, body.readUInt32BE(4)) }));
+  t.after(() => ipp.close());
+  const unread = { ...parse({ model: Buffer.from('HP Color LaserJet M452nw'), suppliesUnread: true }), snmpVersion: '2c' as const };
+  const query = t.mock.method(readers, 'query', async () => unread);
+  const auto = await readPrinter({ host: '127.0.0.1', protocol: 'auto', ippUrl: ipp.url, state: {} });
+  assert.equal(auto.via, 'ipp', 'IPP\'s levels stand in');
+  assert.ok(auto.supplies.length);
+  // IPP not answering either: SNMP's reading, without supplies
+  const none = await readPrinter({ host: '127.0.0.1', protocol: 'auto', ippUrl: 'ipp://127.0.0.1:1/ipp/print', timeout: 300, state: {} });
+  assert.equal(none.suppliesUnread, true);
+  assert.equal(none.snmpVersion, '2c');
+  // SNMP only: no IPP
+  assert.equal((await readPrinter({ host: '127.0.0.1', protocol: 'snmp', ippUrl: ipp.url })).suppliesUnread, true);
+  assert.equal(query.mock.callCount(), 3);
 });
 
 test('reading: auto reports both failures', async () => {

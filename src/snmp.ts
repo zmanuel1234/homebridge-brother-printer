@@ -367,7 +367,7 @@ export function parse(raw: RawReadings): PrinterData {
   // Without Brother's records: the standard supplies table (any make of printer)
   const mib = !brotherSupplies.length && raw.markers?.length ? mapMarkers(raw.markers) : null;
   const supplies = mib ? mib.supplies : brotherSupplies;
-  const type = mib?.ink ? 'ink' : decode.printerType(model, maint, deviceId);
+  const type = mib?.ink ? 'ink' : mib?.toner ? 'laser' : decode.printerType(model, maint, deviceId);
   const mfg = /(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i.exec(deviceId)?.[1]?.trim() ?? '';
   const isBrother = brotherSupplies.length > 0 || /brother/i.test(`${mfg} ${model}`);
   // null for a maker the plugin can't name: Home then shows "Printer", never Brother

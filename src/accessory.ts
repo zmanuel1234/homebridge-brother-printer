@@ -211,6 +211,8 @@ export class PrinterAccessory {
   readonly debug: boolean;
 
   failures = 0;
+  /** Polls in a row whose supplies couldn't be read */
+  unreadPolls = 0;
   online = true;
   last: LastSeen = {};
   timer: NodeJS.Timeout | null = null;
@@ -635,8 +637,15 @@ export class PrinterAccessory {
     // The supplies table didn't read this time (it did before): keep the last levels,
     // drums and parts rather than take them away
     if (d.suppliesUnread) {
+      this.unreadPolls += 1;
       log(`[${this.name}] Supplies couldn't be read this time; keeping the last levels.`);
+      this.warnOnce('supplies-unread', this.unreadPolls >= this.offlineAfter, `The printer answers, but its supply levels `
+        + `haven't been readable for ${this.unreadPolls} polls; showing the last ones.`);
+      this.applyLowFlag(d);
     } else {
+      if (this.last.warned?.['supplies-unread']) { this.log.info(`[${this.name}] Supply levels read again.`); }
+      this.unreadPolls = 0;
+      this.warnOnce('supplies-unread', false, '');
       this.applySupplies(d);
       this.applyDrumAndParts(d);
     }
@@ -644,9 +653,9 @@ export class PrinterAccessory {
     if (d.totalPages !== null) { this.pages.updateValue(d.totalPages); }
     this.last.statusText = d.statusText;
 
-    if (this.last.summary === undefined && !d.suppliesUnread) {
+    if (this.last.summary === undefined) {
       const kind = d.type === 'ink' ? 'ink' : 'toner';
-      const levels = d.supplies.length
+      const levels = d.suppliesUnread ? 'supply levels not readable this time' : d.supplies.length
         ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
         : `no ${kind} levels reported`;
       const drum = d.drumPercent !== null ? `, drum ${d.drumPercent}%` : '';
@@ -654,6 +663,17 @@ export class PrinterAccessory {
         + `${d.totalPages ?? '?'} pages, status "${d.statusText || 'unknown'}".`);
       this.last.summary = true;
     }
+  }
+
+  /**
+   * Without a reading of the levels, the printer's own low / empty flag can still
+   * mark the toner low (but not clear it)
+   */
+  applyLowFlag(d: PrinterData): void {
+    if (!d.errors.includes('lowToner') && !d.errors.includes('noToner')) { return; }
+    const C = this.hap.Characteristic;
+    this.toner?.updateCharacteristic(C.StatusLowBattery, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+    this.lowSensor?.updateCharacteristic(C.ContactSensorState, C.ContactSensorState.CONTACT_NOT_DETECTED);
   }
 
   /**

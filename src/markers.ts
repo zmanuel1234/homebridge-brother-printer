@@ -26,6 +26,8 @@ export interface MarkerReadings {
   parts: Partial<Record<PartKey, Part>>;
   /** An ink printer, by its supplies */
   ink: boolean;
+  /** A toner printer, by its supplies (so its model name isn't taken for an inkjet's) */
+  toner: boolean;
 }
 
 // Color words beyond English, for printers that name supplies in their language
@@ -146,9 +148,11 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   }
 
   let ink = false;
+  let toner = false;
   markers.forEach((m, i) => {
     const percent = percentOf(m);
     if (/ink/.test(m.type)) { ink = true; }
+    if (/^toner/.test(m.type) || (isSupply(m) && /toner|トナー|碳粉|토너/i.test(m.name))) { toner = true; }
     if (isSupply(m)) {
       if (/\bink\b/i.test(m.name)) { ink = true; }
       const color = supplyColor[i];
@@ -171,7 +175,8 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   });
   supplies.sort((x, y) => ALL_COLORS.indexOf(x.color) - ALL_COLORS.indexOf(y.color));
   const lowestSupply = supplies.length ? supplies.reduce((x, y) => (y.level < x.level ? y : x)) : null;
-  return { supplies, lowestSupply, drums, parts, ink: ink || !!parts.inkWasteBox };
+  const isInk = ink || !!parts.inkWasteBox;
+  return { supplies, lowestSupply, drums, parts, ink: isInk, toner: toner && !isInk };
 }
 
 const MAKERS: Record<string, string> = {

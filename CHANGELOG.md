@@ -4,15 +4,18 @@
 
 ### Fixed
 - **Inkjets of other makes** read as ink by their model (HP OfficeJet, DeskJet, ENVY; Canon
-  PIXMA, MAXIFY, MegaTank; Epson EcoTank, WorkForce, Expression…) when their supplies
-  don't say so, so the battery and low sensor are named Ink, not Toner.
+  PIXMA, MAXIFY, MegaTank; Epson EcoTank, WorkForce, Expression; HP DesignJet…) when their
+  supplies don't say so, so the battery and low sensor are named Ink, not Toner. Supplies that
+  say toner (and Epson's AL- lasers) keep a printer a laser.
 - **Kyocera, Utax and Triumph-Adler** toners named only by part number (TK-5240K, CK-5512M,
   PK-5015Y) get their color from the last letter; before, only a mono printer's showed.
 - **Drums and waste toner boxes in % with an unknown maximum** (Sharp) show their level when
   the printer's other supplies count to 100; before, they showed nothing.
 - A printer whose supplies table stops answering, while everything else does, **stays
   online** and keeps its last levels, drum and sensors; before, every poll failed and it
-  showed as offline.
+  showed as offline. With `protocol` `auto`, IPP's levels stand in for that poll. The log
+  warns once the levels haven't been readable for `offlineAfter` polls in a row, and the
+  printer's own toner-low flag still opens the Toner Low sensor meanwhile.
 
 ## 0.8.1 - 2026-11-26
 

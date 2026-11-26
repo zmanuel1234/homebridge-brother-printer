@@ -303,11 +303,14 @@ export function modelFromDeviceId(text: string | null | undefined): string | nul
  * maker's name, so Brother's HL-L2350DW isn't taken for an Epson L.
  */
 export function inkjetModel(model: string): boolean {
-  if (/officejet|deskjet|\benvy\b|photosmart|pagewide|smart ?tank|ink ?tank|\bpixma\b|\bmaxify\b|imageprograf|megatank|workforce|ecotank|\bexpression\b|\bstylus\b|surecolor/i.test(model)) {
+  // Epson's lasers: AcuLaser, AL- (some sold as "WorkForce AL-M300")
+  if (/aculaser|\bAL-[CM]?\d/i.test(model)) { return false; }
+  if (/officejet|deskjet|designjet|\benvy\b|photosmart|pagewide|smart ?tank|ink ?tank|\bpixma\b|\bmaxify\b|imageprograf|megatank|workforce|ecotank|\bexpression\b|\bstylus\b|surecolor|\bartisan\b|geljet/i.test(model)) {
     return true;
   }
-  if (/^epson\s+(?:XP|ET|WF|L|PX|EW|EP|SC|M)-?[A-Z]?\d/i.test(model)) { return !/^epson\s+(?:AL|AcuLaser)/i.test(model); }
-  return /^canon\s+(?:TS|TR|MG|MX|MB|iP|iX|GX|G|TM|TA|TX)-?\d/i.test(model);
+  // Model codes, after the maker's name or alone (as some printers give the model)
+  if (/^(?:epson\s+)?(?:XP|ET|WF|PX|EW|EP)-[A-Z]?\d/i.test(model) || /^epson\s+(?:L|SC|M)-?[A-Z]?\d/i.test(model)) { return true; }
+  return /^canon\s+(?:TS|TR|MG|MX|MB|iP|iX|GX|GM|G|E|TM|TA|TX)-?\d/i.test(model) || /^(?:TS|TR|MG)\d{3,4}\b/i.test(model);
 }
 
 export function printerType(model: string | null | undefined, decoded: Maintenance | null | undefined,

@@ -186,6 +186,12 @@ test('Printer MIB: levels in % with an unknown maximum (Sharp drums and waste to
     { name: 'Drum', type: 'opc', colors: '', level: 40, high: -2 },
   ]);
   assert.deepEqual(pages.drums, {});
+  // "Some remaining" (-3) stays without a number, even next to markers counting to 100
+  const some = reading([
+    { name: 'Black Toner', type: 'toner', colors: '', level: 75, high: 100 },
+    { name: 'Drum', type: 'opc', colors: '', level: -3, high: -2 },
+  ]);
+  assert.deepEqual(some.drums, {});
 });
 
 test('Printer MIB: Kyocera, Utax and Triumph-Adler toners named by part number get their color', () => {
@@ -226,6 +232,16 @@ test('Printer MIB: inkjets of other makes read as ink, by their model, when thei
   }
   // No supplies table at all: still ink, so the Ink Low sensor is named for ink
   assert.equal(parse({ model: Buffer.from('HP OfficeJet 8020 series') }).type, 'ink');
+  // Model codes some printers give without the maker
+  for (const model of ['ET-2850 Series', 'XP-6000 Series', 'TS8300 series', 'HP DesignJet T230']) {
+    assert.equal(parse({ model: Buffer.from(model) }).type, 'ink', model);
+  }
+  // Epson's lasers, even under the WorkForce name; and supplies that say toner win over the name
+  for (const model of ['EPSON WorkForce AL-M300DN', 'EPSON AL-C300DN', 'EPSON AcuLaser C1700']) {
+    assert.equal(parse({ model: Buffer.from(model) }).type, 'laser', model);
+  }
+  const toner = [{ name: 'Black Toner Cartridge', type: 'toner', colors: '', level: 40, high: 100 }];
+  assert.equal(reading(toner, { model: Buffer.from('EPSON WorkForce Pro WF-M5799') }).type, 'laser');
 });
 
 test('Printer MIB: names follow the printer\'s character set', () => {
