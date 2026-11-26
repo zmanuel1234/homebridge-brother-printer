@@ -86,8 +86,14 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         if (a) { match.set(e, a); taken.add(a.UUID); }
       }
     };
+    // A name match loses to another printer now at the accessory's address: when
+    // "Printer" is renamed "Office" and a new printer named "Printer" is added at
+    // another address, the accessory stays with the one at its address.
+    const heldByAddress = (e: Entry, a: PlatformAccessory<PrinterContext>): boolean =>
+      a.context.host !== e.host && entries.some((o) => o !== e && !match.has(o) && o.host === a.context.host);
     pass((e, a) => !!e.serial && a.context.serial === e.serial);
-    pass((e, a) => ctxName(a) === e.name && agrees(e, a));
+    pass((e, a) => ctxName(a) === e.name && a.context.host === e.host && agrees(e, a));
+    pass((e, a) => ctxName(a) === e.name && agrees(e, a) && !heldByAddress(e, a));
     pass((e, a) => a.context.host === e.host && agrees(e, a));
 
     const active = new Set<string>();

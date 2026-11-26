@@ -109,8 +109,8 @@ export function findResponders(options: DiscoverOptions = {}): Promise<string[]>
       if (err) { reject(err); } else { resolve([...found]); }
     };
     socket.on('error', (err) => finish(err));
-    // Any SNMP answer counts; the community or version may still be wrong for a
-    // full read, which the query afterwards finds out.
+    // Any SNMP answer to this request counts; the community or version may still
+    // be wrong for a full read, which the query afterwards finds out.
     // Only answers to this request (its id in the reply)
     const id = integer(requestId);
     socket.on('message', (msg, rinfo) => { if (msg[0] === 0x30 && msg.includes(id)) { found.add(rinfo.address); } });

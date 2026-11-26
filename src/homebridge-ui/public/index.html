@@ -94,10 +94,12 @@
 
   $('bp-found').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-add]');
-    if (!button) { return; }
+    if (!button || button.disabled) { return; }
+    button.disabled = true; // a double click adds it once
     try {
       await addPrinter(button);
     } catch (err) {
+      button.disabled = false;
       homebridge.toast.error(errorText(err), 'Brother Printer');
     }
   });

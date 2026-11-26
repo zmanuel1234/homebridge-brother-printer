@@ -155,13 +155,20 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(calls.unregistered, [cached]);
   });
 
-  test('a renamed printer never takes an accessory another printer still has by name', () => {
+  test('name and address point to different printers: the address wins, and a serial number settles it', () => {
+    // Without serials, "Office moved and Study took its address" looks the same as
+    // "Office was renamed Study and a new Office added"; printers keep fixed addresses.
     const { calls, start, cachedAccessory } = homebridge();
     const office = cachedAccessory('Office', '10.0.0.9');
-    // "Study" is new but uses Office's old address; Office moved
     const platform = start([{ name: 'Study', host: '10.0.0.9' }, { name: 'Office', host: '10.0.0.10' }], [office]);
-    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, office);
-    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Study']);
+    assert.equal(platform.printers.find((p) => p.name === 'Study')?.accessory, office);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Office']);
+
+    const withSerial = homebridge();
+    const office2 = withSerial.cachedAccessory('Office', '10.0.0.9');
+    ctx(office2).serial = 'E1';
+    const p2 = withSerial.start([{ name: 'Study', host: '10.0.0.9' }, { name: 'Office', host: '10.0.0.10', serial: 'E1' }], [office2]);
+    assert.equal(p2.printers.find((p) => p.name === 'Office')?.accessory, office2);
   });
 
   test('two renamed printers don\'t both take the same cached accessory', () => {
@@ -185,6 +192,23 @@ function defineTests(hap: Hap): void {
     assert.notEqual(added.UUID, cached.UUID, 'a different UUID, though the name\'s UUID is the old one\'s');
     assert.equal(added.displayName, 'Printer');
     assert.deepEqual(later.calls.unregistered, []);
+  });
+
+  test('renamed and a new printer added under the old name at once: the accessory stays at its address', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Printer', '10.0.0.9');
+    const platform = start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Printer', host: '10.0.0.30' }], [cached]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, cached);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Printer']);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('a printer that moved to a new address keeps its accessory by name', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    const platform = start([{ name: 'Office', host: '10.0.0.44' }], [cached]);
+    assert.equal(platform.printers[0].accessory, cached);
+    assert.deepEqual(calls.registered, []);
   });
 
   test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {

@@ -120,7 +120,7 @@ In `config.json`:
 | Option | Default | Description |
 |---|---|---|
 | `name` | `Printer` | Accessory name. Must be unique per printer. You can change it later: the printer keeps its room, automations and notifications in Home, and its sensors are renamed to match (except ones you renamed in the Home app). |
-| `serial` | | Printer serial number, filled in by the settings screen. Optional. With it, a printer is kept in Home even when its name and address change at the same time; without it, it's recognised by name or address. |
+| `serial` | | Printer serial number, filled in by the settings screen. Optional. With it, a printer is kept in Home even when its name and address change at the same time; without it, it's recognised by name or address (by address when the two disagree, since printers keep fixed addresses). |
 | `host` | | Printer IP address or hostname. Printers without one are ignored. |
 | `community` | `public` | SNMP community string. |
 | `port` | `161` | SNMP port. |
