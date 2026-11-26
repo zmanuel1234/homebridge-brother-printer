@@ -47,6 +47,7 @@ if (!host) { fail(USAGE); }
 
 const options: QueryOptions = { host, port: Number(port) || 161, community };
 if (flags.v3 !== undefined) {
+  if (!flags.v3 || flags.v3.startsWith('-')) { fail(`--v3 needs a user name.\n${USAGE}`); }
   if (positional.length > 1) { fail('A community string is for SNMP v1/v2c; leave it out with --v3.'); }
   options.version = '3';
   try {
