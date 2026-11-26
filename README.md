@@ -235,6 +235,7 @@ come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_P
 read -rs BROTHER_SNMP_AUTH_PASS && export BROTHER_SNMP_AUTH_PASS   # type it, then Enter
 read -rs BROTHER_SNMP_PRIV_PASS && export BROTHER_SNMP_PRIV_PASS
 npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
+unset BROTHER_SNMP_AUTH_PASS BROTHER_SNMP_PRIV_PASS
 ```
 
 Passwords given with `--auth-pass` and `--priv-pass` are saved in your shell history and

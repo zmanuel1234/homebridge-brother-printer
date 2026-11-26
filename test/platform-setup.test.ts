@@ -257,6 +257,17 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(calls.unregistered, []);
   });
 
+  test('two moved printers keep their accessories whichever is listed first', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Printer', '10.0.0.10');
+    const b = cachedAccessory('Office', '10.0.0.20');
+    const platform = start([{ name: 'Office', host: '10.0.0.30' }, { name: 'Printer', host: '10.0.0.20' }], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Printer')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, b);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
   test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {
     const { start, cachedAccessory } = homebridge();
     const a = cachedAccessory('Upstairs', '10.0.0.1');
