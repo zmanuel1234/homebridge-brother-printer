@@ -221,6 +221,8 @@ export class PrinterAccessory {
   paper: Service | null = null;
   onlineSvc: Service | null = null;
   history: HistoryLog | null = null;
+  /** With protocol auto: SNMP has answered since Homebridge started, so IPP only stands in */
+  snmpAnswered = false;
   lastEntry: HistoryEntry | undefined;
   /** Starts the Eve history; tests pass their own */
   private readonly startHistory: typeof startHistory;
@@ -578,6 +580,7 @@ export class PrinterAccessory {
     const log = (m: string): void => (this.debug ? this.log.info(m) : this.log.debug(m));
 
     log(`[${this.name}] ${JSON.stringify(d)}`);
+    if (d.via !== 'ipp') { this.snmpAnswered = true; }
     this.setOnline(true);
     this.updateInfo(d);
 
@@ -641,10 +644,13 @@ export class PrinterAccessory {
     const kind: Kind = d.type === 'ink' ? 'Ink' : 'Toner';
     const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
 
-    if ((!d.supplies.length || !d.lowestSupply) && this.standIn(d)) {
-      // IPP standing in for SNMP gave no levels: keep what SNMP showed, and
-      // only raise a low flag the printer reports
-      if (flagged) {
+    if (this.standIn(d)) {
+      // IPP standing in for SNMP: update the sensors SNMP set up with any levels
+      // IPP has, and raise a low flag, but add, remove or clear nothing
+      const low = d.supplies.some((s) => s.level <= this.lowToner);
+      if (this.toner && d.lowestSupply) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(d.lowestSupply.level)); }
+      for (const s of d.supplies) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
+      if (flagged || low) {
         this.toner?.updateCharacteristic(C.StatusLowBattery, C.StatusLowBattery.BATTERY_LEVEL_LOW);
         this.lowSensor?.updateCharacteristic(C.ContactSensorState, C.ContactSensorState.CONTACT_NOT_DETECTED);
       }
@@ -747,8 +753,7 @@ export class PrinterAccessory {
 
   /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
   applyDrumAndParts(d: PrinterData): void {
-    // IPP standing in for SNMP without drum or parts readings: keep what SNMP showed
-    if (this.standIn(d) && !Object.keys(d.drums).length && !Object.keys(d.parts).length) { return; }
+    const standIn = this.standIn(d);
     let due = false;
     const drums = (Object.entries(d.drums) as [Color, { percent?: number; pagesRemaining?: number }][])
       .filter((e): e is [Color, { percent: number; pagesRemaining?: number }] => typeof e[1].percent === 'number');
@@ -768,7 +773,9 @@ export class PrinterAccessory {
       this.warnOnce(`part-${key}`, part.percent <= this.lowDrum,
         `${PART_NAMES[key]} is near end of life (${part.percent}%${left}).`);
     }
-    if (this.maintenance) {
+    // IPP standing in for SNMP may not report every part, so it can open the
+    // sensor but not close it
+    if (this.maintenance && !(standIn && !due)) {
       const C = this.hap.Characteristic;
       this.maintenance.updateCharacteristic(C.ContactSensorState, due
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
@@ -819,7 +826,7 @@ export class PrinterAccessory {
    * remove sensors, reset readings or change the serial number.
    */
   standIn(d: PrinterData): boolean {
-    return this.options.protocol === 'auto' && (d as QueryResult).via === 'ipp';
+    return this.options.protocol === 'auto' && (d as QueryResult).via === 'ipp' && this.snmpAnswered;
   }
 
   updateInfo(d: PrinterData): void {

@@ -50,7 +50,7 @@ if (!host) { fail(USAGE); }
 
 const options: QueryOptions = { host, port: Number(port) || 161, community };
 if (flags.v3 !== undefined) {
-  if (flags.protocol === 'ipp') { fail('--v3 is for SNMP; leave it out with --protocol ipp.'); }
+  if (flags.protocol?.toLowerCase() === 'ipp') { fail('--v3 is for SNMP; leave it out with --protocol ipp.'); }
   if (!flags.v3 || flags.v3.startsWith('-')) { fail(`--v3 needs a user name.\n${USAGE}`); }
   if (positional.length > 1) { fail('A community string is for SNMP v1/v2c; leave it out with --v3.'); }
   options.version = '3';
@@ -72,6 +72,7 @@ if (flags.v3 !== undefined) {
 }
 
 if (flags.protocol !== undefined) {
+  flags.protocol = flags.protocol.toLowerCase();
   if (!['snmp', 'ipp', 'auto'].includes(flags.protocol)) { fail(`--protocol must be snmp, ipp or auto.\n${USAGE}`); }
   options.protocol = flags.protocol as QueryOptions['protocol'];
 }

@@ -216,13 +216,14 @@ Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 ## Reading over IPP (AirPrint)
 
 SNMP gives the most: Brother's own records with the exact toner or ink %, drum and parts
-life, and the page count. For a printer with SNMP turned off, or a model that reports no
-levels over SNMP, set `protocol`:
+life, and the page count. Set `protocol` to:
 
-- `auto`: SNMP on every poll, and IPP when SNMP doesn't answer. A reading over IPP then
-  only adds to what SNMP showed: it doesn't remove the battery, reset the drum or parts,
-  or change the serial number, so a missed SNMP answer doesn't change Home.
-- `ipp`: IPP only (the SNMP settings, including SNMPv3, aren't used).
+- `ipp` for a printer with SNMP turned off, or a model that reports no levels over SNMP:
+  IPP only (the SNMP settings, including SNMPv3, aren't used).
+- `auto` to read over SNMP but carry on over IPP when SNMP doesn't answer. Until SNMP has
+  answered once since Homebridge started, IPP readings count in full. After that IPP only
+  fills in: it updates the sensors SNMP set up and can raise low or maintenance warnings,
+  but doesn't add, remove or clear anything, so a missed SNMP answer doesn't change Home.
 
 Over IPP the plugin reads the printer's state, its problems (paper, jam, cover, toner)
 and the supplies it lists. What that includes depends on the printer: many Brother lasers

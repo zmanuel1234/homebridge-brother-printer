@@ -173,7 +173,7 @@ const REASONS: Record<string, PrinterError> = {
 /** A reason keyword without its severity suffix; "-report" ones are information only */
 export function reasonErrors(reasons: IppValue[]): PrinterError[] {
   const out = new Set<PrinterError>();
-  for (const r of reasons.map(String)) {
+  for (const r of reasons.filter((v) => v !== null).map(String)) {
     if (r.endsWith('-report')) { continue; }
     const key = r.replace(/-(warning|error)$/, '');
     if (REASONS[key]) { out.add(REASONS[key]); }
@@ -216,14 +216,16 @@ export function toPrinterData(a: IppAttributes): PrinterData {
   // As hrPrinterStatus, which the status logic understands: 3 idle, 4 printing, 1 other
   const printerStatus = state === 3 ? 3 : state === 4 ? 4 : state === 5 ? 1 : null;
   // Information-only reasons ("-report") stay out of the text the status logic also reads
-  const reasons = (a['printer-state-reasons'] || []).map(String).filter((r) => r !== 'none' && !r.endsWith('-report'));
+  const reasons = (a['printer-state-reasons'] || []).filter((r) => r !== null).map(String)
+    .filter((r) => r !== 'none' && !r.endsWith('-report'));
   const statusText = str('printer-state-message') || reasons.join(', ');
 
   const supplies: Supply[] = [];
   const drums: Partial<Record<Color, Drum>> = {};
   const parts: Partial<Record<PartKey, Part>> = {};
-  const names = (a['marker-names'] || []).map(String);
-  const types = names.map((_, i) => String(a['marker-types']?.[i] ?? '').toLowerCase());
+  const text = (v: IppValue | undefined): string => (v === null || v === undefined ? '' : String(v));
+  const names = (a['marker-names'] || []).map(text);
+  const types = names.map((_, i) => text(a['marker-types']?.[i]).toLowerCase());
   const isSupply = (type: string, name: string): boolean =>
     /^(toner|ink|ink-cartridge|toner-cartridge|solid-wax|ribbon-wax)$/.test(type) || (type === '' && /toner|ink/i.test(name));
   // A printer with one toner and no color for it is a mono printer: black
@@ -236,7 +238,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
     const percent = level !== null && level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(level * 100 / high))) : null;
     if (/ink/.test(type)) { ink = true; }
-    const color = markerColor(name, String(a['marker-colors']?.[i] ?? '')) ?? (onlyOne && isSupply(type, name) ? 'black' : null);
+    const color = markerColor(name, text(a['marker-colors']?.[i])) ?? (onlyOne && isSupply(type, name) ? 'black' : null);
     if (isSupply(type, name)) {
       if (percent !== null && color && !supplies.some((s) => s.color === color)) { supplies.push({ color, level: percent, fine: null }); }
       return;

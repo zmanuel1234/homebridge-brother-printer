@@ -160,6 +160,51 @@ function defineTests(hap: Hap): void {
     assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
   });
 
+  test('IPP in auto with levels: updates SNMP\'s tiles but removes none, and stores nothing', () => {
+    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true });
+    const two = (b: number, c: number): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    printer.apply(two(60, 50));
+    const cyan = acc.getServiceById(S.HumiditySensor, 'tile-cyan');
+    assert.ok(cyan);
+    const remembered = { ...acc.context };
+    printer.apply(viaIpp({ ...reading(55), drums: {}, parts: {} })); // black only
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tile-cyan'), cyan, 'the cyan tile stays');
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile')?.getCharacteristic(C.CurrentRelativeHumidity).value, 55);
+    assert.deepEqual(acc.context, remembered, 'nothing stored from the stand-in reading');
+  });
+
+  test('IPP in auto: an ink tank printer without levels over SNMP doesn\'t get a battery from IPP', () => {
+    const { acc, printer } = setup({ protocol: 'auto' });
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
+    assert.equal(battery(acc), undefined);
+    printer.apply(viaIpp(reading(70)));
+    assert.equal(battery(acc), undefined);
+    assert.equal(acc.context.noLevels, true);
+  });
+
+  test('IPP in auto: drums without parts don\'t close the Maintenance sensor', () => {
+    const { acc, printer } = setup({ protocol: 'auto', maintenanceSensor: true });
+    printer.apply({ ...reading(50), drums: { black: { percent: 60 } }, parts: { fuser: { percent: 2 } } });
+    const maintenance = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 60 } }, parts: {} }));
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN, 'still open');
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 3 } }, parts: {} }));
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+  });
+
+  test('IPP in auto before SNMP has ever answered: IPP readings count in full', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true });
+    printer.apply(noLevels({ model: 'Brother MFC-L2750DW series', serial: 'E9' }));
+    assert.equal(acc.context.model, 'MFC-L2750DW series');
+    assert.equal(acc.context.serial, 'E9');
+    assert.equal(battery(acc), undefined, 'no level to show');
+    assert.ok(lowSensor(acc), 'the low sensor follows the printer\'s flag');
+  });
+
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
     const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
     printer.apply(viaIpp(reading(50)));
