@@ -1,9 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 - 2026-11-26
+
+Pages printed, how long the toner or ink should last, and paper trays; better coverage of other
+makes. The new tray sensors are off by default. With your current config, Home shows the same
+sensors as with 0.8.1 (apart from the fixes below); the log gains a weekly usage line and names a
+tray that runs out of paper.
 
 ### Added
-- **Pages printed and time left**: once a day the plugin notes the page count and levels.
+- **Pages printed and time left**: once a day the plugin notes the page count and levels
+  (kept with the accessory in Homebridge's cache, about 120 days).
   Test connection in the settings shows pages printed in the last 7 and 30 days and how
   long the toner or ink should last (per color, soonest first); the log has a weekly line
   with the same, and the low toner warning says how long is left.
@@ -20,7 +26,8 @@
 - **Kyocera, Utax and Triumph-Adler** toners named only by part number (TK-5240K, CK-5512M,
   PK-5015Y) get their color from the last letter; before, only a mono printer's showed.
 - **Drums and waste toner boxes in % with an unknown maximum** (Sharp) show their level when
-  the printer's other supplies count to 100; before, they showed nothing.
+  the printer's other supplies count to 100; before, they showed nothing. Like other parts,
+  they can now raise the "near end of life" warning (and the Maintenance sensor, if on).
 - A printer whose supplies table stops answering, while everything else does, **stays
   online** and keeps its last levels, drum and sensors; before, every poll failed and it
   showed as offline. With `protocol` `auto`, IPP's levels stand in for that poll. The log
