@@ -76,6 +76,9 @@ test('search: finds printers of any make; leaves out other devices and ones it c
   // A Windows PC's virtual printer has a printer status too, but isn't one
   const pdf = { ...fromModel('hl-l2340dw'), model: 'Microsoft Print To PDF', supplies: [], drums: {}, lowestSupply: null };
   assert.deepEqual(await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.resolve(pdf) }), []);
+  const faxPrinter = { ...fromModel('hl-l2340dw'), model: 'Brother FAX-L2700DN series' };
+  assert.equal((await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.resolve(faxPrinter) }))[0]?.model,
+    'FAX-L2700DN', 'a real fax-printer is a printer');
   const failing = await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.reject(new Error('timeout')) });
   assert.deepEqual(failing, []);
 });

@@ -182,8 +182,9 @@ export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], co
   const utf8 = new TextDecoder('utf-8', { fatal: true });
   const text = (v: unknown): string => {
     if (!Buffer.isBuffer(v)) { return clean(v); }
-    if (charset) { return decode.decodeText(v, charset); }
-    try { return clean(utf8.decode(v)); } catch { return decode.decodeText(v); }
+    // Valid UTF-8 first: many printers declare US-ASCII or HP Roman8 whatever they send,
+    // and text in a single-byte set (é as 0xE9) is almost never valid UTF-8
+    try { return clean(utf8.decode(v)); } catch { return decode.decodeText(v, charset); }
   };
   const byIndex = new Map<string, Partial<Record<keyof typeof COLUMN, unknown>>>();
   const columns = Object.entries(COLUMN) as [keyof typeof COLUMN, number][];
@@ -229,7 +230,8 @@ export async function readSupplies(session: snmp.Session, charset: number | null
     const rows: snmp.Varbind[] = [];
     for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
     const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
-    const colorants = wantsColorant ? await subtree(session, COLORANT_VALUES, MAX_ROWS).catch(() => []) : [];
+    // Colors may come only from here (supplies named by part number), so a failure counts like the walk's
+    const colorants = wantsColorant ? await subtree(session, COLORANT_VALUES, MAX_ROWS) : [];
     const markers = suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
       colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
     if (markers.length) { state.suppliesRead = true; }
@@ -303,7 +305,7 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
  * first and v1 when v2c gets no answer; options.state remembers which worked.
  */
 export async function query(options: QueryOptions): Promise<QueryResult> {
-  const state = options.state || {};
+  const state = (options.state ||= {});
   const wanted = options.version && options.version !== 'auto' ? [String(options.version) as SnmpVersion] : null;
   const order: SnmpVersion[] = wanted || (state.version ? [state.version] : ['2c', '1']);
 
@@ -358,9 +360,8 @@ export function parse(raw: RawReadings): PrinterData {
   const type = mib?.ink ? 'ink' : decode.printerType(model, maint, deviceId);
   const mfg = /(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i.exec(deviceId)?.[1]?.trim() ?? '';
   const isBrother = brotherSupplies.length > 0 || /brother/i.test(`${mfg} ${model}`);
-  // An unknown maker: the first word of the model, so another make never shows as Brother
-  const manufacturer = isBrother ? 'Brother'
-    : manufacturerOf(mfg, model) ?? manufacturerOf('', sysDescr) ?? (model.split(/\s+/)[0] || null);
+  // null for a maker the plugin can't name: Home then shows "Printer", never Brother
+  const manufacturer = isBrother ? 'Brother' : manufacturerOf(mfg, model) ?? manufacturerOf('', sysDescr);
   const pageCount = typeof raw.pageCount === 'number' ? raw.pageCount : null;
 
   // Inkjets have no drum; their 0x41 record means something else

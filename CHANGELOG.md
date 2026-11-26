@@ -14,7 +14,7 @@
   any levels) from it too.
 - Search for printers finds printers of any make, not only Brother (a computer's virtual
   printers, such as Microsoft Print To PDF, are left out). A printer whose maker can't be
-  named shows as the first word of its model, or "Printer", in Home, never as Brother.
+  named shows as "Printer" in Home, never as Brother.
 - **IPP: more printers and inks**, checked against 49 answers recorded from about 44 real
   printer models (Brother, Canon, Epson, HP, Kyocera, Samsung):
   - Extra inks get their own tiles: Photo Black, Gray (light black), Light Cyan, Light

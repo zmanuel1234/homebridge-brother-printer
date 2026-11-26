@@ -191,5 +191,7 @@ export function manufacturerOf(mfg: string, model: string): string | null {
   if (/^(?:OfficeJet|DeskJet|LaserJet|ENVY|Photosmart|PageWide)/i.test(model)) { return 'HP'; }
   if (/^(?:bizhub)/i.test(model)) { return 'Konica Minolta'; }
   if (/^(?:Aficio)/i.test(model)) { return 'Ricoh'; }
+  if (/^(?:WorkCentre|Phaser|VersaLink|AltaLink|ColorQube|DocuCentre)/i.test(model)) { return 'Xerox'; }
+  if (/^(?:FAX-)/i.test(model)) { return 'Brother'; }
   return null;
 }

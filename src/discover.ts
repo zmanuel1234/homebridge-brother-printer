@@ -151,7 +151,8 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
       });
       // Printers have a printer status (Host Resources MIB) or supplies; routers and the like don't
       // A computer's virtual printer ("Microsoft Print To PDF") has a printer status too
-      const virtual = /microsoft|print to|\bpdf\b|\bxps\b|onenote|\bfax\b/i.test(d.model || '');
+      // (but not a real fax-printer such as a Brother FAX-L2700DN)
+      const virtual = /microsoft|print to|\bpdf\b|\bxps\b|onenote|^fax$/i.test((d.model || '').trim());
       const printer = !virtual && (d.printerStatus !== null || d.supplies.length > 0 || Object.keys(d.drums).length > 0
         || /brother/i.test(d.model || ''));
       if (!printer) { return null; }

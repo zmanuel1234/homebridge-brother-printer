@@ -51,7 +51,7 @@ test('Printer MIB: a color laser with page-counted supplies, drums and parts', (
   assert.equal(d.type, 'laser');
   assert.deepEqual(d.drums, { black: { percent: 95 } });
   assert.deepEqual(d.parts, { developer: { percent: 71 }, wasteToner: { percent: 5 }, belt: { percent: 85 } });
-  assert.equal(d.manufacturer, 'ACME', 'a maker the plugin doesn\'t know: the first word of the model');
+  assert.equal(d.manufacturer, null, 'a maker the plugin can\'t name (Home shows "Printer")');
 });
 
 test('Printer MIB: inkjets, names in other languages, part numbers, two black toners', () => {
@@ -158,6 +158,10 @@ test('Printer MIB: a walk that fails partway is a failed poll once the table has
   // Read before: a lost packet mid-walk must not look like "no supplies"
   await assert.rejects(readSupplies(fakeSession((oid) => (oid.endsWith('.9') ? new Error('Request timed out') : ok(oid))), null, state),
     /timed out/);
+  // The colorant walk too, when supplies take their colors from it
+  const withColorant = (oid: string): snmpLib.Varbind[] | Error => (oid.endsWith('.3') ? [{ oid: `${oid}.1.1`, type: 2, value: 1 }]
+    : oid.startsWith(COLORANT_VALUES) ? new Error('Request timed out') : ok(oid));
+  await assert.rejects(readSupplies(fakeSession(withColorant), null, state), /timed out/);
 });
 
 test('Printer MIB: names follow the printer\'s character set', () => {
@@ -165,6 +169,9 @@ test('Printer MIB: names follow the printer\'s character set', () => {
   const latin1 = Buffer.from('Toner Schwarz \u00e4', 'latin1');
   const markers = suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: latin1 }], [], 4);
   assert.equal(markers[0].name, 'Toner Schwarz \u00e4');
+  // A declared US-ASCII (3) or HP Roman8 (2004) doesn't stop valid UTF-8
+  assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: Buffer.from('黑色碳粉') }], [], 3)[0].name, '黑色碳粉');
+  assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: Buffer.from('黑色碳粉') }], [], 2004)[0].name, '黑色碳粉');
   // No character set given: UTF-8 when valid, so Chinese names come through
   assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: Buffer.from('黑色碳粉') }], [])[0].name, '黑色碳粉');
   assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: latin1 }], [])[0].name, 'Toner Schwarz \u00e4');
