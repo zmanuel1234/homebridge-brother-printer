@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 - 2026-11-26
+
+Pages printed, how long the toner or ink should last, and paper trays; better coverage of other
+makes. The new tray sensors are off by default. With your current config, Home shows the same
+sensors as with 0.8.1 (apart from the fixes below); the log gains a weekly usage line and names a
+tray that runs out of paper.
 
 ### Added
 - **Pages printed and time left**: once a day the plugin notes the page count and levels.
