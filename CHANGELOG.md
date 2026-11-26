@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.10.0-beta.1 - 2026-11-26
 
-From testing 0.9.0 on a real printer in Apple's Home app.
+A beta, for testing on real printers before 0.10.0. The changes come from testing 0.9.0 on a
+real printer in Apple's Home app.
 
 ### Breaking
 - **The Online sensor is now an Offline contact sensor** (`onlineSensor`): it opens when the
