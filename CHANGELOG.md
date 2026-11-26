@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Optional **Out of Paper** contact sensor (`paperSensor`): opens when a tray is empty, so
+  Home notifies it by name. The Problem sensor still opens for this too.
+- Optional **Maintenance** contact sensor (`maintenanceSensor`): opens when the drum, belt,
+  fuser, laser unit, paper feed kit or ink waste box is at or below `lowDrumThreshold`.
+  Until now these only logged a warning.
+- Optional **Online** occupancy sensor (`onlineSensor`): Detected while the printer answers.
+  Unlike the other sensors it stays readable while the printer is offline, so automations
+  can run on it (for example, turning off the printer's smart plug).
+
+All three are off by default; with your current config nothing changes.
+
 ## 0.5.2 - 2026-11-26
 
 No change to how the plugin works: the compiled plugin is identical to 0.5.1's.

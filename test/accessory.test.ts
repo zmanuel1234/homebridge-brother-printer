@@ -248,6 +248,73 @@ function defineTests(hap: Hap): void {
     const { acc } = setup({ faultSensor: false });
     assert.equal(problem(acc), undefined);
   });
+  /* ------------------------------------------------------ optional sensors */
+
+  test('new sensors: all off by default', () => {
+    const { acc } = setup({});
+    assert.equal(service(acc, S.ContactSensor, 'maintenance'), undefined);
+    assert.equal(service(acc, S.ContactSensor, 'noPaper'), undefined);
+    assert.equal(acc.getServiceById(S.OccupancySensor, 'online'), undefined);
+  });
+
+  test('maintenance sensor: opens when the drum or another part is low', () => {
+    const { acc, printer } = setup({ maintenanceSensor: true, lowDrumThreshold: 10 });
+    const svc = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Printer Maintenance');
+    const ok = { drums: { black: { percent: 60 } }, parts: { fuser: { percent: 70 } } };
+    printer.apply(reading(50, 50, ok));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    printer.apply(reading(50, 50, { ...ok, drums: { black: { percent: 8 } } }));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN, 'drum low');
+    printer.apply(reading(50, 50, { ...ok, parts: { fuser: { percent: 10 } } }));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN, 'fuser low');
+    printer.apply(reading(50, 50, ok));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    assert.ok(svc && printer.guarded.includes(svc.getCharacteristic(C.ContactSensorState)));
+  });
+
+  test('out of paper sensor: opens on an empty tray only', () => {
+    const { acc, printer } = setup({ paperSensor: true });
+    const svc = service(acc, S.ContactSensor, 'noPaper');
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Printer Out of Paper');
+    printer.apply(reading(50));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    printer.apply(reading(50, 50, { fault: true, faults: ['jammed'], errors: ['jammed'] }));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED, 'a jam is not out of paper');
+    printer.apply(reading(50, 50, { fault: true, faults: ['noPaper'], errors: ['noPaper'] }));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    printer.apply(reading(50));
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+  });
+
+  test('online sensor: follows reachability and stays readable while offline', async () => {
+    const { acc, printer } = setup({ onlineSensor: true, offlineAfter: 1 });
+    const svc = acc.getServiceById(S.OccupancySensor, 'online');
+    assert.ok(svc);
+    assert.notEqual(printer.occupancy, svc, 'the printing sensor is still the main one');
+    const detected = svc.getCharacteristic(C.OccupancyDetected);
+    await pollWith(printer, reading(50));
+    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_DETECTED);
+    await pollWith(printer, new Error('Request timed out'));
+    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
+    await pollWith(printer, reading(50));
+    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_DETECTED);
+  });
+
+  test('new sensors: kept across restarts, removed when turned off', () => {
+    const on = { maintenanceSensor: true, paperSensor: true, onlineSensor: true };
+    const first = setup(on);
+    const again = setup(on, first.acc);
+    assert.equal(again.printer.maintenance, service(first.acc, S.ContactSensor, 'maintenance'));
+    assert.equal(again.printer.paper, service(first.acc, S.ContactSensor, 'noPaper'));
+    assert.equal(again.printer.onlineSvc, first.acc.getServiceById(S.OccupancySensor, 'online'));
+    assert.equal(again.printer.occupancy, first.printer.occupancy, 'the cached printing sensor is reused');
+    setup({}, first.acc);
+    assert.equal(service(first.acc, S.ContactSensor, 'maintenance'), undefined);
+    assert.equal(service(first.acc, S.ContactSensor, 'noPaper'), undefined);
+    assert.equal(first.acc.getServiceById(S.OccupancySensor, 'online'), undefined);
+  });
+
   test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {
     const first = setup({ tonerTile: true });
     first.printer.apply(reading(40));
