@@ -187,17 +187,22 @@ export function reasonErrors(reasons: IppValue[]): PrinterError[] {
  * ink", "light black ink", "Black(PGBK)", "BK", "tri-color ink"), then from
  * marker-colors (#RRGGBB; several for a multi-color cartridge; "none").
  */
-export function markerColor(name: string, colors: string): Color | null {
+export function markerColor(name: string, colors: string, supply = true): Color | null {
   const n = name.toLowerCase();
-  if (/tri-?colou?r|\bcmy\b|\bcolou?r ink\b/.test(n) || (colors.match(/#[0-9a-f]{6}/gi) || []).length > 1) { return 'tricolor'; }
-  if (/photo\s*black|\bpbk?\b/.test(n)) { return 'photoBlack'; }
-  if (/light\s*black|gr[ae]y/.test(n)) { return 'gray'; }
+  if (/tri-?colou?r|\bcmy\b|\bcolou?r ink\b/.test(n)) { return 'tricolor'; }
+  // PK / PBK photo black, MK matte black (PB is Canon's photo *blue*: no tile)
+  if (/photo\s*black|\bpbk\b|\bpk\b/.test(n)) { return 'photoBlack'; }
+  if (/matte\s*black|\bmk\b/.test(n)) { return 'black'; }
+  if (/light\s*black|\bl?gy\b/.test(n) || (/gr[ae]y/.test(n) && !/black/.test(n))) { return 'gray'; }
   if (/light\s*cyan|photo\s*cyan|\blc\b/.test(n)) { return 'lightCyan'; }
   if (/light\s*magenta|photo\s*magenta|\blm\b/.test(n)) { return 'lightMagenta'; }
   const word = /\b(black|cyan|magenta|yellow)\b/.exec(n)?.[1] as Color | undefined;
   if (word) { return word; }
   const code = /\b(pgbk|bk|k|c|m|y)\b/.exec(n)?.[1];
   if (code) { return ({ pgbk: 'black', bk: 'black', k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[code]; }
+  // Several colors for one marker: a tri-color cartridge (for a drum: shared, no color)
+  const hexes = colors.match(/#[0-9a-f]{6}/gi) || [];
+  if (hexes.length > 1) { return supply ? 'tricolor' : null; }
   return hexColor(colors);
 }
 
@@ -209,8 +214,9 @@ function hexColor(value: string): Color | null {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (max - min < 0.15) {
-    // White (#FFFFFF) is a placeholder some printers send for black
-    return max < 0.15 || max > 0.95 ? 'black' : 'gray';
+    // White (#FFFFFF exactly) is a placeholder some printers send for black
+    if (/^#ffffff$/i.test(value.trim())) { return 'black'; }
+    return max < 0.25 ? 'black' : max > 0.9 ? null : 'gray';
   }
   const light = min > 0.4;
   if (b >= max - 0.15 && g >= max - 0.3 && r < max - 0.3) { return light ? 'lightCyan' : 'cyan'; }
@@ -278,7 +284,18 @@ export function toPrinterData(a: IppAttributes): PrinterData {
   // A printer with one toner and no color for it is a mono printer: black
   const onlyOne = names.filter((n, i) => isSupply(types[i], n)).length === 1;
   let ink = false;
-  const blacks: number[] = [];
+  // Supply colors first, to sort out several blacks: Canon's pigment black
+  // (PGBK) is the black and its dye black the photo black; otherwise the first
+  // black is the black and a second one the photo black. More are left out.
+  const supplyColor = names.map((name, i) => (isSupply(types[i], name)
+    ? markerColor(name, text(a['marker-colors']?.[i])) ?? (onlyOne ? 'black' : null) : null));
+  const blackIdx = supplyColor.flatMap((c, i) => (c === 'black' ? [i] : []));
+  if (blackIdx.length > 1) {
+    const pigment = blackIdx.find((i) => /pgbk|pigment/i.test(names[i])) ?? blackIdx[0];
+    const others = blackIdx.filter((i) => i !== pigment);
+    if (!supplyColor.includes('photoBlack')) { supplyColor[others.shift()!] = 'photoBlack'; }
+    for (const i of others) { supplyColor[i] = null; }
+  }
   names.forEach((name, i) => {
     const type = types[i];
     const level = num('marker-levels', i);
@@ -286,19 +303,12 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
     const percent = level !== null && level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(level * 100 / high))) : null;
     if (/ink/.test(type)) { ink = true; }
-    let color = markerColor(name, text(a['marker-colors']?.[i])) ?? (onlyOne && isSupply(type, name) ? 'black' : null);
     if (isSupply(type, name)) {
-      // A second black is the photo (dye) black, or, next to a pigment black
-      // (Canon's PGBK), the other one
-      if (color === 'black' && blacks.length) { color = 'photoBlack'; }
-      if (color === 'black') { blacks.push(i); }
-      if (color === 'black' && /pgbk|pigment/i.test(name) === false && names.some((o, j) => j !== i && /pgbk|pigment/i.test(o))) {
-        color = 'photoBlack';
-        blacks.pop();
-      }
+      const color = supplyColor[i];
       if (percent !== null && color && !supplies.some((s) => s.color === color)) { supplies.push({ color, level: percent, fine: null }); }
       return;
     }
+    const color = markerColor(name, text(a['marker-colors']?.[i]), false);
     if (type === 'opc' || type === 'photo-conductor' || /drum/i.test(name)) {
       if (percent !== null) { drums[color || 'black'] = { percent }; }
       return;

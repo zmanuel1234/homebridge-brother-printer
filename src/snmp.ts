@@ -248,6 +248,7 @@ export function parse(raw: RawReadings): PrinterData {
 
   return {
     model: model || null,
+    manufacturer: 'Brother',
     serial: decode.decodeText(raw.serial) || decode.decodeText(raw.brSerial) || null,
     type,
     statusText,

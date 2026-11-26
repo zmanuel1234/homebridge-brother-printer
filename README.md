@@ -45,7 +45,7 @@ While the printer can't be reached, all of them except Online show No Response.
 reads printers over AirPrint (IPP) and works with most brands. If you have a Brother
 printer, the difference is in what each can read and show:
 
-| | This plugin (SNMP) | AirPrint (IPP) plugins |
+| | This plugin | AirPrint (IPP) plugins |
 |---|---|---|
 | Printer brands | Brother; other AirPrint printers over IPP (status, problems, ink and toner) | Most AirPrint printers |
 | Toner / ink level | The % from the printer's web page, plus a finer reading for earlier low alerts | A % on some Brother printers (in 10% steps), only "some remaining" on others |
@@ -243,8 +243,8 @@ Photo Black, Gray (light black), Light Cyan, Light Magenta, and HP's single Tri-
 cartridge. A maintenance kit counts as a part for the Maintenance sensor, and Home shows
 the printer's own maker and model.
 
-The IPP reading is checked against answers recorded from 50 real printers: Brother,
-Canon, Epson, HP (inkjets, LaserJets, OfficeJets, PageWide), Kyocera and Samsung
+The IPP reading is checked against 49 answers recorded from about 44 real printer models:
+Brother, Canon, Epson, HP (inkjets, LaserJets, OfficeJets, PageWide), Kyocera and Samsung
 (see `test/fixtures/ipp`). Report a printer that reads wrong with the probe's output
 (`--protocol ipp`).
 
