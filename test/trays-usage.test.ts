@@ -63,17 +63,19 @@ test('trays: type and status (HP marks its bypass tray "on request"; unknown sta
     { oid: `${INPUT_TABLE}.2.1.${i + 1}`, value: type },
     { oid: `${INPUT_TABLE}.11.1.${i + 1}`, value: status },
   ]);
-  // HP LaserJet M880: Tray 1 non-removable and "on request" (9); Tray 2 also non-removable
-  assert.equal(show(traysFromTable(withCols([['Tray 1', 100, 0, 4, 9], ['Tray 2', 500, 200, 4, 0], ['Tray 3', 1500, 300, 3, 0]]), INPUT_TABLE)),
-    'Tray 1* empty 0, Tray 2 ok 40, Tray 3 ok 20');
+  // HP LaserJet M880: Tray 1 is the bypass by its size; "on request" (9) is no sign of one, since
+  // HP marks an empty cassette the same way: Tray 2, empty, stays a main tray from the start
+  assert.equal(show(traysFromTable(withCols([['Tray 1', 100, 0, 4, 9], ['Tray 2', 500, 0, 4, 9], ['Tray 3', 1500, 300, 3, 0]]), INPUT_TABLE)),
+    'Tray 1* empty 0, Tray 2 empty 0, Tray 3 ok 20');
   // A manual feed by type, however big; a tray at 0 whose status is unknown (5)
   assert.equal(show(traysFromTable(withCols([['Feeder', 250, 0, 5, 0], ['Tray 2', 500, 0, 3, 5]]), INPUT_TABLE)),
     'Feeder* empty 0, Tray 2 unknown');
   // A rear feeder isn't taken for a bypass tray (the main tray on many inkjets)
   assert.equal(traysFromIpp(['type=sheetFeedAutoNonRemovableTray;maxcapacity=100;level=0;status=0;name=Rear;'])[0].secondary, false);
   assert.equal(traysFromIpp(['type=sheetFeedManual;maxcapacity=250;level=0;status=0;name=Slot;'])[0].secondary, true);
-  // A removable cassette marked "on request" while empty stays a main tray
+  // A cassette marked "on request" while empty stays a main tray, removable or not
   assert.equal(traysFromIpp(['type=sheetFeedAutoRemovableTray;maxcapacity=500;level=0;status=9;name=Tray 2;'])[0].secondary, false);
+  assert.equal(traysFromIpp(['type=sheetFeedAutoNonRemovableTray;maxcapacity=500;level=0;status=9;name=Tray 2;'])[0].secondary, false);
 });
 
 test('trays: from real IPP answers (HP LaserJet M605, Epson XP-6000)', () => {

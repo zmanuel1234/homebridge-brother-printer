@@ -923,7 +923,8 @@ export class PrinterAccessory {
    */
   applyTrays(trays: Tray[], standIn = false): void {
     const { Service: S, Characteristic: C } = this.hap;
-    const main = trays.filter((t) => !t.secondary);
+    // Main trays, and any tray that already has a sensor (it was a main tray when made)
+    const main = trays.filter((t) => !t.secondary || this.trays[t.key]);
     for (const t of main) {
       if (standIn && t.state !== 'empty') { continue; }
       this.warnOnce(`tray-${t.key}`, t.state === 'empty', `${t.name} is out of paper.`);
