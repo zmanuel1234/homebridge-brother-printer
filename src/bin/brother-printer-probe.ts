@@ -90,6 +90,9 @@ if (flags['ipp-self-signed'] !== undefined) {
   options.ippAllowSelfSigned = flags['ipp-self-signed'] === 'yes';
 }
 
+// The paper trays too, as the settings screen's test shows them
+options.trays = true;
+
 readPrinter(options)
   .then((d) => {
     console.log(JSON.stringify(d, null, 2));

@@ -14,6 +14,7 @@ import { printerType, summarizeStatus } from './decode';
 import type { PrinterError } from './decode';
 import { manufacturerOf, mapMarkers } from './markers';
 import type { Marker } from './markers';
+import { traysFromIpp } from './trays';
 import type { PrinterData } from './snmp';
 
 /* --------------------------------------------------------------- encoding */
@@ -73,6 +74,7 @@ export const REQUESTED = [
   'printer-state', 'printer-state-reasons', 'printer-state-message', 'printer-make-and-model',
   'printer-device-id', 'printer-serial-number', 'printer-info', 'marker-names', 'marker-levels',
   'marker-high-levels', 'marker-low-levels', 'marker-types', 'marker-colors', 'printer-impressions-completed',
+  'printer-input-tray',
 ];
 
 export function getPrinterAttributes(uri: string, requestId: number): Buffer {
@@ -138,7 +140,8 @@ export function parseResponse(buf: Buffer): IppResponse {
       const langLen = data.length >= 2 ? data.readUInt16BE(0) : 0;
       const at = 2 + langLen;
       value = data.length >= at + 2 ? data.toString('utf8', at + 2, at + 2 + data.readUInt16BE(at)) : '';
-    } else if (tag >= 0x40) {
+    } else if (tag >= 0x40 || tag === TAG.octetString) {
+      // Strings, and octet strings such as printer-input-tray ("type=…;level=-3;name=Tray 1;")
       value = data.toString('utf8');
     } else {
       // unknown / no-value, dates, resolutions, ranges: kept as a gap, so that
@@ -238,6 +241,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     drumPagesUsed: null,
     drumPagesRemaining: null,
     unknown: {},
+    ...(a['printer-input-tray'] ? { trays: traysFromIpp(a['printer-input-tray']) } : {}),
   };
 }
 

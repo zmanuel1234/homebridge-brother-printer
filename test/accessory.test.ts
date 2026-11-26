@@ -349,6 +349,133 @@ function defineTests(hap: Hap): void {
     assert.equal(battery(first.acc)?.getCharacteristic(C.BatteryLevel).value, 50);
   });
 
+  /* ------------------------------------------------------- paper trays */
+
+  const tray = (name: string, state: 'empty' | 'ok' | 'low' | 'unknown', secondary = false, key = name.toLowerCase().replace(/ /g, '-')) =>
+    ({ name, key, state, percent: null, capacity: null, secondary });
+
+  test('paper trays: a sensor per main tray, opened when empty; bypass trays get none', async () => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({ paperTraySensors: true }, null, lines);
+    assert.equal(printer.options.trays, true, 'trays read on every poll');
+    await pollWith(printer, { ...reading(50), trays: [tray('MP Tray', 'empty', true), tray('Tray 1', 'ok'), tray('Tray 2', 'empty')] });
+    const t1 = acc.getServiceById(S.ContactSensor, 'tray-tray-1');
+    const t2 = acc.getServiceById(S.ContactSensor, 'tray-tray-2');
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-mp-tray'), undefined);
+    assert.equal(t1?.getCharacteristic(C.ConfiguredName).value, 'Printer Tray 1');
+    assert.equal(t1?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    assert.equal(t2?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    assert.equal(lines.filter((l) => l.startsWith('warn') && /Tray 2 is out of paper/.test(l)).length, 1);
+    assert.ok(!lines.some((l) => /MP Tray is out of paper/.test(l)));
+    // Paper put in; a reading without trays changes nothing
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'ok'), tray('Tray 2', 'ok')] });
+    assert.equal(t2?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    await pollWith(printer, reading(50));
+    assert.ok(acc.getServiceById(S.ContactSensor, 'tray-tray-2'));
+    // A drawer taken out: its sensor goes
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'ok')] });
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), undefined);
+    // Offline: No Response like the other sensors
+    await pollWith(printer, new Error('timeout'));
+    await pollWith(printer, new Error('timeout'));
+    await pollWith(printer, new Error('timeout'));
+    assert.equal(printer.online, false);
+    assert.equal(t1?.getCharacteristic(C.StatusActive).value, false);
+  });
+
+  test('paper trays: kept across a restart and a rename; removed when turned off', async () => {
+    const first = setup({ paperTraySensors: true });
+    await pollWith(first.printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    const renamed = setup({ paperTraySensors: true, name: 'Office' }, first.acc);
+    const svc = first.acc.getServiceById(S.ContactSensor, 'tray-tray-1');
+    assert.equal(renamed.printer.trays['tray-1'], svc);
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Office Tray 1');
+    setup({ name: 'Office' }, first.acc);
+    assert.equal(first.acc.getServiceById(S.ContactSensor, 'tray-tray-1'), undefined);
+  });
+
+  test('paper trays: IPP standing in updates SNMP\'s sensors only, to a state it\'s sure of', async () => {
+    const { acc, printer } = setup({ protocol: 'auto', paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty'), tray('Tray 2', 'ok')] });
+    const t1 = acc.getServiceById(S.ContactSensor, 'tray-tray-1')!;
+    const ippReading = (trays: ReturnType<typeof tray>[]) => ({ ...reading(50), snmpVersion: null, via: 'ipp' as const, trays });
+    // Other names (Canon: "main", "rear") and unknown levels: nothing added, removed or closed
+    await pollWith(printer, ippReading([tray('Main', 'ok'), tray('Tray 1', 'unknown')]));
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-main'), undefined);
+    assert.ok(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), 'not removed');
+    assert.equal(t1.getCharacteristic(C.ContactSensorState).value, OPEN, 'unknown doesn\'t close it');
+    // A definite reading does count
+    await pollWith(printer, ippReading([tray('Tray 1', 'ok')]));
+    assert.equal(t1.getCharacteristic(C.ContactSensorState).value, CLOSED);
+  });
+
+  test('paper trays: a tray keeps its sensor when a reading takes it for a bypass tray', async () => {
+    const { acc, printer } = setup({ paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'ok')] });
+    const svc = acc.getServiceById(S.ContactSensor, 'tray-tray-2');
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'empty', true)] });
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), svc, 'the same sensor');
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN);
+  });
+
+  test('paper trays: with tray sensors, a failed tray read doesn\'t repeat the warning', async () => {
+    const lines: string[] = [];
+    const { printer } = setup({ paperTraySensors: true }, null, lines);
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    await pollWith(printer, reading(50)); // trays couldn't be read
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    assert.equal(lines.filter((l) => /Tray 1 is out of paper/.test(l)).length, 1);
+  });
+
+  test('paper trays: a tray whose level is never known gets no sensor', async () => {
+    const { acc, printer } = setup({ paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Input Tray 1', 'unknown')] });
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-input-tray-1'), undefined);
+  });
+
+  test('paper trays: the warning comes again after the paper error clears (trays read only during one)', async () => {
+    const lines: string[] = [];
+    const { printer } = setup({}, null, lines);
+    const out = { ...reading(50), errors: ['noPaper' as const], trays: [tray('Tray 1', 'empty')] };
+    await pollWith(printer, out);
+    await pollWith(printer, reading(50)); // refilled: no error, trays not read
+    await pollWith(printer, out);
+    assert.equal(lines.filter((l) => /Tray 1 is out of paper/.test(l)).length, 2);
+  });
+
+  test('paper trays: without sensors, still a warning naming the empty tray', async () => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({}, null, lines);
+    assert.equal(printer.options.trays, undefined);
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    assert.ok(lines.some((l) => /Tray 1 is out of paper/.test(l)));
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-tray-1'), undefined);
+  });
+
+  /* -------------------------------------------------------------- usage */
+
+  test('usage: one reading a day in the cache, a weekly line in the log, time left with a low warning', async (t) => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({}, null, lines);
+    const DAY = 86400_000;
+    let now = Date.UTC(2026, 0, 1);
+    t.mock.method(Date, 'now', () => now);
+    for (let day = 0; day <= 10; day++) {
+      now = Date.UTC(2026, 0, 1) + day * DAY;
+      await pollWith(printer, { ...reading(60 - day * 5), totalPages: 1000 + day * 20 });
+      await pollWith(printer, { ...reading(60 - day * 5), totalPages: 1000 + day * 20 }); // same day: no new reading
+    }
+    assert.equal(acc.context.usage?.length, 11);
+    assert.ok(lines.some((l) => l.startsWith('info') && /140 pages printed in the last 7 days\. Toner: about 5 days left\./.test(l)), lines.join('\n'));
+    const low = lines.find((l) => /Toner is low: 10%/.test(l));
+    assert.match(low ?? '', /At the rate it's been going down, about 2 days left\./);
+    // IPP standing in and unread supplies record nothing
+    const before = acc.context.usage!.length;
+    now += 2 * DAY;
+    await pollWith(printer, { ...reading(10), supplies: [], lowestSupply: null, suppliesUnread: true });
+    assert.equal(acc.context.usage!.length, before);
+  });
+
   test('a printer whose maker can\'t be named shows as "Printer", never Brother', () => {
     const { acc, printer } = setup({});
     printer.apply({ ...reading(50), model: null, manufacturer: null });

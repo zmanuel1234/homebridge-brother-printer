@@ -10,6 +10,9 @@ import { ALL_COLORS, COLOR_NAMES } from './decode';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 import { entryDue, startHistory } from './history';
 import type { HistoryEntry, HistoryLog } from './history';
+import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './usage';
+import type { UsageSample } from './usage';
+import type { Tray } from './trays';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -30,6 +33,10 @@ export interface PrinterContext {
   manufacturer?: string;
   /** The printer has answered SNMP (with protocol auto, IPP then only fills in) */
   snmpAnswered?: boolean;
+  /** One reading a day: pages and levels, for usage and "toner left" estimates */
+  usage?: UsageSample[];
+  /** When the weekly usage line was last logged (Unix seconds) */
+  usageLogged?: number;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -60,6 +67,7 @@ export interface PrinterConfig {
   faultSensor?: unknown;
   maintenanceSensor?: unknown;
   paperSensor?: unknown;
+  paperTraySensors?: unknown;
   onlineSensor?: unknown;
   eveHistory?: unknown;
   offlineAfter?: unknown;
@@ -127,6 +135,8 @@ const EVE_HISTORY_SERVICE = 'E863F007-079E-48FF-8F27-9C2605A29F52';
 /** What the plugin adds after the printer's name when it names a sensor */
 const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
   ' Out of Paper', ' Online', ...Object.values(COLOR_NAMES).map((n) => ` ${n}`)]);
+/** Paper tray sensors' subtypes: "tray-" and the tray's key */
+const TRAY_PREFIX = 'tray-';
 
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
@@ -203,6 +213,7 @@ export class PrinterAccessory {
   readonly lowTonerSensor: boolean;
   readonly maintenanceSensor: boolean;
   readonly paperSensor: boolean;
+  readonly paperTraySensors: boolean;
   readonly onlineSensor: boolean;
   readonly eveHistory: boolean;
   /** The serial number from the settings, if any */
@@ -228,6 +239,8 @@ export class PrinterAccessory {
   lowSensor: Service | null = null;
   maintenance: Service | null = null;
   paper: Service | null = null;
+  /** Paper tray sensors by tray key */
+  trays: Record<string, Service> = {};
   onlineSvc: Service | null = null;
   history: HistoryLog | null = null;
   /** With protocol auto: SNMP has answered since Homebridge started, so IPP only stands in */
@@ -262,6 +275,9 @@ export class PrinterAccessory {
     this.lowTonerSensor = config.lowTonerSensor === true;
     this.maintenanceSensor = config.maintenanceSensor === true;
     this.paperSensor = config.paperSensor === true;
+    this.paperTraySensors = config.paperTraySensors === true;
+    // Tray sensors need the trays on every poll
+    if (this.paperTraySensors) { this.options.trays = true; }
     this.onlineSensor = config.onlineSensor === true;
     this.eveHistory = config.eveHistory === true;
     this.configSerial = String(config.serial ?? '').trim();
@@ -292,7 +308,9 @@ export class PrinterAccessory {
           if (!svc.testCharacteristic(type)) { continue; }
           const value = svc.getCharacteristic(type).value;
           // Only names the plugin gave; a name set in the Home app stays
-          if (typeof value === 'string' && value.startsWith(old) && OWN_SUFFIXES.has(value.slice(old.length))) {
+          const own = OWN_SUFFIXES.has(value?.toString().slice(old.length) ?? '')
+            || (svc.subtype?.startsWith(TRAY_PREFIX) === true && value?.toString().startsWith(`${old} `) === true);
+          if (typeof value === 'string' && value.startsWith(old) && own) {
             svc.updateCharacteristic(type, this.name + value.slice(old.length));
           }
         }
@@ -366,6 +384,12 @@ export class PrinterAccessory {
     this.maintenance = this.optionalContact(this.maintenanceSensor, 'maintenance', `${this.name} Maintenance`);
     // Out of paper on its own, the problem people most often fix themselves
     this.paper = this.optionalContact(this.paperSensor, 'noPaper', `${this.name} Out of Paper`);
+
+    // One sensor per paper tray, made once the printer lists its trays; here only the
+    // ones restored from the cache are picked up
+    for (const svc of acc.services.filter((s) => s.UUID === S.ContactSensor.UUID && s.subtype?.startsWith(TRAY_PREFIX))) {
+      if (this.paperTraySensors) { this.trays[svc.subtype!.slice(TRAY_PREFIX.length)] = svc; } else { acc.removeService(svc); }
+    }
 
     // Reachable or not, as a sensor automations can use. Home can't trigger on
     // No Response, so this one stays readable while the printer is offline.
@@ -488,6 +512,7 @@ export class PrinterAccessory {
       [this.maintenance, C.ContactSensorState],
       [this.paper, C.ContactSensorState],
       ...Object.values(this.tiles).map((svc): [Service, CharacteristicType] => [svc, C.CurrentRelativeHumidity]),
+      ...Object.values(this.trays).map((svc): [Service, CharacteristicType] => [svc, C.ContactSensorState]),
     ];
     for (const [svc, type] of pairs) {
       if (svc) { this.guard(svc.getCharacteristic(type)); }
@@ -575,7 +600,7 @@ export class PrinterAccessory {
     this.occupancy.updateCharacteristic(C.StatusActive, online);
     for (const svc of Object.values(this.tiles)) { svc.updateCharacteristic(C.StatusActive, online); }
     if (this.problem) { this.problem.updateCharacteristic(C.StatusActive, online); }
-    for (const svc of [this.lowSensor, this.maintenance, this.paper]) {
+    for (const svc of [this.lowSensor, this.maintenance, this.paper, ...Object.values(this.trays)]) {
       if (svc) { svc.updateCharacteristic(C.StatusActive, online); }
     }
     if (this.onlineSvc) {
@@ -648,6 +673,14 @@ export class PrinterAccessory {
       this.warnOnce('supplies-unread', false, '');
       this.applySupplies(d);
       this.applyDrumAndParts(d);
+      if (!this.standIn(d)) { this.recordUsage(d); }
+    }
+    if (d.trays) {
+      this.applyTrays(d.trays, this.standIn(d));
+    } else if (!this.options.trays && !d.errors.some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty')) {
+      // Trays read only while paper is low or out: no paper error means they all have
+      // paper, so the next tray to run out is warned about again
+      for (const key of Object.keys(this.last.warned || {})) { if (key.startsWith('tray-')) { this.last.warned![key] = false; } }
     }
 
     if (d.totalPages !== null) { this.pages.updateValue(d.totalPages); }
@@ -783,7 +816,9 @@ export class PrinterAccessory {
       if (was && was.level !== s.level) { this.log.info(`[${this.name}] ${label(s)} ${s.level}%`); }
       if (isLow(s) && !(was && was.low)) {
         const fine = s.fine !== null && s.fine !== s.level ? ` (${s.fine}% by the finer reading)` : '';
-        this.log.warn(`[${this.name}] ${label(s)} is low: ${s.level}%${fine}.`);
+        const days = daysLeft(this.accessory.context.usage, s.color, Math.round(Date.now() / 1000), s.fine ?? s.level);
+        const left = days !== null ? ` At the rate it's been going down, ${describeDays(days)} left.` : '';
+        this.log.warn(`[${this.name}] ${label(s)} is low: ${s.level}%${fine}.${left}`);
       }
     }
     this.last.supplies = Object.fromEntries(d.supplies.map((s) => [s.color, { level: s.level, low: isLow(s) }]));
@@ -849,6 +884,82 @@ export class PrinterAccessory {
       this.maintenance.updateCharacteristic(C.ContactSensorState, due
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
         : C.ContactSensorState.CONTACT_DETECTED);
+    }
+  }
+
+  /**
+   * One reading a day of the pages and levels, kept in the cache for the usage
+   * figures; and once a week a line in the log with pages printed and how long the
+   * toner or ink should last.
+   */
+  recordUsage(d: PrinterData): void {
+    const now = Math.round(Date.now() / 1000);
+    // The finer reading where there is one: some printers count the coarse one in 10% steps
+    const levels: Partial<Record<Color, number>> = Object.fromEntries(d.supplies.map((s) => [s.color, s.fine ?? s.level]));
+    if (d.totalPages === null && !d.supplies.length) { return; }
+    const ctx = this.accessory.context;
+    const next = addSample(ctx.usage, now, d.totalPages, levels);
+    if (!next) { return; }
+    ctx.usage = next;
+    const since = ctx.usageLogged ?? next[0].t;
+    if (now - since >= 7 * 86400) {
+      const week = pagesInLast(next, now, d.totalPages, 7);
+      const kind = d.type === 'ink' ? 'Ink' : 'Toner';
+      const left = describeLeft(next, now, levels, kind);
+      const parts = [week !== null ? `${week} page${week === 1 ? '' : 's'} printed in the last 7 days` : '', left ?? ''].filter(Boolean);
+      if (parts.length) { this.log.info(`[${this.name}] ${parts.join('. ')}.`); }
+      ctx.usageLogged = now;
+    }
+    this.api.updatePlatformAccessories([this.accessory]);
+  }
+
+  /**
+   * Paper trays: a warning when one runs out, and with paperTraySensors one contact
+   * sensor per tray that opens when it's empty. Bypass and manual trays, often empty
+   * on purpose, get neither, and nor does a tray whose level isn't known (no sensor
+   * that could never open). IPP standing in for SNMP (whose trays may have other
+   * names, and often unknown levels) only updates sensors SNMP made, and only to a
+   * state it's sure of.
+   */
+  applyTrays(trays: Tray[], standIn = false): void {
+    const { Service: S, Characteristic: C } = this.hap;
+    const main = trays.filter((t) => !t.secondary);
+    for (const t of main) {
+      if (standIn && t.state !== 'empty') { continue; }
+      this.warnOnce(`tray-${t.key}`, t.state === 'empty', `${t.name} is out of paper.`);
+    }
+    if (!this.paperTraySensors) { return; }
+    // A tray keeps its sensor once it has one, even if a reading takes it for a bypass
+    // tray (its status can change as it empties); new sensors only for main trays
+    for (const t of trays) {
+      let svc = this.trays[t.key];
+      if (!svc && (standIn || t.secondary || t.state === 'unknown')) { continue; }
+      if (standIn && t.state === 'unknown') { continue; }
+      if (!svc) {
+        const name = `${this.name} ${t.name}`;
+        svc = this.accessory.getServiceById(S.ContactSensor, TRAY_PREFIX + t.key)
+          || this.accessory.addService(S.ContactSensor, name, TRAY_PREFIX + t.key);
+        this.label(svc, name);
+        if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
+        svc.getCharacteristic(C.StatusActive).updateValue(true);
+        this.occupancy.addLinkedService(svc);
+        this.guard(svc.getCharacteristic(C.ContactSensorState));
+        this.trays[t.key] = svc;
+      }
+      // Only a tray that says it's empty opens; an unknown level leaves the sensor as it was
+      if (t.state === 'unknown') { continue; }
+      svc.updateCharacteristic(C.ContactSensorState, t.state === 'empty'
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
+    }
+    // Trays the printer no longer lists (a removed paper drawer); not when it listed none
+    if (trays.length && !standIn) {
+      for (const [key, svc] of Object.entries(this.trays)) {
+        if (trays.some((t) => t.key === key)) { continue; }
+        this.accessory.removeService(svc);
+        this.guarded = this.guarded.filter((ch) => !svc.characteristics.includes(ch));
+        delete this.trays[key];
+      }
     }
   }
 

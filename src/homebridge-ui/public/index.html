@@ -169,6 +169,9 @@
         ['Levels', r.levels],
         ...(r.drum ? [['Drum', r.drum]] : []),
         ['Pages printed', r.pages ?? 'unknown'],
+        ...(r.usage ? [['Recently', r.usage]] : []),
+        ...(r.left ? [['Time left', r.left]] : []),
+        ...(r.paper ? [['Paper', r.paper]] : []),
         ['Serial number', r.serial || 'unknown'],
         ['Read over', r.via],
       ];

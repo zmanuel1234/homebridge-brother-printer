@@ -35,9 +35,11 @@ const typeOf = (v: AgentValue): number => (typeof v === 'number' ? lib.ObjectTyp
 
 /** A row of the Printer MIB supplies table (prtMarkerSuppliesTable), for printers of any make */
 export interface FakeSupply { colorant: number; type: number; name: string; max: number; level: number }
+/** A row of the Printer MIB input table (prtInputTable): a paper tray */
+export interface FakeTray { name: string; max: number; level: number }
 
 export function startFakePrinter(port: number, overrides: Partial<Record<OidName, AgentValue | undefined>> = {},
-  users: snmp.User[] = [], supplies: FakeSupply[] = [], colorants: string[] = []): Promise<FakePrinter> {
+  users: snmp.User[] = [], supplies: FakeSupply[] = [], colorants: string[] = [], trays: FakeTray[] = []): Promise<FakePrinter> {
   const given: Partial<Record<OidName, AgentValue | null | undefined>> = {
     maintenance: toBuffer(fx.maintenance),
     counters: toBuffer(fx.counters),
@@ -128,6 +130,23 @@ export function startFakePrinter(port: number, overrides: Partial<Record<OidName
     });
     supplies.forEach((s, i) => mib.addTableRow('prtMarkerSuppliesTable',
       [1, i + 1, s.colorant, s.type, Buffer.from(s.name), s.max, s.level]));
+  }
+  if (trays.length) {
+    const col = (number: number, name: string, type: number) => ({ number, name, type, maxAccess: lib.MaxAccess['read-only'] });
+    mib.registerProvider({
+      name: 'prtInputTable',
+      type: lib.MibProviderType.Table,
+      oid: '1.3.6.1.2.1.43.8.2.1',
+      tableColumns: [
+        { number: 251, name: 'inDev', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        { number: 1, name: 'prtInputIndex', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        col(9, 'maxCapacity', lib.ObjectType.Integer),
+        col(10, 'currentLevel', lib.ObjectType.Integer),
+        col(13, 'inputName', lib.ObjectType.OctetString),
+      ],
+      tableIndex: [{ columnName: 'inDev' }, { columnName: 'prtInputIndex' }],
+    });
+    trays.forEach((tr, i) => mib.addTableRow('prtInputTable', [1, i + 1, tr.max, tr.level, Buffer.from(tr.name)]));
   }
   if (colorants.length) {
     mib.registerProvider({
