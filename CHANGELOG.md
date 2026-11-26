@@ -31,8 +31,13 @@ The new sensors are off by default; with your current config nothing changes.
 ### Changed
 - **Renaming a printer keeps it in Home**: its room, automations and notifications stay,
   and its sensors are renamed to match, except ones renamed in the Home app. It's
-  recognised by its serial number (when set) or its address. Before, a new name meant a
-  new accessory.
+  recognised by its serial number (when set), its name and address, or its address alone
+  (the address wins when name and address point to different printers). Before, a new
+  name meant a new accessory.
+- A warning in the log when the printer at an address has a different serial number than
+  before, or than the one in the settings.
+- A printer that can't be set up (for example, invalid SNMPv3 settings) shows No Response
+  in Home instead of its last values.
 - README: how this plugin compares with AirPrint (IPP) plugins such as
   @homebridge-plugins/homebridge-printer.
 - Issue forms for printer reports (with the probe output) and bugs.

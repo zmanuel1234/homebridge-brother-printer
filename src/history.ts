@@ -44,7 +44,7 @@ export function fakeGato(api: API): FakeGatoHistory {
  * Start the history for an accessory. It must already have the services whose
  * history Eve should show (the toner tiles): fakegato looks at them only here.
  */
-export function startHistory(api: API, accessory: PlatformAccessory, log: { debug(message: string): void }): HistoryLog {
+export function startHistory(api: API, accessory: PlatformAccessory, log: { debug(...args: unknown[]): void }): HistoryLog {
   const History = fakeGato(api);
   return new History('custom', accessory, {
     size: HISTORY_SIZE,

@@ -216,7 +216,8 @@ SNMPv3 fields once you pick v3.
 
 The plugin only reads, so a read-only SNMPv3 user is enough. With missing or invalid
 SNMPv3 settings (no user, a password under 8 characters, an unknown protocol, encryption
-without authentication), the printer isn't set up and the log says why.
+without authentication), the printer isn't set up: it shows No Response in Home and the log
+says why.
 
 ## Checking what your printer reports
 
@@ -232,8 +233,11 @@ come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_P
 which keeps them out of your shell history:
 
 ```bash
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user> --auth-pass <password> --priv-pass <password>
+BROTHER_SNMP_AUTH_PASS='<password>' BROTHER_SNMP_PRIV_PASS='<password>' \
+  npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
 ```
+
+(With a space before the command, most shells also keep it out of the history.)
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
 match, or values are `null`, please open a

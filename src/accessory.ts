@@ -1,6 +1,7 @@
 import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
+import { format } from 'node:util';
 import { query } from './snmp';
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from './snmp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
@@ -181,6 +182,8 @@ export class PrinterAccessory {
   readonly paperSensor: boolean;
   readonly onlineSensor: boolean;
   readonly eveHistory: boolean;
+  /** The serial number from the settings, if any */
+  readonly configSerial: string;
   readonly offlineAfter: number;
   readonly debug: boolean;
 
@@ -231,6 +234,7 @@ export class PrinterAccessory {
     this.paperSensor = config.paperSensor === true;
     this.onlineSensor = config.onlineSensor === true;
     this.eveHistory = config.eveHistory === true;
+    this.configSerial = String(config.serial ?? '').trim();
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
@@ -696,7 +700,7 @@ export class PrinterAccessory {
     }
     if (!this.history) {
       try {
-        this.history = this.startHistory(this.api, this.accessory, { debug: (m: string) => this.log.debug(m) });
+        this.history = this.startHistory(this.api, this.accessory, { debug: (...args: unknown[]) => this.log.debug(format(...args)) });
       } catch (err) {
         this.warnOnce('history-start', true, `Couldn't start the Eve history: ${errorText(err)}`);
         return;
@@ -782,6 +786,10 @@ export class PrinterAccessory {
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
+    if (this.configSerial && d.serial && d.serial !== this.configSerial) {
+      this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
+        + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
+    }
     if (d.serial && d.serial !== ctx.serial) {
       if (ctx.serial) {
         this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `

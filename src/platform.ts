@@ -44,6 +44,20 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     this.cached.set(accessory.UUID, accessory as PlatformAccessory<PrinterContext>);
   }
 
+  /**
+   * A printer Home already has that couldn't be set up (e.g. invalid SNMPv3
+   * settings): show No Response rather than its last values as if they were live.
+   */
+  showNoResponse(accessory: PlatformAccessory): void {
+    const { Service: S, HapStatusError, HAPStatus } = this.api.hap;
+    for (const svc of accessory.services) {
+      if (svc.UUID === S.AccessoryInformation.UUID) { continue; }
+      for (const ch of svc.characteristics) {
+        ch.onGet(() => { throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE); });
+      }
+    }
+  }
+
   setup(): void {
     // Homebridge types the config as any: a list of entries, each checked below
     const printers: unknown = this.config.printers;
@@ -90,9 +104,12 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     // "Printer" is renamed "Office" and a new printer named "Printer" is added at
     // another address, the accessory stays with the one at its address.
     const heldByAddress = (e: Entry, a: PlatformAccessory<PrinterContext>): boolean =>
-      a.context.host !== e.host && entries.some((o) => o !== e && !match.has(o) && o.host === a.context.host);
+      a.context.host !== e.host && entries.some((o) => o !== e && !match.has(o) && o.host === a.context.host && agrees(o, a));
     pass((e, a) => !!e.serial && a.context.serial === e.serial);
-    pass((e, a) => ctxName(a) === e.name && a.context.host === e.host && agrees(e, a));
+    // The same name and address is the same printer even if a serial number in
+    // the settings disagrees (a typo, or a replaced mainboard): the plugin warns
+    // about that once the printer answers, rather than starting over in Home.
+    pass((e, a) => ctxName(a) === e.name && a.context.host === e.host);
     pass((e, a) => ctxName(a) === e.name && agrees(e, a) && !heldByAddress(e, a));
     pass((e, a) => a.context.host === e.host && agrees(e, a));
 
@@ -116,6 +133,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       } catch (err) {
         const msg = (err as { message?: string } | null)?.message || String(err);
         this.log.error(`[${e.name}] Couldn't set up this printer: ${msg}`);
+        if (!isNew) { this.showNoResponse(accessory); }
         continue;
       }
 
