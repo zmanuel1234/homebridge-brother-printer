@@ -95,6 +95,7 @@ function defineTests(hap: Hap): void {
   const service = (acc: Acc, type: typeof S.Battery | typeof S.ContactSensor, subtype: string): Service | undefined =>
     acc.getServiceById(type, subtype);
   const lowSensor = (acc: Acc) => service(acc, S.ContactSensor, 'lowToner');
+  const low = (acc: Acc) => lowSensor(acc)!;
   const state = (acc: Acc) => lowSensor(acc)?.getCharacteristic(C.ContactSensorState).value;
 
   /* ------------------------------------------------------- low toner sensor */
@@ -711,6 +712,17 @@ function defineTests(hap: Hap): void {
     assert.equal(acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52'), undefined);
   });
 
+  test('Eve history: users who had it keep humidity tiles when tileType isn\'t set; no history service without them', () => {
+    const { acc, printer } = setup({ eveHistory: true, tonerTile: true });
+    assert.equal(printer.tileType, 'humidity');
+    printer.apply(reading(55));
+    assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
+    acc.addService(new S('History', 'E863F007-079E-48FF-8F27-9C2605A29F52'));
+    // Light tiles chosen: Eve can't draw on them, so the history service goes
+    setup({ eveHistory: true, tonerTile: true, tileType: 'light' }, acc);
+    assert.equal(acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52'), undefined);
+  });
+
   test('Eve history: works with the real fakegato-history', async (t) => {
     const { mkdtempSync, readdirSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
@@ -865,6 +877,39 @@ function defineTests(hap: Hap): void {
     assert.equal(color.acc.getServiceById(S.HumiditySensor, 'tile-cyan')!.getCharacteristic(C.ConfiguredName).value, 'Cyan Toner');
   });
 
+  test('switching printingSensor keeps every sensor linked to the printer\'s tile', async () => {
+    const first = setup({ lowTonerSensor: true, paperTraySensors: true });
+    await pollWith(first.printer, { ...reading(5), trays: [tray('Tray 1', 'ok')] });
+    const linked = (p: PrinterAccessory) => (p.main as unknown as { linkedServices: Service[] }).linkedServices.map((s) => s.subtype).sort();
+    const contact = setup({ lowTonerSensor: true, paperTraySensors: true, printingSensor: 'contact' }, first.acc);
+    assert.deepEqual(linked(contact.printer), ['lowToner', 'problem', 'toner', 'tray-tray-1']);
+    const back = setup({ lowTonerSensor: true, paperTraySensors: true }, first.acc);
+    assert.deepEqual(linked(back.printer), ['lowToner', 'problem', 'toner', 'tray-tray-1']);
+  });
+
+  test('renamed printer: its tile and sensors follow, even when its name is a sensor\'s', () => {
+    // A printer named "Toner" (its battery is "Toner" too), renamed "Laser"
+    const first = setup({ name: 'Toner', lowTonerSensor: true });
+    first.printer.apply(reading(50));
+    const again = setup({ name: 'Laser', lowTonerSensor: true }, first.acc);
+    again.printer.apply(reading(50));
+    assert.equal(again.printer.main.getCharacteristic(C.ConfiguredName).value, 'Laser');
+    assert.equal(battery(first.acc)!.getCharacteristic(C.ConfiguredName).value, 'Toner', 'the battery isn\'t renamed after the printer');
+    // 0.9's names after the old printer name move to today's
+    low(first.acc).setCharacteristic(C.ConfiguredName, 'Laser Toner Low');
+    const third = setup({ name: 'Office', lowTonerSensor: true }, first.acc);
+    third.printer.apply(reading(50));
+    assert.equal(low(first.acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+  });
+
+  test('an inkjet\'s Toner Low sensor becomes Ink Low', () => {
+    const { acc, printer } = setup({ lowTonerSensor: true });
+    printer.apply(reading(50));
+    assert.equal(low(acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+    printer.apply({ ...reading(50), type: 'ink' });
+    assert.equal(low(acc).getCharacteristic(C.ConfiguredName).value, 'Ink Low');
+  });
+
   test('sensor names with several printers: the printer\'s name in front', () => {
     const lines: string[] = [];
     const acc = Object.assign(new hap.Accessory('Office', hap.uuid.generate('office')), { context: {} }) as unknown as Acc;
@@ -888,6 +933,10 @@ function defineTests(hap: Hap): void {
     assert.equal(acc.context.firmware, '1.14');
     const again = setup({}, acc);
     assert.equal(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value, '1.14', 'kept after a restart');
+    // A firmware Home can't show (say, another printer at the address): the plugin's again
+    again.printer.apply({ ...reading(50), firmware: 'SWP1FN1514BR' });
+    assert.equal(acc.context.firmware, undefined);
+    assert.match(String(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value), /^\d+\.\d+\.\d+/);
   });
 
   test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {

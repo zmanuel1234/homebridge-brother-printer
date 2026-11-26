@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+From testing 0.9.0 on a real printer in Apple's Home app.
+
+### Breaking
+- **The Online sensor is now an Offline contact sensor** (`onlineSensor`): it opens when the
+  printer stops answering. The occupancy sensor it was ("Online: Triggered") made the room
+  show as occupied all the time. It's a new sensor in Home: its name, automations and
+  notifications need setting up again.
+- **Toner / ink tiles are light sensors by default** (`tileType`), showing the level in lux:
+  as humidity sensors, Home counted them as the room's humidity ("Humidity 70%"). Existing
+  humidity tiles are replaced by new light tiles (names, automations and scenes on them need
+  setting up again). With `eveHistory` on and no `tileType` set, the tiles stay humidity
+  sensors, so Eve history carries on.
+- **No drum battery** (`showDrum` is gone): Apple's Home app shows only one battery per
+  accessory, so it never showed there; Eve and Controller users lose the drum level in those
+  apps. The drum stays in the log, Test connection and the Maintenance sensor. The setting is
+  ignored, with a note in the log.
+- **Sensor names are what they are** ("Toner Low", "Problem", "Tray 1", "Cyan Toner") instead
+  of starting with the printer's name, which Home cut off ("Brother Printer Tone…"). With
+  several printers they keep the printer's name in front. Names the plugin gave are renamed;
+  names you set in the Home app stay (on sensors that are kept; see above for replaced ones).
+- Switching `printingSensor` gives the printer a new tile: automations on the old one need
+  setting up again.
+
+### Added
+- `printingSensor`: show printing as a contact sensor (open while printing) instead of an
+  occupancy sensor, which makes the room show as occupied while a job prints. Default:
+  occupancy, as before.
+- `tileType`: `light` (the default) or `humidity`, for the toner / ink tiles.
+- The firmware version a printer gives over IPP, when it's one Home can show (Canon's
+  "01.35"); otherwise the plugin's version, as before.
+
+### Changed
+- Paper trays over SNMP: each column of the tray table is read on its own, so a printer that
+  doesn't answer the tray type or status still gives its trays. This is the likely reason the
+  trays didn't show over SNMP on an MFC-L2750DW (still to be confirmed on that printer). A
+  tray table without names or levels counts as not read.
+- Settings and README: what IPP (AirPrint) reads and doesn't; that the tiles count as the
+  room's light level (or humidity); that the page count shows only in Eve and Controller.
+
 ## 0.9.0 - 2026-11-26
 
 Pages printed, how long the toner or ink should last, and paper trays; better coverage of other
@@ -40,35 +81,6 @@ tray that runs out of paper.
 ### Changed
 - Settings and README: what IPP (AirPrint) reads and doesn't; that the toner tiles count as
   the room's humidity; that the page count and drum show only in Eve and Test connection.
-
-## Unreleased
-
-### Added
-- **Pages printed and time left**: once a day the plugin notes the page count and levels
-  (kept with the accessory in Homebridge's cache, about 120 days).
-  Test connection in the settings shows pages printed in the last 7 and 30 days and how
-  long the toner or ink should last (per color, soonest first); the log has a weekly line
-  with the same, and the low toner warning says how long is left.
-- **Paper trays**: Test connection shows each tray (how full, has paper or empty), and the
-  log names a tray that runs out. Optional `paperTraySensors`: one contact sensor per tray
-  that opens when it's empty. Bypass and manual trays get no sensor or warning.
-- The probe command shows the trays too.
-
-### Fixed
-- **Inkjets of other makes** read as ink by their model (HP OfficeJet, DeskJet, ENVY; Canon
-  PIXMA, MAXIFY, MegaTank; Epson EcoTank, WorkForce, Expression; HP DesignJet…) when their
-  supplies don't say so, so the battery and low sensor are named Ink, not Toner. Supplies that
-  say toner (and Epson's AL- lasers) keep a printer a laser.
-- **Kyocera, Utax and Triumph-Adler** toners named only by part number (TK-5240K, CK-5512M,
-  PK-5015Y) get their color from the last letter; before, only a mono printer's showed.
-- **Drums and waste toner boxes in % with an unknown maximum** (Sharp) show their level when
-  the printer's other supplies count to 100; before, they showed nothing. Like other parts,
-  they can now raise the "near end of life" warning (and the Maintenance sensor, if on).
-- A printer whose supplies table stops answering, while everything else does, **stays
-  online** and keeps its last levels, drum and sensors; before, every poll failed and it
-  showed as offline. With `protocol` `auto`, IPP's levels stand in for that poll. The log
-  warns once the levels haven't been readable for `offlineAfter` polls in a row, and the
-  printer's own toner-low flag still opens the Toner Low sensor meanwhile.
 
 ## 0.8.1 - 2026-11-26
 

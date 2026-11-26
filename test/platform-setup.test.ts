@@ -137,6 +137,14 @@ function defineTests(hap: Hap): void {
     assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
   });
 
+  test('several printers: each sensor\'s name starts with its printer\'s; one printer: not', () => {
+    const two = homebridge().start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Study', host: '10.0.0.10' }], []);
+    const name = (p: (typeof two.printers)[number]) => p.problem!.getCharacteristic(hap!.Characteristic.ConfiguredName).value;
+    assert.deepEqual(two.printers.map(name), ['Office Problem', 'Study Problem']);
+    const one = homebridge().start([{ name: 'Office', host: '10.0.0.9' }], []);
+    assert.equal(name(one.printers[0]), 'Problem');
+  });
+
   test('renamed and moved to a new address: kept by serial number', () => {
     const { calls, start, cachedAccessory } = homebridge();
     const cached = cachedAccessory('Office', '10.0.0.9');

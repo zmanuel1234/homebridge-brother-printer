@@ -29,7 +29,9 @@ export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantVa
 const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
 /** Printer MIB input table (prtInputEntry): paper trays; type 2, max capacity 9, current level 10, status 11, name 13 */
 export const INPUT_TABLE = '1.3.6.1.2.1.43.8.2.1';
-const TRAY_COLUMNS = [2, 9, 10, 11, 13];
+// Name and level first: without them there's nothing to show
+const TRAY_COLUMNS = [13, 10, 9, 2, 11];
+const REQUIRED_TRAY_COLUMNS = [10, 13];
 /** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
 const SUPPLY_TYPES: Record<number, string> = {
   1: 'other', 2: 'unknown', 3: 'toner', 4: 'waste-toner', 5: 'ink', 6: 'ink-cartridge', 7: 'ink-ribbon', 8: 'waste-ink',
@@ -138,7 +140,7 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
-  /** The printer's firmware version as it gives it ("1.14", "SWP1FN1514BR"), when it does */
+  /** The printer's firmware version as it gives it over IPP ("01.35", "SWP1FN1514BR"), when it does */
   firmware?: string | null;
 }
 
@@ -269,19 +271,20 @@ export async function readSupplies(session: snmp.Session, charset: number | null
 
 /**
  * The paper trays' rows (only the columns used), each column on its own: a printer that
- * doesn't answer one (some don't have the type or status) still gives the others.
- * Undefined when none can be read (never fails the poll).
+ * refuses the type, capacity or status column still gives its trays. Without the names
+ * or the levels there's nothing reliable to show, and a timeout stops the read (rather
+ * than waiting on every column): both give undefined. Never fails the poll.
  */
 export async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
   const rows: { oid: string; value: unknown }[] = [];
-  let read = false;
   for (const col of TRAY_COLUMNS) {
     try {
       rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32)).map((vb) => ({ oid: vb.oid, value: vb.value })));
-      read = true;
-    } catch { /* this column only */ }
+    } catch (err) {
+      if (REQUIRED_TRAY_COLUMNS.includes(col) || /time(d)? ?out/i.test((err as Error)?.message ?? '')) { return undefined; }
+    }
   }
-  return read ? rows : undefined;
+  return rows;
 }
 
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
@@ -451,7 +454,5 @@ export function parse(raw: RawReadings): PrinterData {
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
     ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
-    // "Brother NC-8300h, Firmware Ver.1.14  (14.11.06),MID …"
-    firmware: /firmware\s+ver(?:sion)?\.?\s*([\w.-]+)/i.exec(sysDescr)?.[1] ?? null,
   };
 }

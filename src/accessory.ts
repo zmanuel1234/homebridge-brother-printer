@@ -138,9 +138,6 @@ const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
 /** fakegato-history's service (Eve's history service) */
 const EVE_HISTORY_SERVICE = 'E863F007-079E-48FF-8F27-9C2605A29F52';
 
-/** What the plugin adds after the printer's name when it names a sensor */
-const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
-  ' Out of Paper', ' Online', ' Offline', ...Object.values(COLOR_NAMES).flatMap((n) => [` ${n}`, ` ${n} Toner`, ` ${n} Ink`])]);
 /** Paper tray sensors' subtypes: "tray-" and the tray's key */
 const TRAY_PREFIX = 'tray-';
 
@@ -233,6 +230,10 @@ export class PrinterAccessory {
   failures = 0;
   /** Polls in a row whose supplies couldn't be read */
   unreadPolls = 0;
+  /** The printer's name before a rename in the config, so sensors named after it follow */
+  previousName: string | undefined;
+  /** Trays whose sensor has been labelled since the start (restored ones get today's names once) */
+  labelledTrays = new Set<string>();
   online = true;
   last: LastSeen = {};
   timer: NodeJS.Timeout | null = null;
@@ -283,8 +284,10 @@ export class PrinterAccessory {
         + 'per accessory, so the drum battery never showed. The drum is in the Maintenance sensor, the log and Test connection.');
     }
     this.tonerTile = config.tonerTile === true;
-    // Light by default: Home counts humidity tiles as the room's humidity (Eve history needs humidity)
-    this.tileType = String(config.tileType ?? '').trim().toLowerCase() === 'humidity' ? 'humidity' : 'light';
+    // Light by default: Home counts humidity tiles as the room's humidity. Eve history needs
+    // humidity, so with it on and no tileType set, the tiles stay humidity sensors.
+    const tileType = String(config.tileType ?? '').trim().toLowerCase();
+    this.tileType = tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
     this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
     this.prefixNames = deps.prefixNames === true;
     this.faultSensor = config.faultSensor !== false;
@@ -318,17 +321,15 @@ export class PrinterAccessory {
   renameFrom(old: string | undefined): void {
     const acc = this.accessory;
     if (old && old !== this.name) {
-      const C = this.hap.Characteristic;
+      const { Service: S, Characteristic: C } = this.hap;
+      // The printer's own tile here; its sensors when they're labelled (label() knows
+      // the old name). Only names the plugin gave: a name set in the Home app stays.
+      this.previousName = old;
       for (const svc of acc.services) {
+        const own = (svc.UUID === S.OccupancySensor.UUID && !svc.subtype) || (svc.UUID === S.ContactSensor.UUID && svc.subtype === 'printing');
+        if (!own) { continue; }
         for (const type of [C.Name, C.ConfiguredName]) {
-          if (!svc.testCharacteristic(type)) { continue; }
-          const value = svc.getCharacteristic(type).value;
-          // Only names the plugin gave; a name set in the Home app stays
-          const own = OWN_SUFFIXES.has(value?.toString().slice(old.length) ?? '')
-            || (svc.subtype?.startsWith(TRAY_PREFIX) === true && value?.toString().startsWith(`${old} `) === true);
-          if (typeof value === 'string' && value.startsWith(old) && own) {
-            svc.updateCharacteristic(type, this.name + value.slice(old.length));
-          }
+          if (svc.testCharacteristic(type) && svc.getCharacteristic(type).value === old) { svc.updateCharacteristic(type, this.name); }
         }
       }
       const named = acc as unknown as { updateDisplayName?: (name: string) => void };
@@ -407,7 +408,10 @@ export class PrinterAccessory {
     // One sensor per paper tray, made once the printer lists its trays; here only the
     // ones restored from the cache are picked up
     for (const svc of acc.services.filter((s) => s.UUID === S.ContactSensor.UUID && s.subtype?.startsWith(TRAY_PREFIX))) {
-      if (this.paperTraySensors) { this.trays[svc.subtype!.slice(TRAY_PREFIX.length)] = svc; } else { acc.removeService(svc); }
+      if (this.paperTraySensors) {
+        this.trays[svc.subtype!.slice(TRAY_PREFIX.length)] = svc;
+        this.main.addLinkedService(svc);
+      } else { acc.removeService(svc); }
     }
 
     // Reachable or not, as a sensor automations can use: a contact sensor "Offline" that
@@ -418,9 +422,10 @@ export class PrinterAccessory {
     this.onlineSvc = this.onlineSensor ? this.optionalContact(true, 'offline', 'Offline') : null;
     if (!this.onlineSensor) { this.removeSubtype(S.ContactSensor, 'offline'); }
 
-    // Eve history (fakegato's service) is added when the history starts; take
-    // it away when the history is turned off
-    if (!this.eveHistory) {
+    // Eve history (fakegato's service) is added when the history starts; take it away when
+    // no history will run (turned off, or no humidity tiles for Eve to draw it on), so Eve
+    // doesn't keep showing a history nothing adds to
+    if (!this.eveHistory || !this.tonerTile || this.tileType !== 'humidity') {
       const historySvc = acc.services.find((svc) => svc.UUID === EVE_HISTORY_SERVICE);
       if (historySvc) { acc.removeService(historySvc); }
     }
@@ -431,6 +436,7 @@ export class PrinterAccessory {
     if (lowSvc && this.lowTonerSensor) {
       this.lowSensor = lowSvc;
       this.label(lowSvc, `${acc.context.kind || 'Toner'} Low`);
+      this.main.addLinkedService(lowSvc);
     } else if (lowSvc) { acc.removeService(lowSvc); }
 
     // Supply tiles are created once the printer says which colors it has;
@@ -480,7 +486,7 @@ export class PrinterAccessory {
       // "Toner" on a mono printer; "Cyan Toner", "Photo Black Ink" on a color one
       const what = mono ? kind : `${COLOR_NAMES[color]} ${kind}`;
       // Names the plugin gave before 0.10: the printer's name and the color
-      const before = [`${this.name} ${mono ? kind : COLOR_NAMES[color]}`];
+      const before = [this.name, this.previousName].filter(Boolean).map((n) => `${n} ${mono ? kind : COLOR_NAMES[color]}`);
       if (existing) { this.label(existing, what, before); continue; }
       const svc = this.accessory.addService(this.tileService(), this.sensorName(what), subtype);
       this.label(svc, what, before);
@@ -581,7 +587,7 @@ export class PrinterAccessory {
     svc.setCharacteristic(C.Name, name);
     if (!svc.testCharacteristic(C.ConfiguredName)) { svc.addOptionalCharacteristic(C.ConfiguredName); }
     const current = svc.getCharacteristic(C.ConfiguredName).value;
-    const own = what ? [`${this.name} ${what}`, what, ...before] : [];
+    const own = what ? [`${this.name} ${what}`, what, ...(this.previousName ? [`${this.previousName} ${what}`] : []), ...before] : [];
     if (!current || (current !== name && own.includes(String(current)))) { svc.setCharacteristic(C.ConfiguredName, name); }
   }
 
@@ -989,7 +995,7 @@ export class PrinterAccessory {
     for (const t of trays) {
       let svc = this.trays[t.key];
       if (!svc && (standIn || t.secondary || t.state === 'unknown')) { continue; }
-      if (svc && !standIn) { this.label(svc, t.name); }
+      if (svc && !standIn && !this.labelledTrays.has(t.key)) { this.label(svc, t.name); this.labelledTrays.add(t.key); }
       if (standIn && t.state === 'unknown') { continue; }
       if (!svc) {
         svc = this.accessory.getServiceById(S.ContactSensor, TRAY_PREFIX + t.key)
@@ -1032,6 +1038,7 @@ export class PrinterAccessory {
     const was = this.accessory.context.kind || 'Toner';
     if (was === kind) { return; }
     this.label(toner, kind, [`${this.name} ${was}`, was]);
+    if (this.lowSensor) { this.label(this.lowSensor, `${kind} Low`, [`${this.name} ${was} Low`, `${was} Low`]); }
   }
 
   /** The printer's own tile: Detected (occupancy) or open (contact) while a job prints */
@@ -1083,7 +1090,13 @@ export class PrinterAccessory {
     // The printer's firmware where it's a version Home shows (1.14, 01.35; HomeKit wants
     // up to three numbers); otherwise the plugin's version, as before
     const fw = d.firmware?.trim() ?? '';
-    if (/^\d+(\.\d+){0,2}$/.test(fw) && fw !== ctx.firmware) { ctx.firmware = fw; changed = true; }
+    if (/^\d+(\.\d+){0,2}$/.test(fw)) {
+      if (fw !== ctx.firmware) { ctx.firmware = fw; changed = true; }
+    } else if (fw && ctx.firmware) {
+      // A version Home can't show (or another printer): the plugin's again
+      delete ctx.firmware;
+      changed = true;
+    }
     if (d.serial && d.serial !== ctx.serial) {
       if (ctx.serial) {
         this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `

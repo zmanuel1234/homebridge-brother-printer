@@ -52,9 +52,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     const { Characteristic: C, HapStatusError, HAPStatus } = this.api.hap;
     // Only the readings; names stay readable, or Home could get blank ones when
     // it reloads the bridge's accessories. Unlike while the printer is offline,
-    // the Online sensor throws too: it isn't polled, so its value would be stale.
+    // the Offline sensor throws too: it isn't polled, so its value would be stale.
     const readings = new Set([C.OccupancyDetected, C.StatusFault, C.BatteryLevel, C.StatusLowBattery,
-      C.ContactSensorState, C.CurrentRelativeHumidity].map((type) => type.UUID));
+      C.ContactSensorState, C.CurrentRelativeHumidity, C.CurrentAmbientLightLevel].map((type) => type.UUID));
     for (const svc of accessory.services) {
       for (const ch of svc.characteristics) {
         if (!readings.has(ch.UUID)) { continue; }

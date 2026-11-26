@@ -175,8 +175,8 @@ In `config.json`:
 | `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
 | `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`, with `tileType` set to `humidity`. |
-| `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's humidity (or light level, with `tileType`). |
-| `tileType` | `light` | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity). |
+| `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's light level (or humidity, with `tileType` set to `humidity`). |
+| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity). |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
@@ -194,8 +194,8 @@ words them its own way:
   few rooms have another sensor for. For Eve history they must be humidity sensors
   (`tileType`), which Home counts as the room's humidity: a room with a printer whose
   toner is at 70% then shows "Humidity 70%".
-- The plugin's version shows as the firmware, unless the printer gives its own as a version
-  number Home can show (as many Brother and Canon printers do).
+- The plugin's version shows as the firmware, unless the printer gives its own over IPP as a
+  version number Home can show (as some Canon printers do).
 - Low toner or ink is announced as **"battery is low"**. For a clearer message, turn on
   `lowTonerSensor`: its contact sensor opens at the same point and Home notifies it by
   name, as it does for any contact sensor that opens. Turn on its notifications in the
