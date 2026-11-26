@@ -241,7 +241,20 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(again.calls.unregistered, []);
     const detected = office.getService(hap!.Service.OccupancySensor)!.getCharacteristic(hap!.Characteristic.OccupancyDetected);
     await assert.rejects(Promise.resolve().then(() => detected.handleGetRequest()));
+    const name = office.getService(hap!.Service.OccupancySensor)!.getCharacteristic(hap!.Characteristic.ConfiguredName);
+    assert.equal(await name.handleGetRequest(), 'Office', 'names stay readable');
     assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
+  });
+
+  test('two printers that both moved keep their accessories', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Printer', '10.0.0.10');
+    const b = cachedAccessory('Office', '10.0.0.30');
+    const platform = start([{ name: 'Printer', host: '10.0.0.20' }, { name: 'Office', host: '10.0.0.10' }], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Printer')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, b);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
   });
 
   test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {

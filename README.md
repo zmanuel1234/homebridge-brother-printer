@@ -229,15 +229,16 @@ npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150
 
 With SNMPv3, add the user and passwords. SHA and AES are the defaults; `--priv none`
 turns encryption off, and `--auth none` needs `--priv none` too. The passwords can also
-come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_PRIV_PASS`,
-which keeps them out of your shell history:
+come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_PRIV_PASS`:
 
 ```bash
-BROTHER_SNMP_AUTH_PASS='<password>' BROTHER_SNMP_PRIV_PASS='<password>' \
-  npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
+read -rs BROTHER_SNMP_AUTH_PASS && export BROTHER_SNMP_AUTH_PASS   # type it, then Enter
+read -rs BROTHER_SNMP_PRIV_PASS && export BROTHER_SNMP_PRIV_PASS
+npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
 ```
 
-(With a space before the command, most shells also keep it out of the history.)
+Passwords given with `--auth-pass` and `--priv-pass` are saved in your shell history and
+visible to other users in the process list; `read -s` keeps them out of both.
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
 match, or values are `null`, please open a
