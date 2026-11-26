@@ -14,6 +14,15 @@
 
 All three are off by default; with your current config nothing changes.
 
+## 0.5.2 - 2026-11-26
+
+No change to how the plugin works: the compiled plugin is identical to 0.5.1's.
+
+### Changed
+- Development only: built with TypeScript 7 (the native compiler) and linted with oxlint instead
+  of TypeScript 6 and ESLint, with the same rules. CI retries npm's package signature check up to
+  3 times, because npm's registry sometimes answers it with an invalid response.
+
 ## 0.5.1 - 2026-11-26
 
 No change to how the plugin works.
