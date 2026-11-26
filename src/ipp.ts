@@ -218,7 +218,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
 
   return {
     model: model || null,
-    manufacturer: manufacturerOf(field(/(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i), model),
+    manufacturer: manufacturerOf(field(/(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i), model) ?? (model.split(/\s+/)[0] || null),
     serial,
     type,
     statusText,

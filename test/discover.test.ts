@@ -73,6 +73,9 @@ test('search: finds printers of any make; leaves out other devices and ones it c
   const hp = { ...fromModel('hl-l2340dw'), model: 'HP LaserJet Pro M404n' };
   const foundHp = await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.resolve(hp) });
   assert.equal(foundHp[0]?.model, 'HP LaserJet Pro M404n');
+  // A Windows PC's virtual printer has a printer status too, but isn't one
+  const pdf = { ...fromModel('hl-l2340dw'), model: 'Microsoft Print To PDF', supplies: [], drums: {}, lowestSupply: null };
+  assert.deepEqual(await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.resolve(pdf) }), []);
   const failing = await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.reject(new Error('timeout')) });
   assert.deepEqual(failing, []);
 });

@@ -91,7 +91,7 @@ export interface QueryOptions {
   /** Needed for version '3' */
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
-  state?: { version?: SnmpVersion };
+  state?: { version?: SnmpVersion; suppliesRead?: boolean };
 }
 
 export interface PrinterData extends StatusSummary {
@@ -169,13 +169,22 @@ function subtree(session: snmp.Session, oid: string, limit: number): Promise<snm
   });
 }
 
-const text = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') : v === null || v === undefined ? '' : String(v))
+const clean = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') : v === null || v === undefined ? '' : String(v))
   // Some printers end names with NULs or pad them; keep printable text
   // eslint-disable-next-line no-control-regex
   .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** The Printer MIB supplies table as markers, from walked values */
-export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], colorants: { oid: string; value: unknown }[]): Marker[] {
+export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], colorants: { oid: string; value: unknown }[],
+  charset: number | null = null): Marker[] {
+  // Names follow the printer's character set (prtLocalizationCharacterSet), as its display
+  // text does; without one, UTF-8 if they are valid UTF-8 (Chinese, Japanese…), else Latin-1
+  const utf8 = new TextDecoder('utf-8', { fatal: true });
+  const text = (v: unknown): string => {
+    if (!Buffer.isBuffer(v)) { return clean(v); }
+    if (charset) { return decode.decodeText(v, charset); }
+    try { return clean(utf8.decode(v)); } catch { return decode.decodeText(v); }
+  };
   const byIndex = new Map<string, Partial<Record<keyof typeof COLUMN, unknown>>>();
   const columns = Object.entries(COLUMN) as [keyof typeof COLUMN, number][];
   for (const { oid, value } of rows) {
@@ -208,14 +217,25 @@ export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], co
     .filter((m) => m.name || m.level !== null);
 }
 
-/** Read the Printer MIB supplies; an empty list when the printer has none or doesn't answer */
-async function readSupplies(session: snmp.Session): Promise<Marker[]> {
+/**
+ * Read the Printer MIB supplies: only the columns used, and the colorant names
+ * only when a supply refers to one. An empty list when the printer has no table.
+ * A walk that fails partway counts as a failed poll once the table has been read
+ * before (a lost packet mustn't look like "no supplies" and take sensors away);
+ * a printer whose table never reads is treated as having none.
+ */
+export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[]> {
   try {
-    const rows = await subtree(session, SUPPLIES_TABLE, MAX_ROWS * Object.keys(COLUMN).length * 2);
-    const colorants = await subtree(session, COLORANT_VALUES, MAX_ROWS).catch(() => []);
-    return suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
-      colorants.map((vb) => ({ oid: vb.oid, value: vb.value }))).slice(0, MAX_ROWS);
-  } catch {
+    const rows: snmp.Varbind[] = [];
+    for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
+    const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
+    const colorants = wantsColorant ? await subtree(session, COLORANT_VALUES, MAX_ROWS).catch(() => []) : [];
+    const markers = suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
+      colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
+    if (markers.length) { state.suppliesRead = true; }
+    return markers;
+  } catch (err) {
+    if (state.suppliesRead) { throw err; }
     return [];
   }
 }
@@ -255,7 +275,10 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         });
         // Not a Brother printer, or one whose records have no levels: the standard supplies table
         const brother = decode.supplyList(decode.decodeMaintenance(raw.maintenance, raw.nextCare).supplies);
-        if (!brother.length) { raw.markers = await readSupplies(session); }
+        if (!brother.length) {
+          const charset = typeof raw.charset === 'number' ? raw.charset : Number(decode.decodeText(raw.charset)) || null;
+          raw.markers = await readSupplies(session, charset, options.state ||= {});
+        }
         return raw;
       } catch (err) {
         const e = err as Error | null;
@@ -311,8 +334,8 @@ function sumPages(c: decode.Counters): number | null {
 export function modelOf(descr: string, sysDescr: string): string {
   const attached = /attached to\s+([\w-]+)/i.exec(sysDescr)?.[1];
   const fromSys = attached
-    ?? (/jetdirect|ethernet|ROM |print(ing)? (server|system)/i.test(sysDescr) ? ''
-      : sysDescr.split(/[;,]| \/ /)[0].replace(/\s+\d+(\.\d+)+$/, '').trim().slice(0, 60));
+    ?? (/jetdirect|ethernet|ROM |print(ing)? (server|system)|zebranet/i.test(sysDescr) ? ''
+      : sysDescr.split(/[;,]| \/ |\s+version\s/i)[0].replace(/\s+\d+(\.\d+)+$/, '').trim().slice(0, 60));
   if (!descr || /^generic\b/i.test(descr)) { return fromSys || descr; }
   return descr;
 }
@@ -335,7 +358,9 @@ export function parse(raw: RawReadings): PrinterData {
   const type = mib?.ink ? 'ink' : decode.printerType(model, maint, deviceId);
   const mfg = /(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i.exec(deviceId)?.[1]?.trim() ?? '';
   const isBrother = brotherSupplies.length > 0 || /brother/i.test(`${mfg} ${model}`);
-  const manufacturer = isBrother ? 'Brother' : manufacturerOf(mfg, model) ?? manufacturerOf('', sysDescr);
+  // An unknown maker: the first word of the model, so another make never shows as Brother
+  const manufacturer = isBrother ? 'Brother'
+    : manufacturerOf(mfg, model) ?? manufacturerOf('', sysDescr) ?? (model.split(/\s+/)[0] || null);
   const pageCount = typeof raw.pageCount === 'number' ? raw.pageCount : null;
 
   // Inkjets have no drum; their 0x41 record means something else

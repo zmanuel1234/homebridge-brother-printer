@@ -7,12 +7,14 @@
   reads the standard Printer MIB supplies table, so HP, Canon, Epson, Kyocera, Xerox,
   Ricoh, Konica Minolta, Sharp, OKI, Samsung, Dell and others show their toner or ink per
   color, drums, waste toner box, fuser, transfer belt, developer and maintenance kit.
-  Checked against SNMP recordings of 26 real printers: levels as % or pages, names in
+  Checked against SNMP recordings of about 22 real printer models: levels as % or pages, names in
   other languages (German, Chinese…), part numbers as names, two black toners. Home shows
   the printer's own maker and model (also from the device's description when the model is
   generic or missing). Older Brother models whose records have no levels get the drum (and
   any levels) from it too.
-- Search for printers finds printers of any make, not only Brother.
+- Search for printers finds printers of any make, not only Brother (a computer's virtual
+  printers, such as Microsoft Print To PDF, are left out). A printer whose maker can't be
+  named shows as the first word of its model, or "Printer", in Home, never as Brother.
 - **IPP: more printers and inks**, checked against 49 answers recorded from about 44 real
   printer models (Brother, Canon, Epson, HP, Kyocera, Samsung):
   - Extra inks get their own tiles: Photo Black, Gray (light black), Light Cyan, Light

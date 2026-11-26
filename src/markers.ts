@@ -93,19 +93,19 @@ export function hexColor(value: string): Color | null {
 export function partKey(name: string, type: string): PartKey | null {
   const n = name.toLowerCase();
   if (type === 'maintenance-kit' || /maintenance kit/.test(n)) { return 'maintenanceKit'; }
-  if (type === 'waste-ink' || (/waste/.test(n) && /ink/.test(n))) { return 'inkWasteBox'; }
-  if (type === 'waste-toner' || /waste/.test(type) || /waste/.test(n)) { return 'wasteToner'; }
+  if (type === 'waste-ink' || (/waste/.test(n) && /\bink\b/.test(n))) { return 'inkWasteBox'; }
+  if (type === 'waste-toner' || (type === '' || type === 'other' || type === 'unknown') && /waste|廃|廢|废|폐/.test(n)) { return 'wasteToner'; }
   if (type === 'fuser' || /fuser|fusing/.test(n)) { return 'fuser'; }
   if (type === 'developer' || /developer/.test(n)) { return 'developer'; }
   if (/transfer|belt/.test(type) || /belt|transfer (kit|unit|roller)/.test(n)) { return 'belt'; }
-  if (/laser/.test(n)) { return 'laser'; }
+  if (/laser (unit|scanner)/.test(n)) { return 'laser'; }
   if (/feed/.test(n) && !/document|adf/.test(n)) { return /mp/.test(n) ? 'paperFeedMP' : 'paperFeed1'; }
   return null;
 }
 
 export const SUPPLY_TYPE = /^(toner|ink|ink-cartridge|toner-cartridge|solid-wax|ribbon-wax)$/;
 /** Untyped markers (some printers leave the type out): a supply by its name, unless it names a part */
-const PART_WORDS = /waste|drum|developer|fus(er|ing)|belt|roll|filter|maintenance|kit|imaging|staple|廢|废/i;
+const PART_WORDS = /waste|drum|developer|fus(er|ing)|belt|roll|filter|maintenance|kit|imaging|staple|collection|廢|废|廃|폐/i;
 const isSupply = (m: Marker): boolean =>
   SUPPLY_TYPE.test(m.type) || ((m.type === '' || m.type === 'other' || m.type === 'unknown')
     && /toner|ink\b|ink |cartridge|patrone|cartouche|碳粉|墨|トナー|インク|토너|잉크/i.test(m.name) && !PART_WORDS.test(m.name));

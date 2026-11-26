@@ -875,11 +875,12 @@ export class PrinterAccessory {
     if (this.standIn(d)) { return; }
     const ctx = this.accessory.context;
     let changed = false;
-    const maker = d.manufacturer || 'Brother';
+    // A make the plugin can't name shows as "Printer", never as Brother
+    const maker = d.manufacturer === null ? 'Printer' : d.manufacturer || 'Brother';
     // The model without the maker's name in front ("EPSON XP-6000 Series" → "XP-6000 Series")
     const model = d.model ? d.model.replace(new RegExp(`^(?:Brother|${maker.replace(/[^\w-]/g, '\\$&')})\\s+`, 'i'), '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
-    if (d.manufacturer && d.manufacturer !== (ctx.manufacturer || 'Brother')) { ctx.manufacturer = d.manufacturer; changed = true; }
+    if (d.manufacturer !== undefined && maker !== (ctx.manufacturer || 'Brother')) { ctx.manufacturer = maker; changed = true; }
     if (this.configSerial && d.serial && d.serial !== this.configSerial) {
       this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
         + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);

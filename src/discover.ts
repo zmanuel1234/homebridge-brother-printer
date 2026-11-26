@@ -150,8 +150,10 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
         host, port: options.port ?? 161, community: options.community || 'public', timeout: 2000, retries: 0,
       });
       // Printers have a printer status (Host Resources MIB) or supplies; routers and the like don't
-      const printer = d.printerStatus !== null || d.supplies.length > 0 || Object.keys(d.drums).length > 0
-        || /brother/i.test(d.model || '');
+      // A computer's virtual printer ("Microsoft Print To PDF") has a printer status too
+      const virtual = /microsoft|print to|\bpdf\b|\bxps\b|onenote|\bfax\b/i.test(d.model || '');
+      const printer = !virtual && (d.printerStatus !== null || d.supplies.length > 0 || Object.keys(d.drums).length > 0
+        || /brother/i.test(d.model || ''));
       if (!printer) { return null; }
       const found: FoundPrinter = {
         host, model: cleanModel(d.model || 'Brother printer'), serial: d.serial, type: d.type, levels: summary(d),

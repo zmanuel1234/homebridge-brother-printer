@@ -1,11 +1,13 @@
 // Printers of any make over SNMP: the standard Printer MIB supplies table
 // (RFC 3805), read when there are no Brother records. Checked by hand against
-// SNMP recordings of 26 real printers (HP, Canon, Dell, Epson, Fujifilm,
-// Konica Minolta, OKI, Ricoh, Samsung, Sharp, Utax, Xerox); these tests use
-// rows written to the standard, in the same shapes.
+// SNMP recordings of real printers (HP, Canon, Dell, Epson, Fujifilm, Konica
+// Minolta, OKI, Ricoh, Samsung, Sharp, Utax, Xerox) from LibreNMS's test data;
+// the rows below are short examples in the same shapes, some with the supply
+// names and numbers those printers report.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLORANT_VALUES, SUPPLIES_TABLE, modelOf, parse, query, suppliesFromVarbinds } from '../src/snmp';
+import { COLORANT_VALUES, SUPPLIES_TABLE, modelOf, parse, query, readSupplies, suppliesFromVarbinds } from '../src/snmp';
+import type * as snmpLib from 'net-snmp';
 import type { RawReadings } from '../src/snmp';
 import { startFakePrinter } from './fake-agent';
 import type { FakeSupply } from './fake-agent';
@@ -49,7 +51,7 @@ test('Printer MIB: a color laser with page-counted supplies, drums and parts', (
   assert.equal(d.type, 'laser');
   assert.deepEqual(d.drums, { black: { percent: 95 } });
   assert.deepEqual(d.parts, { developer: { percent: 71 }, wasteToner: { percent: 5 }, belt: { percent: 85 } });
-  assert.equal(d.manufacturer, null, 'ACME isn\'t a maker the plugin knows');
+  assert.equal(d.manufacturer, 'ACME', 'a maker the plugin doesn\'t know: the first word of the model');
 });
 
 test('Printer MIB: inkjets, names in other languages, part numbers, two black toners', () => {
@@ -133,4 +135,37 @@ test('over SNMP: a Brother printer with its own records doesn\'t read the suppli
   const d = await query({ host: '127.0.0.1', port: 16211, timeout: 1000, retries: 0 });
   assert.equal(levels(d), 'black 70');
   assert.equal(d.manufacturer, 'Brother');
+});
+
+/** A session whose walks answer from a list, or fail */
+function fakeSession(answer: (oid: string) => snmpLib.Varbind[] | Error): snmpLib.Session {
+  return {
+    subtree(oid: string, _max: number, feed: (vbs: snmpLib.Varbind[]) => boolean, done: (err?: Error) => void) {
+      const a = answer(oid);
+      if (a instanceof Error) { done(a); } else { feed(a); done(); }
+    },
+  } as unknown as snmpLib.Session;
+}
+
+test('Printer MIB: a walk that fails partway is a failed poll once the table has been read before', async () => {
+  const ok = (oid: string): snmpLib.Varbind[] => (oid.endsWith('.6') ? [{ oid: `${oid}.1.1`, type: 4, value: Buffer.from('Black Toner') }]
+    : oid.endsWith('.9') ? [{ oid: `${oid}.1.1`, type: 2, value: 50 }] : oid.endsWith('.8') ? [{ oid: `${oid}.1.1`, type: 2, value: 100 }] : []);
+  const state: { suppliesRead?: boolean } = {};
+  // Never read before: a failure means no table
+  assert.deepEqual(await readSupplies(fakeSession(() => new Error('Request timed out')), null, state), []);
+  assert.equal((await readSupplies(fakeSession(ok), null, state))[0].level, 50);
+  assert.equal(state.suppliesRead, true);
+  // Read before: a lost packet mid-walk must not look like "no supplies"
+  await assert.rejects(readSupplies(fakeSession((oid) => (oid.endsWith('.9') ? new Error('Request timed out') : ok(oid))), null, state),
+    /timed out/);
+});
+
+test('Printer MIB: names follow the printer\'s character set', () => {
+  // "Schwarz Tönerkartusche" in Latin-1 (IANA charset 4)
+  const latin1 = Buffer.from('Toner Schwarz \u00e4', 'latin1');
+  const markers = suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: latin1 }], [], 4);
+  assert.equal(markers[0].name, 'Toner Schwarz \u00e4');
+  // No character set given: UTF-8 when valid, so Chinese names come through
+  assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: Buffer.from('黑色碳粉') }], [])[0].name, '黑色碳粉');
+  assert.equal(suppliesFromVarbinds([{ oid: `${SUPPLIES_TABLE}.6.1.1`, value: latin1 }], [])[0].name, 'Toner Schwarz \u00e4');
 });

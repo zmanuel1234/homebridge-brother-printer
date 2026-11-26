@@ -293,6 +293,12 @@ function defineTests(hap: Hap): void {
     assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Studio Photo Black');
   });
 
+  test('a printer whose maker can\'t be named shows as "Printer", never Brother', () => {
+    const { acc, printer } = setup({});
+    printer.apply({ ...reading(50), model: null, manufacturer: null });
+    assert.equal(acc.getService(S.AccessoryInformation)!.getCharacteristic(C.Manufacturer).value, 'Printer');
+  });
+
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
     const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
     printer.apply(viaIpp(reading(50)));

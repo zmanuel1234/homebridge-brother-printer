@@ -57,13 +57,14 @@ printer, the difference is in what each can read and show:
 | Find printers from the settings screen | Yes, with a connection test | Yes |
 | Works with SNMP turned off | Yes, over IPP (`protocol`, below), with IPP's detail | Yes |
 
-Both read the printer locally, with no cloud account. This plugin can also read a Brother
-printer over IPP, as an option (see [Reading over IPP](#reading-over-ipp-airprint)); an
-AirPrint plugin is the one to use for other brands.
+Both read the printer locally, with no cloud account. This plugin can also read a printer
+over IPP, as an option (see [Reading over IPP](#reading-over-ipp-airprint)), and reads
+printers of other makes too ([Other makes of printer](#other-makes-of-printer)).
 
 ## Requirements
 
-- A Brother printer with SNMP. Tested on a real **MFC-L2750DW**, and against SNMP
+- A printer with SNMP: a Brother in most detail, or another make
+  ([below](#other-makes-of-printer)). Brother: tested on a real **MFC-L2750DW**, and against SNMP
   captures from these models (from the [brother](https://github.com/bieniu/brother)
   library, which Home Assistant's Brother integration uses):
 
@@ -97,7 +98,7 @@ Running it as a child bridge is recommended.
 
 ## Other makes of printer
 
-Every network printer also gives standard SNMP data (the Printer MIB): its supplies with
+Most network printers also give standard SNMP data (the Printer MIB): their supplies with
 their levels, drums, waste toner box, fuser, transfer belt, developer and maintenance
 kit. For a printer that isn't a Brother, the plugin reads that, so it works with HP,
 Canon, Epson, Kyocera, Xerox, Ricoh, Lexmark, Konica Minolta, Sharp, OKI, Samsung, Dell
@@ -105,7 +106,7 @@ and others, with the same sensors and settings. Brother printers are read from B
 own records instead, which give a finer toner reading and drum pages left.
 
 What's shown depends on what the printer reports. It was checked against SNMP recordings
-of 26 real printers (HP Color LaserJets, Canon, Dell, Epson, Fujifilm, Konica Minolta,
+of about 22 real printer models (HP Color LaserJets, Canon, Dell, Epson, Fujifilm, Konica Minolta,
 OKI, Ricoh, Samsung, Sharp, Utax and Xerox): levels given as a % or as pages, supply names
 in other languages (such as German or Chinese), part numbers instead of names, and two
 black toners. A supply reported only as "some remaining" has no %.
