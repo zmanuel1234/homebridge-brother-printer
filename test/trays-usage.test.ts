@@ -72,6 +72,8 @@ test('trays: type and status (HP marks its bypass tray "on request"; unknown sta
   // A rear feeder isn't taken for a bypass tray (the main tray on many inkjets)
   assert.equal(traysFromIpp(['type=sheetFeedAutoNonRemovableTray;maxcapacity=100;level=0;status=0;name=Rear;'])[0].secondary, false);
   assert.equal(traysFromIpp(['type=sheetFeedManual;maxcapacity=250;level=0;status=0;name=Slot;'])[0].secondary, true);
+  // A removable cassette marked "on request" while empty stays a main tray
+  assert.equal(traysFromIpp(['type=sheetFeedAutoRemovableTray;maxcapacity=500;level=0;status=9;name=Tray 2;'])[0].secondary, false);
 });
 
 test('trays: from real IPP answers (HP LaserJet M605, Epson XP-6000)', () => {
@@ -193,9 +195,11 @@ test('settings test: paper trays and the plugin\'s usage history from the access
   writeFileSync(join(storage, 'accessories', 'cachedAccessories.0E1234567890'), JSON.stringify([
     { platform: 'BrotherPrinter', context: { name: 'Office', host: '10.0.0.5', usage, snmpAnswered: true } },
   ]));
-  const ipp = await testPrinter({ name: ' Office ', host: '10.0.0.5' }, () => Promise.resolve({ ...d, via: 'ipp' as const }), storage);
-  assert.equal(ipp.usage, null);
-  assert.equal(ipp.left, 'Toner: about 7 weeks left', 'levels still count; the name is matched trimmed');
+  const ipp = await testPrinter({ name: ' Office ', host: '10.0.0.5', protocol: 'auto' }, () => Promise.resolve({ ...d, via: 'ipp' as const }), storage);
+  assert.deepEqual([ipp.usage, ipp.left], [null, null]);
+  // Switched to IPP only: the history is IPP's own from then on (the name matched trimmed)
+  const ippOnly = await testPrinter({ name: ' Office ', host: '10.0.0.5', protocol: 'ipp' }, () => Promise.resolve({ ...d, via: 'ipp' as const }), storage);
+  assert.equal(ippOnly.left, 'Toner: about 7 weeks left');
   assert.equal(r.left, 'Toner: about 7 weeks left');
   // Not running in Homebridge yet: no history
   const fresh = await testPrinter({ name: 'New', host: '10.0.0.9' }, () => Promise.resolve(d), storage);

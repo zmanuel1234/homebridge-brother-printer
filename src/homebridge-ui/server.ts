@@ -37,7 +37,7 @@ const errorText = (err: unknown): string => (err as { message?: string } | null)
 
 const TRAY_STATE = { empty: 'empty', low: 'low', ok: 'has paper', unknown: 'unknown' } as const;
 
-export function testSummary(d: QueryResult, cached?: CachedUsage): TestResult {
+export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: string): TestResult {
   const kind = d.type === 'ink' ? 'ink' : 'toner';
   const levels = d.supplies.length
     ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
@@ -53,15 +53,17 @@ export function testSummary(d: QueryResult, cached?: CachedUsage): TestResult {
     paper: d.trays?.length
       ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`).join(', ')
       : null,
-    ...usageSummary(d, cached),
+    ...usageSummary(d, cached, protocol),
   };
 }
 
-function usageSummary(d: QueryResult, cached?: CachedUsage): { usage: string | null; left: string | null } {
+function usageSummary(d: QueryResult, cached?: CachedUsage, protocol?: string): { usage: string | null; left: string | null } {
   const now = Math.round(Date.now() / 1000);
+  // With auto, the plugin keeps SNMP's readings once SNMP has answered; IPP's page count
+  // and levels, read now as a fallback, may not match them
+  if (protocol === 'auto' && d.via === 'ipp' && cached?.snmpAnswered) { return { usage: null, left: null }; }
   const samples = cached?.samples;
-  // IPP's page count may not match the SNMP one the plugin keeps
-  const pages = d.via === 'ipp' && cached?.snmpAnswered ? null : d.totalPages;
+  const pages = d.totalPages;
   const week = pagesInLast(samples, now, pages, 7);
   const month = pagesInLast(samples, now, pages, 30);
   const usage = [week !== null ? `${week} pages in the last 7 days` : '', month !== null ? `${month} in the last 30 days` : '']
@@ -105,7 +107,7 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
   const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
   try {
     const d = await read({ ...options, timeout: 3000, retries: 0, trays: true });
-    return testSummary(d, cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host));
+    return testSummary(d, cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host), options.protocol);
   } catch (err) {
     const what = options.protocol === 'ipp' ? 'IPP' : options.protocol === 'auto' ? 'SNMP or IPP' : 'SNMP';
     throw new Error(`Couldn't read ${options.host}: ${errorText(err)}. Check the address, that ${what} is on in the `

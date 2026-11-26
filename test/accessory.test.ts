@@ -409,6 +409,24 @@ function defineTests(hap: Hap): void {
     assert.equal(t1.getCharacteristic(C.ContactSensorState).value, CLOSED);
   });
 
+  test('paper trays: a tray keeps its sensor when a reading takes it for a bypass tray', async () => {
+    const { acc, printer } = setup({ paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'ok')] });
+    const svc = acc.getServiceById(S.ContactSensor, 'tray-tray-2');
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'empty', true)] });
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), svc, 'the same sensor');
+    assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN);
+  });
+
+  test('paper trays: with tray sensors, a failed tray read doesn\'t repeat the warning', async () => {
+    const lines: string[] = [];
+    const { printer } = setup({ paperTraySensors: true }, null, lines);
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    await pollWith(printer, reading(50)); // trays couldn't be read
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty')] });
+    assert.equal(lines.filter((l) => /Tray 1 is out of paper/.test(l)).length, 1);
+  });
+
   test('paper trays: a tray whose level is never known gets no sensor', async () => {
     const { acc, printer } = setup({ paperTraySensors: true });
     await pollWith(printer, { ...reading(50), trays: [tray('Input Tray 1', 'unknown')] });

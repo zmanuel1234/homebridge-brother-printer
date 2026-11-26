@@ -677,7 +677,7 @@ export class PrinterAccessory {
     }
     if (d.trays) {
       this.applyTrays(d.trays, this.standIn(d));
-    } else if (!d.errors.some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty')) {
+    } else if (!this.options.trays && !d.errors.some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty')) {
       // Trays read only while paper is low or out: no paper error means they all have
       // paper, so the next tray to run out is warned about again
       for (const key of Object.keys(this.last.warned || {})) { if (key.startsWith('tray-')) { this.last.warned![key] = false; } }
@@ -929,10 +929,12 @@ export class PrinterAccessory {
       this.warnOnce(`tray-${t.key}`, t.state === 'empty', `${t.name} is out of paper.`);
     }
     if (!this.paperTraySensors) { return; }
-    for (const t of main) {
+    // A tray keeps its sensor once it has one, even if a reading takes it for a bypass
+    // tray (its status can change as it empties); new sensors only for main trays
+    for (const t of trays) {
       let svc = this.trays[t.key];
-      if (standIn && (!svc || t.state === 'unknown')) { continue; }
-      if (!svc && t.state === 'unknown') { continue; }
+      if (!svc && (standIn || t.secondary || t.state === 'unknown')) { continue; }
+      if (standIn && t.state === 'unknown') { continue; }
       if (!svc) {
         const name = `${this.name} ${t.name}`;
         svc = this.accessory.getServiceById(S.ContactSensor, TRAY_PREFIX + t.key)
@@ -951,9 +953,9 @@ export class PrinterAccessory {
         : C.ContactSensorState.CONTACT_DETECTED);
     }
     // Trays the printer no longer lists (a removed paper drawer); not when it listed none
-    if (main.length && !standIn) {
+    if (trays.length && !standIn) {
       for (const [key, svc] of Object.entries(this.trays)) {
-        if (main.some((t) => t.key === key)) { continue; }
+        if (trays.some((t) => t.key === key)) { continue; }
         this.accessory.removeService(svc);
         this.guarded = this.guarded.filter((ch) => !svc.characteristics.includes(ch));
         delete this.trays[key];
