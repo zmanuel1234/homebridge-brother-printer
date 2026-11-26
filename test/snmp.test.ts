@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { query } from '../src/snmp';
+import * as snmpLib from 'net-snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp';
 import type { QueryOptions } from '../src/snmp';
 import { startFakePrinter } from './fake-agent';
 
@@ -57,4 +58,76 @@ test('auto: uses v2c when it answers and remembers it', async (t) => {
   const r = await query({ host: '127.0.0.1', port: 16171, state });
   assert.equal(r.snmpVersion, '2c');
   assert.equal(state.version, '2c');
+});
+
+/* ------------------------------------------------------------------ SNMPv3 */
+
+const V3_USER: snmpLib.User = {
+  name: 'homebridge',
+  level: snmpLib.SecurityLevel.authPriv,
+  authProtocol: snmpLib.AuthProtocols.sha,
+  authKey: 'auth-pass-1',
+  privProtocol: snmpLib.PrivProtocols.aes,
+  privKey: 'priv-pass-1',
+};
+
+test('SNMPv3: reads with authentication and encryption', async (t) => {
+  const printer = await startFakePrinter(16180, {}, [V3_USER]);
+  t.after(() => printer.close());
+  const r = await query({
+    host: '127.0.0.1', port: 16180, version: '3', timeout: 1000, retries: 0,
+    v3: { user: 'homebridge', authProtocol: 'sha', authPassword: 'auth-pass-1', privProtocol: 'aes', privPassword: 'priv-pass-1' },
+  });
+  assert.equal(r.snmpVersion, '3');
+  assert.equal(r.tonerPercent, 70);
+  assert.equal(r.model, 'Brother MFC-L2750DW series');
+});
+
+test('SNMPv3: a wrong password is refused', async (t) => {
+  const printer = await startFakePrinter(16181, {}, [V3_USER]);
+  t.after(() => printer.close());
+  await assert.rejects(query({
+    host: '127.0.0.1', port: 16181, version: '3', timeout: 500, retries: 0,
+    v3: { user: 'homebridge', authProtocol: 'sha', authPassword: 'wrong-pass', privProtocol: 'aes', privPassword: 'priv-pass-1' },
+  }));
+});
+
+test('SNMPv3: the security level follows the protocols set', () => {
+  assert.equal(v3User({ user: 'u' }).level, snmpLib.SecurityLevel.noAuthNoPriv);
+  assert.equal(v3User({ user: 'u', authProtocol: 'md5', authPassword: '12345678' }).level, snmpLib.SecurityLevel.authNoPriv);
+  const full = v3User({ user: 'u', authProtocol: 'sha256', authPassword: '12345678', privProtocol: 'des', privPassword: '87654321' });
+  assert.equal(full.level, snmpLib.SecurityLevel.authPriv);
+  assert.equal(full.authProtocol, snmpLib.AuthProtocols.sha256);
+  assert.equal(full.privProtocol, snmpLib.PrivProtocols.des);
+});
+
+test('SNMPv3: settings that can\'t work are refused with a clear reason', () => {
+  assert.throws(() => v3User(undefined), /user name/);
+  assert.throws(() => v3User({ user: '' }), /user name/);
+  assert.throws(() => v3User({ user: 'u', privProtocol: 'aes', privPassword: '12345678' }), /needs authentication/);
+  assert.throws(() => v3User({ user: 'u', authProtocol: 'sha', authPassword: 'short' }), /at least 8/);
+  assert.throws(() => v3User({ user: 'u', authProtocol: 'sha', authPassword: '12345678', privProtocol: 'aes' }), /at least 8/);
+});
+
+test('SNMPv3: authentication without encryption works end to end', async (t) => {
+  const user: snmpLib.User = {
+    name: 'reader', level: snmpLib.SecurityLevel.authNoPriv, authProtocol: snmpLib.AuthProtocols.sha256, authKey: 'auth-pass-2',
+  };
+  const printer = await startFakePrinter(16182, {}, [user]);
+  t.after(() => printer.close());
+  const r = await query({
+    host: '127.0.0.1', port: 16182, version: '3', timeout: 1000, retries: 0,
+    v3: { user: 'reader', authProtocol: 'sha256', authPassword: 'auth-pass-2', privProtocol: 'none' },
+  });
+  assert.equal(r.tonerPercent, 70);
+});
+
+test('SNMPv3: protocol settings accept common spellings and refuse unknown ones', () => {
+  assert.equal(protocolSetting(undefined, AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('SHA-256', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha256');
+  assert.equal(protocolSetting('SHA1', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('AES128', PRIV_PROTOCOLS, 'aes', 'encryption'), 'aes');
+  assert.equal(protocolSetting('None', PRIV_PROTOCOLS, 'aes', 'encryption'), 'none');
+  assert.throws(() => protocolSetting('3des', PRIV_PROTOCOLS, 'aes', 'encryption'), /encryption "3des" isn't supported/);
 });

@@ -55,7 +55,7 @@ While the printer can't be reached, all of them except Online show No Response.
   Other Brother models generally use the same records. Reports, with the probe output
   below, are welcome.
 - SNMP turned on in the printer's web page: **Network → Protocol → SNMP** (v1/v2c,
-  read-only is enough). The default community is `public`.
+  read-only is enough). The default community is `public`. SNMPv3 works too (below).
 - A fixed address for the printer: reserve its IP in your router, or use its mDNS
   hostname (for example `brn3c2af4919dfc.local`).
 - Homebridge 1.6 or later (including 2.x), Node.js 22 (22.19 or later), 24 or 26.
@@ -92,7 +92,13 @@ Set it up in the plugin's settings screen, or in `config.json`:
 | `host` | | Printer IP address or hostname. Printers without one are ignored. |
 | `community` | `public` | SNMP community string. |
 | `port` | `161` | SNMP port. |
-| `snmpVersion` | `auto` | `auto` tries v2c, then v1. Set `1` for older printers that only answer v1. |
+| `snmpVersion` | `auto` | `auto` tries v2c, then v1. Set `1` for older printers that only answer v1, or `3` for SNMPv3 (below). |
+| `v3User` | | SNMPv3 user name. Used only with `snmpVersion` `3`. |
+| `v3AuthProtocol` | `sha` | SNMPv3 authentication: `none`, `md5`, `sha` (SHA-1), `sha224`, `sha256`, `sha384` or `sha512`. `none` needs `v3PrivProtocol` `none` too. |
+| `v3AuthPassword` | | SNMPv3 authentication password, at least 8 characters. |
+| `v3PrivProtocol` | `aes` | SNMPv3 encryption: `none`, `des`, `aes` (AES-128), `aes256b` or `aes256r`. Needs authentication. |
+| `v3PrivPassword` | | SNMPv3 encryption password, at least 8 characters. |
+| `v3Context` | | SNMPv3 context name. Leave empty unless the printer has one set. |
 | `pollInterval` | `60` | Seconds between polls (10–3600). |
 | `lowTonerThreshold` | `10` | Toner or ink % at or below which Home shows it as low (any color, on color printers). |
 | `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
@@ -148,12 +154,34 @@ answered, the version that worked is used.
 
 Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 
+## SNMPv3
+
+If you'd rather not leave SNMP v1/v2c on, Brother printers also support SNMPv3, which
+needs a user name and password and can encrypt the traffic. Set it up in the printer's
+web page under **Network → Protocol → SNMP** (choose the SNMPv3 mode and set the user,
+protocols and passwords; on some models these are under **Advanced Settings**), then
+set `snmpVersion` to `3` and enter the same values here. The settings screen shows the
+SNMPv3 fields once you pick v3.
+
+The plugin only reads, so a read-only SNMPv3 user is enough. With missing or invalid
+SNMPv3 settings (no user, a password under 8 characters, an unknown protocol, encryption
+without authentication), the printer isn't set up and the log says why.
+
 ## Checking what your printer reports
 
 The package includes a command that prints what the plugin reads:
 
 ```bash
 npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150
+```
+
+With SNMPv3, add the user and passwords. SHA and AES are the defaults; `--priv none`
+turns encryption off, and `--auth none` needs `--priv none` too. The passwords can also
+come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_PRIV_PASS`,
+which keeps them out of your shell history:
+
+```bash
+npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user> --auth-pass <password> --priv-pass <password>
 ```
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
@@ -169,6 +197,10 @@ model.
   the log shows the display text as the printer shows it. Problems and printing are
   detected from language-neutral status codes, with English display text as a fallback.
 - **Old printer never connects**: set `snmpVersion` to `1`.
+- **SNMPv3 errors** ("Request timed out", "Unknown User Name", "Wrong Digest",
+  "Unsupported Security Level", "Decryption Error"): the user, protocols, passwords or
+  context name don't match the printer's. A wrong password usually shows as a timeout.
+  Check them with the probe command above.
 - **Toner shows 0% with a full cartridge**: some non-genuine cartridges aren't recognised
   by the printer, which then reports no level.
 

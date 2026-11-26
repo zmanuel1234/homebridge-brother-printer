@@ -11,8 +11,13 @@
 - Optional **Online** occupancy sensor (`onlineSensor`): Detected while the printer answers.
   Unlike the other sensors it stays readable while the printer is offline, so automations
   can run on it (for example, turning off the printer's smart plug).
+- **SNMPv3** (`snmpVersion` `3`), for printers with v1/v2c turned off: user name, MD5 or
+  SHA authentication and DES or AES encryption. The settings screen shows these fields once
+  v3 is picked, with an optional context name; missing or invalid SNMPv3 settings (including an
+  unknown protocol) are reported at startup. The probe
+  command takes `--v3 <user>` and the matching options.
 
-All three are off by default; with your current config nothing changes.
+The new sensors are off by default; with your current config nothing changes.
 
 ## 0.5.2 - 2026-11-26
 

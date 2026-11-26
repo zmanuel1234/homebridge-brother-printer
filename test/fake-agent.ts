@@ -20,7 +20,7 @@ interface Mib {
   setTableSingleCell(table: string, column: number, row: number[], value: AgentValue): void;
 }
 interface Agent {
-  getAuthorizer(): { addCommunity(name: string): void };
+  getAuthorizer(): { addCommunity(name: string): void; addUser(user: snmp.User): void };
   getMib(): Mib;
   close(): void;
 }
@@ -33,7 +33,8 @@ const lib = snmp as unknown as {
 
 const typeOf = (v: AgentValue): number => (typeof v === 'number' ? lib.ObjectType.Integer : lib.ObjectType.OctetString);
 
-export function startFakePrinter(port: number, overrides: Partial<Record<OidName, AgentValue | undefined>> = {}): Promise<FakePrinter> {
+export function startFakePrinter(port: number, overrides: Partial<Record<OidName, AgentValue | undefined>> = {},
+  users: snmp.User[] = []): Promise<FakePrinter> {
   const given: Partial<Record<OidName, AgentValue | null | undefined>> = {
     maintenance: toBuffer(fx.maintenance),
     counters: toBuffer(fx.counters),
@@ -53,6 +54,7 @@ export function startFakePrinter(port: number, overrides: Partial<Record<OidName
 
   const agent = lib.createAgent({ port, address: '127.0.0.1' }, () => {});
   agent.getAuthorizer().addCommunity('public');
+  for (const user of users) { agent.getAuthorizer().addUser(user); }
   const mib = agent.getMib();
 
   const scalars: OidName[] = [];
