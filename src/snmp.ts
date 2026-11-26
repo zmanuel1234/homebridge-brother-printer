@@ -1,6 +1,8 @@
 import type { EventEmitter } from 'node:events';
 import * as snmp from 'net-snmp';
 import * as decode from './decode';
+import { manufacturerOf, mapMarkers } from './markers';
+import type { Marker } from './markers';
 import type { Color, Drum, Part, PartKey, PrinterError, PrinterType, RawValue, StatusSummary, Supply } from './decode';
 
 export const OID = {
@@ -16,10 +18,28 @@ export const OID = {
   pageCount: '1.3.6.1.2.1.43.10.2.1.4.1.1', // prtMarkerLifeCount
   printerStatus: '1.3.6.1.2.1.25.3.5.1.1.1', // hrPrinterStatus
   errorState: '1.3.6.1.2.1.25.3.5.1.2.1', // hrPrinterDetectedErrorState
+  sysDescr: '1.3.6.1.2.1.1.1.0', // the device's own description, a fallback for the model
 } as const;
 
+/** Printer MIB (RFC 3805): every printer's supplies, read when there are no Brother records */
+export const SUPPLIES_TABLE = '1.3.6.1.2.1.43.11.1.1'; // prtMarkerSuppliesEntry
+export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantValue
+const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
+/** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
+const SUPPLY_TYPES: Record<number, string> = {
+  1: 'other', 2: 'unknown', 3: 'toner', 4: 'waste-toner', 5: 'ink', 6: 'ink-cartridge', 7: 'ink-ribbon', 8: 'waste-ink',
+  9: 'opc', 10: 'developer', 11: 'fuser-oil', 12: 'solid-wax', 13: 'ribbon-wax', 14: 'waste-wax', 15: 'fuser',
+  16: 'corona-wire', 17: 'fuser-oil-wick', 18: 'cleaner-unit', 19: 'fuser-cleaning-pad', 20: 'transfer-unit',
+  21: 'toner-cartridge', 22: 'fuser-oiler', 32: 'staples',
+};
+/** At most this many table entries are read, however big the table */
+const MAX_ROWS = 64;
+
 export type OidName = keyof typeof OID;
-export type RawReadings = Partial<Record<OidName, RawValue>>;
+export type RawReadings = Partial<Record<OidName, RawValue>> & {
+  /** Printer MIB supplies, when read */
+  markers?: Marker[];
+};
 export type SnmpVersion = '1' | '2c' | '3';
 
 export const AUTH_PROTOCOLS = ['none', 'md5', 'sha', 'sha224', 'sha256', 'sha384', 'sha512'] as const;
@@ -71,7 +91,7 @@ export interface QueryOptions {
   /** Needed for version '3' */
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
-  state?: { version?: SnmpVersion };
+  state?: { version?: SnmpVersion; suppliesRead?: boolean };
 }
 
 export interface PrinterData extends StatusSummary {
@@ -138,6 +158,92 @@ export function v3User(v3: V3User | undefined): snmp.User {
   return user;
 }
 
+/** All values under an OID (GETBULK on v2c/v3, GETNEXT on v1), up to a limit */
+function subtree(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+  return new Promise((resolve, reject) => {
+    const out: snmp.Varbind[] = [];
+    session.subtree(oid, 20, (varbinds) => {
+      for (const vb of varbinds) { if (!snmp.isVarbindError(vb)) { out.push(vb); } }
+      return out.length >= limit; // true stops the walk
+    }, (err) => (err ? reject(err) : resolve(out)));
+  });
+}
+
+const clean = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') : v === null || v === undefined ? '' : String(v))
+  // Some printers end names with NULs or pad them; keep printable text
+  // eslint-disable-next-line no-control-regex
+  .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** The Printer MIB supplies table as markers, from walked values */
+export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], colorants: { oid: string; value: unknown }[],
+  charset: number | null = null): Marker[] {
+  // Names: valid UTF-8 as such, else the printer's character set (prtLocalizationCharacterSet),
+  // as for its display text, else Latin-1
+  const utf8 = new TextDecoder('utf-8', { fatal: true });
+  const text = (v: unknown): string => {
+    if (!Buffer.isBuffer(v)) { return clean(v); }
+    // Valid UTF-8 first: many printers declare US-ASCII or HP Roman8 whatever they send,
+    // and text in a single-byte set (é as 0xE9) is almost never valid UTF-8
+    try { return clean(utf8.decode(v)); } catch { return decode.decodeText(v, charset); }
+  };
+  const byIndex = new Map<string, Partial<Record<keyof typeof COLUMN, unknown>>>();
+  const columns = Object.entries(COLUMN) as [keyof typeof COLUMN, number][];
+  for (const { oid, value } of rows) {
+    if (!oid.startsWith(`${SUPPLIES_TABLE}.`)) { continue; }
+    const [col, ...index] = oid.slice(SUPPLIES_TABLE.length + 1).split('.');
+    const name = columns.find(([, n]) => n === Number(col))?.[0];
+    if (!name) { continue; }
+    const key = index.join('.');
+    const row = byIndex.get(key) ?? {};
+    row[name] = value;
+    byIndex.set(key, row);
+  }
+  // prtMarkerColorantValue, indexed by hrDeviceIndex.colorantIndex
+  const colorant = new Map(colorants.map(({ oid, value }) => [oid.slice(COLORANT_VALUES.length + 1), text(value)]));
+  const order = (k: string): number[] => k.split('.').map(Number);
+  return [...byIndex.entries()]
+    .sort(([a], [b]) => { const x = order(a); const y = order(b); return x[0] - y[0] || x[1] - y[1]; })
+    .map(([key, row]) => {
+      const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+      const device = key.split('.')[0];
+      const type = num(row.type);
+      return {
+        name: text(row.name),
+        type: type !== null ? SUPPLY_TYPES[type] ?? 'other' : '',
+        colors: num(row.colorant) ? colorant.get(`${device}.${row.colorant as number}`) ?? '' : '',
+        level: num(row.level),
+        high: num(row.max),
+      };
+    })
+    .filter((m) => m.name || m.level !== null);
+}
+
+/**
+ * Read the Printer MIB supplies: only the columns used, and the colorant names
+ * only when a supply refers to one. An empty list when the printer has no table.
+ * A walk that fails partway counts as a failed poll once the table has been read
+ * before (a lost packet mustn't look like "no supplies" and take sensors away);
+ * a printer whose table never reads is treated as having none.
+ */
+export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[]> {
+  try {
+    const rows: snmp.Varbind[] = [];
+    for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
+    const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
+    // Colors may come only from here (supplies named by part number), so once supplies have been
+    // read a failure counts like the walk's; before that, carry on without the colorant names
+    const colorants = !wantsColorant ? []
+      : await subtree(session, COLORANT_VALUES, MAX_ROWS).catch((err: unknown) => { if (state.suppliesRead) { throw err; } return []; });
+    const markers = suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
+      colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
+    if (markers.length) { state.suppliesRead = true; }
+    return markers;
+  } catch (err) {
+    if (state.suppliesRead) { throw err; }
+    return [];
+  }
+}
+
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     session.get(oids, (err, varbinds) => (err ? reject(err) : resolve(varbinds || [])));
@@ -171,6 +277,12 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         varbinds.forEach((vb, idx) => {
           raw[names[idx]] = snmp.isVarbindError(vb) ? null : vb.value as RawValue;
         });
+        // Not a Brother printer, or one whose records have no levels: the standard supplies table
+        const brother = decode.supplyList(decode.decodeMaintenance(raw.maintenance, raw.nextCare).supplies);
+        if (!brother.length) {
+          const charset = typeof raw.charset === 'number' ? raw.charset : Number(decode.decodeText(raw.charset)) || null;
+          raw.markers = await readSupplies(session, charset, options.state ||= {});
+        }
         return raw;
       } catch (err) {
         const e = err as Error | null;
@@ -195,7 +307,7 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
  * first and v1 when v2c gets no answer; options.state remembers which worked.
  */
 export async function query(options: QueryOptions): Promise<QueryResult> {
-  const state = options.state || {};
+  const state = (options.state ||= {});
   const wanted = options.version && options.version !== 'auto' ? [String(options.version) as SnmpVersion] : null;
   const order: SnmpVersion[] = wanted || (state.version ? [state.version] : ['2c', '1']);
 
@@ -217,6 +329,21 @@ function sumPages(c: decode.Counters): number | null {
   return typeof c.monoPages === 'number' && typeof c.colorPages === 'number' ? c.monoPages + c.colorPages : null;
 }
 
+/**
+ * The model: hrDeviceDescr, unless it's a generic driver name ("Generic 28C-1")
+ * and the device's description names the printer ("KONICA MINOLTA bizhub
+ * C3110", "RICOH MP C2503 1.35 / RICOH Network Printer…", or a print server
+ * "… Attached to MC873 …").
+ */
+export function modelOf(descr: string, sysDescr: string): string {
+  const attached = /attached to\s+([\w-]+)/i.exec(sysDescr)?.[1];
+  const fromSys = attached
+    ?? (/jetdirect|ethernet|ROM |print(ing)? (server|system)|zebranet/i.test(sysDescr) ? ''
+      : sysDescr.split(/[;,]| \/ |\s+version\s/i)[0].replace(/\s+\d+(\.\d+)+$/, '').trim().slice(0, 60));
+  if (!descr || /^generic\b/i.test(descr)) { return fromSys || descr; }
+  return descr;
+}
+
 export function parse(raw: RawReadings): PrinterData {
   const charset = typeof raw.charset === 'number' ? raw.charset : Number(decode.decodeText(raw.charset)) || null;
   const statusText = decode.decodeText(raw.statusText, charset);
@@ -224,11 +351,19 @@ export function parse(raw: RawReadings): PrinterData {
   const errors = decode.decodeErrorState(raw.errorState);
 
   const deviceId = decode.decodeText(raw.deviceId);
-  const model = decode.decodeText(raw.model) || decode.modelFromDeviceId(deviceId) || '';
+  const sysDescr = decode.decodeText(raw.sysDescr) || '';
+  const model = modelOf(decode.decodeText(raw.model) || decode.modelFromDeviceId(deviceId) || '', sysDescr);
   const maint = decode.decodeMaintenance(raw.maintenance, raw.nextCare);
   const counters = decode.decodeCounters(raw.counters);
-  const supplies = decode.supplyList(maint.supplies);
-  const type = decode.printerType(model, maint, deviceId);
+  const brotherSupplies = decode.supplyList(maint.supplies);
+  // Without Brother's records: the standard supplies table (any make of printer)
+  const mib = !brotherSupplies.length && raw.markers?.length ? mapMarkers(raw.markers) : null;
+  const supplies = mib ? mib.supplies : brotherSupplies;
+  const type = mib?.ink ? 'ink' : decode.printerType(model, maint, deviceId);
+  const mfg = /(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i.exec(deviceId)?.[1]?.trim() ?? '';
+  const isBrother = brotherSupplies.length > 0 || /brother/i.test(`${mfg} ${model}`);
+  // null for a maker the plugin can't name: Home then shows "Printer", never Brother
+  const manufacturer = isBrother ? 'Brother' : manufacturerOf(mfg, model) ?? manufacturerOf('', sysDescr);
   const pageCount = typeof raw.pageCount === 'number' ? raw.pageCount : null;
 
   // Inkjets have no drum; their 0x41 record means something else
@@ -237,6 +372,8 @@ export function parse(raw: RawReadings): PrinterData {
   // Lowest supply; when coarse levels tie (they move in 10% steps), the finer
   // reading decides, so a 2% yellow beats a 10% cyan
   const rank = (s: Supply): [number, number] => [s.level, s.fine ?? s.level];
+  if (mib && !Object.keys(maint.drums).length) { maint.drums = mib.drums; }
+  const parts = { ...mib?.parts, ...maint.parts };
   const lowest = supplies.length
     ? supplies.reduce((a, b) => {
       const [al, af] = rank(a);
@@ -248,6 +385,7 @@ export function parse(raw: RawReadings): PrinterData {
 
   return {
     model: model || null,
+    manufacturer,
     serial: decode.decodeText(raw.serial) || decode.decodeText(raw.brSerial) || null,
     type,
     statusText,
@@ -257,7 +395,7 @@ export function parse(raw: RawReadings): PrinterData {
     supplies,
     lowestSupply: lowest,
     drums: maint.drums,
-    parts: maint.parts,
+    parts,
     totalPages: counters.totalPages ?? pageCount ?? sumPages(counters),
     colorPages: counters.colorPages ?? null,
     duplexPages: counters.duplexPages ?? null,

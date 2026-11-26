@@ -293,6 +293,22 @@ function defineTests(hap: Hap): void {
     assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Studio Photo Black');
   });
 
+  test('supplies shown before a restart: a failed supplies walk on the first poll is a failed poll', () => {
+    const first = setup({});
+    first.printer.apply(reading(50));
+    assert.equal(first.acc.context.noLevels, false);
+    const again = setup({}, first.acc);
+    assert.equal(again.printer.options.state?.suppliesRead, true);
+    const fresh = setup({});
+    assert.equal(fresh.printer.options.state?.suppliesRead, false);
+  });
+
+  test('a printer whose maker can\'t be named shows as "Printer", never Brother', () => {
+    const { acc, printer } = setup({});
+    printer.apply({ ...reading(50), model: null, manufacturer: null });
+    assert.equal(acc.getService(S.AccessoryInformation)!.getCharacteristic(C.Manufacturer).value, 'Printer');
+  });
+
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
     const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
     printer.apply(viaIpp(reading(50)));

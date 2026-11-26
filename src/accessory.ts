@@ -131,7 +131,7 @@ const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
   paperFeed1: 'Paper feed kit (tray 1)', paperFeedMP: 'Paper feed kit (MP tray)', inkWasteBox: 'Ink waste box',
-  maintenanceKit: 'Maintenance kit',
+  maintenanceKit: 'Maintenance kit', wasteToner: 'Waste toner box', developer: 'Developer unit',
 };
 
 interface LastSeen {
@@ -248,6 +248,9 @@ export class PrinterAccessory {
     this.name = config.name;
 
     this.options = queryOptions(config);
+    // Supplies shown before a restart: a supplies walk that fails on the first poll is a
+    // failed poll, not "no supplies" (which would take the battery and tiles away)
+    this.options.state!.suppliesRead = accessory.context.noLevels === false;
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
@@ -305,7 +308,7 @@ export class PrinterAccessory {
 
     acc.getService(S.AccessoryInformation)!
       .setCharacteristic(C.Manufacturer, acc.context.manufacturer || 'Brother')
-      .setCharacteristic(C.Model, acc.context.model || 'Brother printer')
+      .setCharacteristic(C.Model, acc.context.model || (acc.context.manufacturer ? 'Printer' : 'Brother printer'))
       .setCharacteristic(C.SerialNumber, acc.context.serial || this.options.host)
       .setCharacteristic(C.FirmwareRevision, version);
 
@@ -875,11 +878,12 @@ export class PrinterAccessory {
     if (this.standIn(d)) { return; }
     const ctx = this.accessory.context;
     let changed = false;
-    const maker = d.manufacturer || 'Brother';
+    // A make the plugin can't name shows as "Printer", never as Brother
+    const maker = d.manufacturer === null ? 'Printer' : d.manufacturer || 'Brother';
     // The model without the maker's name in front ("EPSON XP-6000 Series" → "XP-6000 Series")
     const model = d.model ? d.model.replace(new RegExp(`^(?:Brother|${maker.replace(/[^\w-]/g, '\\$&')})\\s+`, 'i'), '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
-    if (d.manufacturer && d.manufacturer !== (ctx.manufacturer || 'Brother')) { ctx.manufacturer = d.manufacturer; changed = true; }
+    if (d.manufacturer !== undefined && maker !== (ctx.manufacturer || 'Brother')) { ctx.manufacturer = maker; changed = true; }
     if (this.configSerial && d.serial && d.serial !== this.configSerial) {
       this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
         + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
@@ -896,7 +900,7 @@ export class PrinterAccessory {
     if (!changed) { return; }
     this.accessory.getService(S.AccessoryInformation)!
       .updateCharacteristic(C.Manufacturer, ctx.manufacturer || 'Brother')
-      .updateCharacteristic(C.Model, ctx.model || 'Brother printer')
+      .updateCharacteristic(C.Model, ctx.model || (ctx.manufacturer && ctx.manufacturer !== 'Brother' ? 'Printer' : 'Brother printer'))
       .updateCharacteristic(C.SerialNumber, ctx.serial || this.options.host);
     this.api.updatePlatformAccessories([this.accessory]);
   }

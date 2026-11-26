@@ -3,11 +3,23 @@
 ## Unreleased
 
 ### Added
-- **IPP: more printers and inks**, checked against answers recorded from 50 real printers
-  (Brother, Canon, Epson, HP, Kyocera, Samsung):
+- **Printers of other makes over SNMP**: without Brother records with levels, the plugin
+  reads the standard Printer MIB supplies table, so HP, Canon, Epson, Kyocera, Xerox,
+  Ricoh, Konica Minolta, Sharp, OKI, Samsung, Dell and others show their toner or ink per
+  color, drums, waste toner box, fuser, transfer belt, developer and maintenance kit.
+  Checked against SNMP recordings of about 22 real printer models: levels as % or pages, names in
+  other languages (German, Chinese…), part numbers as names, two black toners. Home shows
+  the printer's own maker and model (also from the device's description when the model is
+  generic or missing). Older Brother models whose records have no levels get the drum (and
+  any levels) from it too.
+- Search for printers finds printers of any make, not only Brother (a computer's virtual
+  printers, such as Microsoft Print To PDF, are left out). A printer whose maker can't be
+  named shows as "Printer" in Home, never as Brother.
+- **IPP: more printers and inks**, checked against 49 answers recorded from about 44 real
+  printer models (Brother, Canon, Epson, HP, Kyocera, Samsung):
   - Extra inks get their own tiles: Photo Black, Gray (light black), Light Cyan, Light
-    Magenta, and HP's Tri-color cartridge. Before, a second black replaced the first, and
-    tri-color cartridges were left out.
+    Magenta, and HP's Tri-color cartridge. Before, a second black (photo black, Canon's
+    PGBK) was left out, and so were tri-color cartridges.
   - Printers that name their cartridges `inkCartridge` (many HP inkjets, some Brother)
     now show their levels; before they showed none.
   - Printer colors are matched by name first, then by the nearest color, so other shades

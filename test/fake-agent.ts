@@ -33,8 +33,11 @@ const lib = snmp as unknown as {
 
 const typeOf = (v: AgentValue): number => (typeof v === 'number' ? lib.ObjectType.Integer : lib.ObjectType.OctetString);
 
+/** A row of the Printer MIB supplies table (prtMarkerSuppliesTable), for printers of any make */
+export interface FakeSupply { colorant: number; type: number; name: string; max: number; level: number }
+
 export function startFakePrinter(port: number, overrides: Partial<Record<OidName, AgentValue | undefined>> = {},
-  users: snmp.User[] = []): Promise<FakePrinter> {
+  users: snmp.User[] = [], supplies: FakeSupply[] = [], colorants: string[] = []): Promise<FakePrinter> {
   const given: Partial<Record<OidName, AgentValue | null | undefined>> = {
     maintenance: toBuffer(fx.maintenance),
     counters: toBuffer(fx.counters),
@@ -104,6 +107,42 @@ export function startFakePrinter(port: number, overrides: Partial<Record<OidName
   }
 
   for (const name of scalars) { mib.setScalarValue(name, valueOf(name)); }
+
+  if (supplies.length) {
+    // Indexed by hrDeviceIndex (1) and the supply's index
+    const col = (number: number, name: string, type: number) => ({ number, name, type, maxAccess: lib.MaxAccess['read-only'] });
+    mib.registerProvider({
+      name: 'prtMarkerSuppliesTable',
+      type: lib.MibProviderType.Table,
+      oid: '1.3.6.1.2.1.43.11.1.1',
+      tableColumns: [
+        { number: 251, name: 'hrDeviceIndex', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        { number: 1, name: 'prtMarkerSuppliesIndex', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        col(3, 'colorantIndex', lib.ObjectType.Integer),
+        col(5, 'type', lib.ObjectType.Integer),
+        col(6, 'description', lib.ObjectType.OctetString),
+        col(8, 'maxCapacity', lib.ObjectType.Integer),
+        col(9, 'level', lib.ObjectType.Integer),
+      ],
+      tableIndex: [{ columnName: 'hrDeviceIndex' }, { columnName: 'prtMarkerSuppliesIndex' }],
+    });
+    supplies.forEach((s, i) => mib.addTableRow('prtMarkerSuppliesTable',
+      [1, i + 1, s.colorant, s.type, Buffer.from(s.name), s.max, s.level]));
+  }
+  if (colorants.length) {
+    mib.registerProvider({
+      name: 'prtMarkerColorantTable',
+      type: lib.MibProviderType.Table,
+      oid: '1.3.6.1.2.1.43.12.1.1',
+      tableColumns: [
+        { number: 251, name: 'cDev', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        { number: 1, name: 'cIndex', type: lib.ObjectType.Integer, maxAccess: lib.MaxAccess['not-accessible'] },
+        { number: 4, name: 'colorantValue', type: lib.ObjectType.OctetString, maxAccess: lib.MaxAccess['read-only'] },
+      ],
+      tableIndex: [{ columnName: 'cDev' }, { columnName: 'cIndex' }],
+    });
+    colorants.forEach((c, i) => mib.addTableRow('prtMarkerColorantTable', [1, i + 1, Buffer.from(c)]));
+  }
 
   const set = (name: OidName, value: AgentValue): void => {
     if (scalars.includes(name)) {

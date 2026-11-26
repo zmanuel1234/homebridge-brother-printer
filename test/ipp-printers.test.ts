@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { manufacturerOf, markerColor, parseResponse, toPrinterData } from '../src/ipp';
+import { TAG, ippMessage, manufacturerOf, markerColor, parseResponse, toPrinterData } from '../src/ipp';
+import type { IppAttribute } from '../src/ipp';
 import type { PrinterData } from '../src/snmp';
 
 const read = (file: string): PrinterData =>
@@ -46,7 +47,7 @@ for (const [file, want] of Object.entries(PRINTERS)) {
 test('real printers over IPP: idle ones aren\'t printing, and nothing reads as "null"', () => {
   for (const file of Object.keys(PRINTERS)) {
     const d = read(file);
-    assert.equal(JSON.stringify(d).includes('null,') && /"(model|statusText)":"null"/.test(JSON.stringify(d)), false, file);
+    assert.doesNotMatch(JSON.stringify(d), /"(model|statusText|manufacturer)":"null"/, file);
     if (file !== 'hp-officejet-250-mobile-series') { assert.equal(d.printing, false, file); }
   }
 });
@@ -68,6 +69,14 @@ test('marker colors: names first, then the nearest color', () => {
     ['', '#FFFFFF', 'black'],
     ['', '#99FFFF', 'lightCyan'],
     ['Maintenance Kit', 'none', null],
+    ['Photo Blue (PB)', '#0000FF', null],
+    ['Matte Black (MK)', '#000000', 'black'],
+    ['PK', '#000000', 'photoBlack'],
+    ['Black Toner (Gray scale)', '#000000', 'black'],
+    ['Gray ink', '#808080', 'gray'],
+    ['Black Toner', '#000000#000000', 'black'],
+    ['', '#FFFFE0', null],
+    ['', '#333333', 'black'],
   ];
   for (const [name, colors, want] of cases) { assert.equal(markerColor(name, colors), want, `${name} ${colors}`); }
 });
@@ -82,4 +91,36 @@ test('real printers over IPP: the maker, for Home\'s accessory details', () => {
   });
   assert.equal(manufacturerOf('', 'Something 123'), null);
   assert.equal(manufacturerOf('ACME', 'Something 123'), 'ACME');
+});
+
+/** A printer answer built from marker lists, for cases no recording covers */
+function markers(names: string[], types: string[], colors: string[], levels: number[]): PrinterData {
+  const attrs: IppAttribute[] = [
+    { tag: TAG.name, name: 'marker-names', values: names },
+    { tag: TAG.keyword, name: 'marker-types', values: types },
+    { tag: TAG.name, name: 'marker-colors', values: colors },
+    { tag: TAG.integer, name: 'marker-levels', values: levels },
+  ];
+  return toPrinterData(parseResponse(ippMessage(0, 1, [{ tag: TAG.printer, attributes: attrs }])).printer);
+}
+
+test('several blacks: pigment black is the black, whatever the order; a pigment color doesn\'t count', () => {
+  const ink = (n: number) => Array<string>(n).fill('ink-cartridge');
+  // Canon six-ink: PGBK, BK, C, M, Y, PB (photo blue has no tile)
+  const canon = markers(['Black(BK)', 'Photo Blue(PB)', 'Black(PGBK)', 'Cyan', 'Magenta', 'Yellow'], ink(6),
+    ['#000000', '#0000FF', '#000000', '#00FFFF', '#FF00FF', '#FFFF00'], [50, 3, 70, 60, 60, 60]);
+  assert.equal(levels(canon), 'black 70, cyan 60, magenta 60, yellow 60, photoBlack 50');
+  const pigmentCyan = markers(['Black', 'Pigment Cyan', 'Magenta', 'Yellow'], ink(4),
+    ['#000000', '#00FFFF', '#FF00FF', '#FFFF00'], [40, 50, 50, 50]);
+  assert.equal(levels(pigmentCyan), 'black 40, cyan 50, magenta 50, yellow 50');
+  const three = markers(['Black A', 'Black B', 'Black C'], ink(3), ['#000000', '#000000', '#000000'], [10, 20, 30]);
+  assert.equal(levels(three), 'black 10, photoBlack 20', 'a third black is left out');
+  const numbered = markers(['Black Toner 1', 'Black Toner 2', 'Cyan Toner'], ['toner', 'toner', 'toner'],
+    ['', '', ''], [90, 30, 50]);
+  assert.equal(levels(numbered), 'black 30, cyan 50', 'two numbered black toners: the lower one');
+});
+
+test('a color drum shared by all colors still counts as the drum', () => {
+  const d = markers(['Black Toner', 'Drum Unit'], ['toner', 'opc'], ['#000000', '#000000#00FFFF#FF00FF#FFFF00'], [50, 40]);
+  assert.equal(d.drumPercent, 40);
 });

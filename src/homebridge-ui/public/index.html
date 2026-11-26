@@ -6,7 +6,7 @@
 <div class="card card-body mb-3" id="bp-tools">
   <h5 class="card-title mb-2">Find and test printers</h5>
   <p class="small text-muted mb-2">
-    Searches this network for Brother printers with SNMP turned on, and fills in a new printer's address and serial
+    Searches this network for printers with SNMP turned on (Brother and other makes), and fills in a new printer's address and serial
     number. The serial number lets the plugin keep a printer in Home when you rename it or its address changes.
   </p>
   <div class="d-flex flex-wrap align-items-end mb-2" style="gap: .5rem">
@@ -70,7 +70,7 @@
       found = await homebridge.request('/discover', { community: $('bp-community').value.trim() || 'public' });
       const configured = (await platformConfig())[0].printers;
       if (!found.length) {
-        out.innerHTML = '<p class="small mb-0">No Brother printers answered. Check that SNMP is on in the printer\'s web page '
+        out.innerHTML = '<p class="small mb-0">No printers answered. Check that SNMP is on in the printer\'s web page '
           + '(Network &gt; Protocol) and the community above, or enter the address in the form below. '
           + 'The search can\'t find printers that only have SNMPv3 on, or that are on another network.</p>';
         return;

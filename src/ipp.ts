@@ -11,8 +11,9 @@
 import http from 'node:http';
 import https from 'node:https';
 import { printerType, summarizeStatus } from './decode';
-import { ALL_COLORS } from './decode';
-import type { Color, Drum, Part, PartKey, PrinterError, Supply } from './decode';
+import type { PrinterError } from './decode';
+import { manufacturerOf, mapMarkers } from './markers';
+import type { Marker } from './markers';
 import type { PrinterData } from './snmp';
 
 /* --------------------------------------------------------------- encoding */
@@ -182,71 +183,7 @@ export function reasonErrors(reasons: IppValue[]): PrinterError[] {
   return [...out];
 }
 
-/**
- * A marker's color, from its name first (printers name them well: "Photo Black
- * ink", "light black ink", "Black(PGBK)", "BK", "tri-color ink"), then from
- * marker-colors (#RRGGBB; several for a multi-color cartridge; "none").
- */
-export function markerColor(name: string, colors: string): Color | null {
-  const n = name.toLowerCase();
-  if (/tri-?colou?r|\bcmy\b|\bcolou?r ink\b/.test(n) || (colors.match(/#[0-9a-f]{6}/gi) || []).length > 1) { return 'tricolor'; }
-  if (/photo\s*black|\bpbk?\b/.test(n)) { return 'photoBlack'; }
-  if (/light\s*black|gr[ae]y/.test(n)) { return 'gray'; }
-  if (/light\s*cyan|photo\s*cyan|\blc\b/.test(n)) { return 'lightCyan'; }
-  if (/light\s*magenta|photo\s*magenta|\blm\b/.test(n)) { return 'lightMagenta'; }
-  const word = /\b(black|cyan|magenta|yellow)\b/.exec(n)?.[1] as Color | undefined;
-  if (word) { return word; }
-  const code = /\b(pgbk|bk|k|c|m|y)\b/.exec(n)?.[1];
-  if (code) { return ({ pgbk: 'black', bk: 'black', k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[code]; }
-  return hexColor(colors);
-}
-
-/** The nearest supply color to a #RRGGBB value (printers use their own shades, e.g. #00CFFF) */
-function hexColor(value: string): Color | null {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value.trim());
-  if (!m) { return null; }
-  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16) / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  if (max - min < 0.15) {
-    // White (#FFFFFF) is a placeholder some printers send for black
-    return max < 0.15 || max > 0.95 ? 'black' : 'gray';
-  }
-  const light = min > 0.4;
-  if (b >= max - 0.15 && g >= max - 0.3 && r < max - 0.3) { return light ? 'lightCyan' : 'cyan'; }
-  if (r >= max - 0.15 && b >= max - 0.3 && g < max - 0.3) { return light ? 'lightMagenta' : 'magenta'; }
-  if (r >= max - 0.15 && g >= max - 0.3 && b < max - 0.3) { return 'yellow'; }
-  return null;
-}
-
-function partKey(name: string, type: string): PartKey | null {
-  const n = name.toLowerCase();
-  if (/waste/.test(type) || /waste/.test(n)) { return 'inkWasteBox'; }
-  if (type === 'fuser' || /fuser/.test(n)) { return 'fuser'; }
-  if (/transfer|belt/.test(type) || /belt/.test(n)) { return 'belt'; }
-  if (/laser/.test(n)) { return 'laser'; }
-  if (/feed/.test(n)) { return /mp/.test(n) ? 'paperFeedMP' : 'paperFeed1'; }
-  return null;
-}
-
-const MAKERS: Record<string, string> = {
-  'hewlett-packard': 'HP', hp: 'HP', epson: 'Epson', canon: 'Canon', brother: 'Brother', samsung: 'Samsung',
-  kyocera: 'Kyocera', xerox: 'Xerox', lexmark: 'Lexmark', ricoh: 'Ricoh', oki: 'OKI', sharp: 'Sharp', konica: 'Konica Minolta',
-};
-
-/** The maker's name: from the device ID, or the first word of the model, tidied ("EPSON" → "Epson") */
-export function manufacturerOf(mfg: string, model: string): string | null {
-  const raw = (mfg || model.split(/\s+/)[0] || '').trim();
-  const known = MAKERS[raw.toLowerCase()];
-  if (known) { return known; }
-  if (mfg) { return raw; }
-  // Model names that don't start with the maker
-  if (/^(?:CNMF|imageCLASS|PIXMA|MAXIFY|i-SENSYS)/i.test(model)) { return 'Canon'; }
-  if (/^(?:ECOSYS|TASKalfa)/i.test(model)) { return 'Kyocera'; }
-  if (/^(?:MFC|DCP|HL)-/i.test(model)) { return 'Brother'; }
-  if (/^(?:OfficeJet|DeskJet|LaserJet|ENVY|Photosmart|PageWide)/i.test(model)) { return 'HP'; }
-  return null;
-}
+export { manufacturerOf, markerColor } from './markers';
 
 /** The printer's IPP attributes as the plugin's readings */
 export function toPrinterData(a: IppAttributes): PrinterData {
@@ -266,54 +203,18 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     .filter((r) => r !== 'none' && !r.endsWith('-report'));
   const statusText = str('printer-state-message') || reasons.join(', ');
 
-  const supplies: Supply[] = [];
-  const drums: Partial<Record<Color, Drum>> = {};
-  const parts: Partial<Record<PartKey, Part>> = {};
   const text = (v: IppValue | undefined): string => (v === null || v === undefined ? '' : String(v));
-  const names = (a['marker-names'] || []).map(text);
-  // Keywords, though some printers (HP, some Brother) send them in camelCase: inkCartridge
-  const types = names.map((_, i) => text(a['marker-types']?.[i]).replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase());
-  const isSupply = (type: string, name: string): boolean =>
-    /^(toner|ink|ink-cartridge|toner-cartridge|solid-wax|ribbon-wax)$/.test(type) || (type === '' && /toner|ink/i.test(name));
-  // A printer with one toner and no color for it is a mono printer: black
-  const onlyOne = names.filter((n, i) => isSupply(types[i], n)).length === 1;
-  let ink = false;
-  const blacks: number[] = [];
-  names.forEach((name, i) => {
-    const type = types[i];
-    const level = num('marker-levels', i);
-    const high = num('marker-high-levels', i) ?? 100;
-    // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
-    const percent = level !== null && level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(level * 100 / high))) : null;
-    if (/ink/.test(type)) { ink = true; }
-    let color = markerColor(name, text(a['marker-colors']?.[i])) ?? (onlyOne && isSupply(type, name) ? 'black' : null);
-    if (isSupply(type, name)) {
-      // A second black is the photo (dye) black, or, next to a pigment black
-      // (Canon's PGBK), the other one
-      if (color === 'black' && blacks.length) { color = 'photoBlack'; }
-      if (color === 'black') { blacks.push(i); }
-      if (color === 'black' && /pgbk|pigment/i.test(name) === false && names.some((o, j) => j !== i && /pgbk|pigment/i.test(o))) {
-        color = 'photoBlack';
-        blacks.pop();
-      }
-      if (percent !== null && color && !supplies.some((s) => s.color === color)) { supplies.push({ color, level: percent, fine: null }); }
-      return;
-    }
-    if (type === 'opc' || type === 'photo-conductor' || /drum/i.test(name)) {
-      if (percent !== null) { drums[color || 'black'] = { percent }; }
-      return;
-    }
-    if (type === 'maintenance-kit' || /maintenance kit/i.test(name)) {
-      if (percent !== null) { parts.maintenanceKit = { percent }; }
-      return;
-    }
-    const key = partKey(name, type);
-    if (key && percent !== null) { parts[key] = { percent }; }
-  });
-  supplies.sort((x, y) => ALL_COLORS.indexOf(x.color) - ALL_COLORS.indexOf(y.color));
-  const lowest = supplies.length ? supplies.reduce((x, y) => (y.level < x.level ? y : x)) : null;
+  const markers: Marker[] = (a['marker-names'] || []).map((name, i) => ({
+    name: text(name),
+    // Keywords, though some printers (HP, some Brother) send them in camelCase: inkCartridge
+    type: text(a['marker-types']?.[i]).replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase(),
+    colors: text(a['marker-colors']?.[i]),
+    level: num('marker-levels', i),
+    high: num('marker-high-levels', i),
+  }));
+  const { supplies, lowestSupply: lowest, drums, parts, ink } = mapMarkers(markers);
   const black = drums.black || {};
-  const type = ink || parts.inkWasteBox ? 'ink' : printerType(model, null, deviceId);
+  const type = ink ? 'ink' : printerType(model, null, deviceId);
 
   return {
     model: model || null,
