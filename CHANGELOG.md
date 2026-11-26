@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Settings screen: the search and connection-test panel now follows the Homebridge UI's theme, light or dark, in any accent color. The text under a search result and the connection-test labels were nearly invisible in dark themes; the input boxes were white; and the buttons used Bootstrap's own colors instead of the theme's. They now use the UI's own input, select and button styles and its font.
+
 ## 0.8.0 - 2026-11-26
 
 Printers of other makes over SNMP, and IPP for more printers and inks. Brother printers
