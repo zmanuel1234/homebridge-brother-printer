@@ -1,7 +1,7 @@
 name: Printer report
 description: Wrong or missing levels, or a model that isn't listed yet. Includes the probe output.
 title: "[Printer] "
-labels: ["printer report"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
