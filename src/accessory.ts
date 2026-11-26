@@ -34,6 +34,9 @@ export interface PrinterConfig {
   showDrum?: unknown;
   tonerTile?: unknown;
   faultSensor?: unknown;
+  maintenanceSensor?: unknown;
+  paperSensor?: unknown;
+  onlineSensor?: unknown;
   offlineAfter?: unknown;
   debug?: unknown;
 }
@@ -123,6 +126,9 @@ export class PrinterAccessory {
   readonly tonerTile: boolean;
   readonly faultSensor: boolean;
   readonly lowTonerSensor: boolean;
+  readonly maintenanceSensor: boolean;
+  readonly paperSensor: boolean;
+  readonly onlineSensor: boolean;
   readonly offlineAfter: number;
   readonly debug: boolean;
 
@@ -140,6 +146,9 @@ export class PrinterAccessory {
   drum: Service | null = null;
   problem: Service | null = null;
   lowSensor: Service | null = null;
+  maintenance: Service | null = null;
+  paper: Service | null = null;
+  onlineSvc: Service | null = null;
 
   private readonly query: QueryFn;
 
@@ -170,6 +179,9 @@ export class PrinterAccessory {
     this.tonerTile = config.tonerTile === true;
     this.faultSensor = config.faultSensor !== false;
     this.lowTonerSensor = config.lowTonerSensor === true;
+    this.maintenanceSensor = config.maintenanceSensor === true;
+    this.paperSensor = config.paperSensor === true;
+    this.onlineSensor = config.onlineSensor === true;
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
@@ -191,7 +203,7 @@ export class PrinterAccessory {
       .setCharacteristic(C.FirmwareRevision, version);
 
     // Printing state: the tile people see in the Home app
-    this.occupancy = acc.getService(S.OccupancySensor)
+    this.occupancy = acc.services.find((svc) => svc.UUID === S.OccupancySensor.UUID && !svc.subtype)
       || acc.addService(S.OccupancySensor, this.name);
     this.label(this.occupancy, this.name);
     this.occupancy.setPrimaryService(true);
@@ -237,6 +249,24 @@ export class PrinterAccessory {
       this.removeSubtype(S.ContactSensor, 'problem');
     }
 
+    // Drum and parts (belt, fuser, ...) as one contact sensor, since Home shows
+    // only one battery per accessory
+    this.maintenance = this.optionalContact(this.maintenanceSensor, 'maintenance', `${this.name} Maintenance`);
+    // Out of paper on its own, the problem people most often fix themselves
+    this.paper = this.optionalContact(this.paperSensor, 'noPaper', `${this.name} Out of Paper`);
+
+    // Reachable or not, as a sensor automations can use. Home can't trigger on
+    // No Response, so this one stays readable while the printer is offline.
+    if (this.onlineSensor) {
+      const svc = acc.getServiceById(S.OccupancySensor, 'online')
+        || acc.addService(S.OccupancySensor, `${this.name} Online`, 'online');
+      this.label(svc, `${this.name} Online`);
+      this.occupancy.addLinkedService(svc);
+      this.onlineSvc = svc;
+    } else {
+      this.removeSubtype(S.OccupancySensor, 'online');
+    }
+
     // The low toner sensor is created once the printer says toner or ink;
     // here only one restored from the cache is picked up.
     const lowSvc = acc.getServiceById(S.ContactSensor, 'lowToner');
@@ -249,6 +279,22 @@ export class PrinterAccessory {
       if (!svc) { continue; }
       if (this.tonerTile) { this.tiles[color] = svc; } else { acc.removeService(svc); }
     }
+  }
+
+  /** A contact sensor that's on or off by a setting, kept or removed from the cache */
+  optionalContact(enabled: boolean, subtype: string, name: string): Service | null {
+    const { Service: S, Characteristic: C } = this.hap;
+    if (!enabled) {
+      this.removeSubtype(S.ContactSensor, subtype);
+      return null;
+    }
+    const svc = this.accessory.getServiceById(S.ContactSensor, subtype)
+      || this.accessory.addService(S.ContactSensor, name, subtype);
+    this.label(svc, name);
+    if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
+    svc.getCharacteristic(C.StatusActive).updateValue(true);
+    this.occupancy.addLinkedService(svc);
+    return svc;
   }
 
   /** Make one tile per reported supply; remove tiles for colors not reported */
@@ -320,6 +366,8 @@ export class PrinterAccessory {
       [this.drum, C.StatusLowBattery],
       [this.problem, C.ContactSensorState],
       [this.lowSensor, C.ContactSensorState],
+      [this.maintenance, C.ContactSensorState],
+      [this.paper, C.ContactSensorState],
       ...Object.values(this.tiles).map((svc): [Service, CharacteristicType] => [svc, C.CurrentRelativeHumidity]),
     ];
     for (const [svc, type] of pairs) {
@@ -408,7 +456,14 @@ export class PrinterAccessory {
     this.occupancy.updateCharacteristic(C.StatusActive, online);
     for (const svc of Object.values(this.tiles)) { svc.updateCharacteristic(C.StatusActive, online); }
     if (this.problem) { this.problem.updateCharacteristic(C.StatusActive, online); }
-    if (this.lowSensor) { this.lowSensor.updateCharacteristic(C.StatusActive, online); }
+    for (const svc of [this.lowSensor, this.maintenance, this.paper]) {
+      if (svc) { svc.updateCharacteristic(C.StatusActive, online); }
+    }
+    if (this.onlineSvc) {
+      this.onlineSvc.updateCharacteristic(C.OccupancyDetected, online
+        ? C.OccupancyDetected.OCCUPANCY_DETECTED
+        : C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
+    }
     if (!online) {
       this.occupancy.updateCharacteristic(C.OccupancyDetected, 0);
       // Push the failure so Home shows "No Response" without waiting for a read
@@ -434,6 +489,12 @@ export class PrinterAccessory {
 
     if (this.problem) {
       this.problem.updateCharacteristic(C.ContactSensorState, d.fault
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
+    }
+    if (this.paper) {
+      const out = d.errors.includes('noPaper') || d.errors.includes('inputTrayEmpty');
+      this.paper.updateCharacteristic(C.ContactSensorState, out
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
         : C.ContactSensorState.CONTACT_DETECTED);
     }
@@ -538,23 +599,32 @@ export class PrinterAccessory {
     this.last.supplies = Object.fromEntries(d.supplies.map((s) => [s.color, { level: s.level, low: isLow(s) }]));
   }
 
-  /** Drum battery (optional) and log warnings for drums and other parts */
+  /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
   applyDrumAndParts(d: PrinterData): void {
+    let due = false;
     const drums = (Object.entries(d.drums) as [Color, { percent?: number; pagesRemaining?: number }][])
       .filter((e): e is [Color, { percent: number; pagesRemaining?: number }] => typeof e[1].percent === 'number');
     if (drums.length) {
       const [color, lowest] = drums.reduce((a, b) => (b[1].percent < a[1].percent ? b : a));
       const level = clamp(lowest.percent);
       if (this.drum) { this.setBattery(this.drum, level, this.lowDrum); }
+      due = level <= this.lowDrum;
       const name = drums.length > 1 ? `${cap(color)} drum` : 'Drum';
       this.warnOnce('drum', level <= this.lowDrum,
         `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
     }
     for (const [key, part] of Object.entries(d.parts) as [PartKey, { percent?: number; pagesRemaining?: number }][]) {
       if (typeof part.percent !== 'number' || !PART_NAMES[key]) { continue; }
+      if (part.percent <= this.lowDrum) { due = true; }
       const left = part.pagesRemaining !== undefined ? `, ${part.pagesRemaining} pages left` : '';
       this.warnOnce(`part-${key}`, part.percent <= this.lowDrum,
         `${PART_NAMES[key]} is near end of life (${part.percent}%${left}).`);
+    }
+    if (this.maintenance) {
+      const C = this.hap.Characteristic;
+      this.maintenance.updateCharacteristic(C.ContactSensorState, due
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
     }
   }
 

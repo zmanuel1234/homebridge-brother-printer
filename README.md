@@ -30,8 +30,14 @@ Each printer gets these sensors:
   notifies it by name instead of "battery is low".
 - **Toner / ink tiles** (optional humidity sensors): the level as a number on its own tile,
   one per color on color printers.
+- **Out of Paper** (optional contact sensor): Opens when a tray is empty.
+- **Maintenance** (optional contact sensor): Opens when the drum, belt, fuser, laser unit,
+  paper feed kit or ink waste box is near end of life.
+- **Online** (optional occupancy sensor): Detected while the printer answers. Home can't
+  run automations on No Response, but it can on this, for example to turn off the
+  printer's smart plug.
 
-While the printer can't be reached, all of them show No Response.
+While the printer can't be reached, all of them except Online show No Response.
 
 ## Requirements
 
@@ -91,6 +97,9 @@ Set it up in the plugin's settings screen, or in `config.json`:
 | `lowTonerThreshold` | `10` | Toner or ink % at or below which Home shows it as low (any color, on color printers). |
 | `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
 | `faultSensor` | `true` | Add the Printer Problem contact sensor. |
+| `paperSensor` | `false` | Add an Out of Paper contact sensor that opens when a tray is empty. The Problem sensor opens for this too; this one gets its own notification. |
+| `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
+| `onlineSensor` | `false` | Add an Online occupancy sensor: Detected while the printer answers, Not Detected once it shows as offline. |
 | `tonerTile` | `false` | Add humidity sensors showing the toner or ink %, one per color on color printers. They also count in Home's climate summary. |
 | `showDrum` | `false` | Add drum life as a second battery. See below. |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, ink waste box) at or below which a warning is logged, and the drum battery shows low. |
@@ -109,7 +118,8 @@ words them its own way:
   Home app.
 - Home shows only one battery per accessory. With `showDrum` on, it may show the drum
   instead of the toner, which is why the drum is off by default. It's still read, and the
-  plugin logs a warning when it nears end of life. Apps like Eve show both.
+  plugin logs a warning when it nears end of life. Apps like Eve show both. To be notified
+  in Home instead, turn on `maintenanceSensor`.
 - The page count is a custom characteristic, visible in Eve, Controller and the Homebridge
   UI, not in Apple Home.
 

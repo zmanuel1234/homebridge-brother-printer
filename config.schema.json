@@ -106,6 +106,24 @@
               "type": "boolean",
               "default": false
             },
+            "maintenanceSensor": {
+              "title": "Maintenance sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds a contact sensor that opens when the drum or another part (belt, fuser, laser unit, paper feed kit, ink waste box) reaches the parts threshold, so Home can notify it."
+            },
+            "paperSensor": {
+              "title": "Out of paper sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds a contact sensor that opens when a tray is out of paper, so Home notifies \"Printer Out of Paper opened\". The Problem sensor opens for this too."
+            },
+            "onlineSensor": {
+              "title": "Online sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds an occupancy sensor that's Detected while the printer answers, for automations such as turning off its smart plug. Unlike the other sensors it doesn't show No Response when the printer is offline."
+            },
             "faultSensor": {
               "title": "Problem sensor",
               "description": "Adds a contact sensor that opens on a jam, open cover, empty tray or other error, so Home can show and notify it.",
@@ -152,7 +170,10 @@
                 "printers[].showDrum",
                 "printers[].lowDrumThreshold",
                 "printers[].tonerTile",
-                "printers[].faultSensor"
+                "printers[].faultSensor",
+                "printers[].paperSensor",
+                "printers[].maintenanceSensor",
+                "printers[].onlineSensor"
               ]
             },
             {
