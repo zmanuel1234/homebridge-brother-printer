@@ -13,7 +13,8 @@
   can run on it (for example, turning off the printer's smart plug).
 - **SNMPv3** (`snmpVersion` `3`), for printers with v1/v2c turned off: user name, MD5 or
   SHA authentication and DES or AES encryption. The settings screen shows these fields once
-  v3 is picked; missing or invalid SNMPv3 settings are reported at startup. The probe
+  v3 is picked, with an optional context name; missing or invalid SNMPv3 settings (including an
+  unknown protocol) are reported at startup. The probe
   command takes `--v3 <user>` and the matching options.
 
 The new sensors are off by default; with your current config nothing changes.

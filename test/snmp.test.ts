@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as snmpLib from 'net-snmp';
-import { query, v3User } from '../src/snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp';
 import type { QueryOptions } from '../src/snmp';
 import { startFakePrinter } from './fake-agent';
 
@@ -107,4 +107,27 @@ test('SNMPv3: settings that can\'t work are refused with a clear reason', () => 
   assert.throws(() => v3User({ user: 'u', privProtocol: 'aes', privPassword: '12345678' }), /needs authentication/);
   assert.throws(() => v3User({ user: 'u', authProtocol: 'sha', authPassword: 'short' }), /at least 8/);
   assert.throws(() => v3User({ user: 'u', authProtocol: 'sha', authPassword: '12345678', privProtocol: 'aes' }), /at least 8/);
+});
+
+test('SNMPv3: authentication without encryption works end to end', async (t) => {
+  const user: snmpLib.User = {
+    name: 'reader', level: snmpLib.SecurityLevel.authNoPriv, authProtocol: snmpLib.AuthProtocols.sha256, authKey: 'auth-pass-2',
+  };
+  const printer = await startFakePrinter(16182, {}, [user]);
+  t.after(() => printer.close());
+  const r = await query({
+    host: '127.0.0.1', port: 16182, version: '3', timeout: 1000, retries: 0,
+    v3: { user: 'reader', authProtocol: 'sha256', authPassword: 'auth-pass-2', privProtocol: 'none' },
+  });
+  assert.equal(r.tonerPercent, 70);
+});
+
+test('SNMPv3: protocol settings accept common spellings and refuse unknown ones', () => {
+  assert.equal(protocolSetting(undefined, AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('SHA-256', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha256');
+  assert.equal(protocolSetting('SHA1', AUTH_PROTOCOLS, 'sha', 'authentication'), 'sha');
+  assert.equal(protocolSetting('AES128', PRIV_PROTOCOLS, 'aes', 'encryption'), 'aes');
+  assert.equal(protocolSetting('None', PRIV_PROTOCOLS, 'aes', 'encryption'), 'none');
+  assert.throws(() => protocolSetting('3des', PRIV_PROTOCOLS, 'aes', 'encryption'), /encryption "3des" isn't supported/);
 });
