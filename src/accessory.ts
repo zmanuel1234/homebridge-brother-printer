@@ -66,7 +66,7 @@ export interface PrinterConfig {
   lowDrumThreshold?: unknown;
   showDrum?: unknown;
   tonerTile?: unknown;
-  /** 'humidity' (default) or 'light': the kind of sensor the toner / ink tiles are */
+  /** 'light' (default) or 'humidity': the kind of sensor the toner / ink tiles are */
   tileType?: unknown;
   /** 'occupancy' (default) or 'contact': how the printer's own tile shows printing */
   printingSensor?: unknown;
@@ -283,7 +283,8 @@ export class PrinterAccessory {
         + 'per accessory, so the drum battery never showed. The drum is in the Maintenance sensor, the log and Test connection.');
     }
     this.tonerTile = config.tonerTile === true;
-    this.tileType = String(config.tileType ?? '').trim().toLowerCase() === 'light' ? 'light' : 'humidity';
+    // Light by default: Home counts humidity tiles as the room's humidity (Eve history needs humidity)
+    this.tileType = String(config.tileType ?? '').trim().toLowerCase() === 'humidity' ? 'humidity' : 'light';
     this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
     this.prefixNames = deps.prefixNames === true;
     this.faultSensor = config.faultSensor !== false;

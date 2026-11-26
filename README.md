@@ -30,9 +30,9 @@ Each printer gets these sensors:
   lowest color, so the alert fires when any color runs low.
 - **Toner Low** (optional contact sensor): Opens when the toner or ink is low, so Home
   notifies it by name instead of "battery is low".
-- **Toner / ink tiles** (optional humidity or light sensors): the level as a number on its
-  own tile, one per color on color printers. Home counts them as the room's humidity (or
-  light level); see below.
+- **Toner / ink tiles** (optional light sensors, or humidity sensors for Eve history): the
+  level as a number on its own tile, one per color on color printers. Home counts them as
+  the room's light level (or humidity); see below.
 - **Out of Paper** (optional contact sensor): Opens when a tray is empty.
 - **Paper trays** (optional contact sensors, one per tray: "Tray 1", "Tray 2"…):
   each opens when that tray is empty. Bypass and manual trays get none.
@@ -174,9 +174,9 @@ In `config.json`:
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
 | `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
-| `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile` as humidity sensors. |
+| `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`, with `tileType` set to `humidity`. |
 | `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's humidity (or light level, with `tileType`). |
-| `tileType` | `humidity` | What the tiles are: `humidity` (% , needed for Eve history) or `light` (the level in lux, which fewer rooms have). |
+| `tileType` | `light` | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity). |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
@@ -189,11 +189,11 @@ words them its own way:
 - The printing sensor reads **Detected** / **Not Detected**, and while a job prints the room
   shows as occupied. With `printingSensor` set to `contact` it reads **Open** / **Closed**
   instead.
-- HomeKit has no plain % sensor, so the toner / ink tiles are humidity sensors (or light
-  sensors, with `tileType`). Home then counts them as the room's humidity or light level:
-  a room with a printer whose toner is at 70% shows "Humidity 70%". Put the printer in a
-  room without a real humidity sensor, or use light sensors, or leave the tiles off (the
-  battery shows the level too).
+- HomeKit has no plain % sensor, so the toner / ink tiles are light sensors, showing the
+  level in lux (70% shows as 70 lux). Home counts them as the room's light level, which
+  few rooms have another sensor for. For Eve history they must be humidity sensors
+  (`tileType`), which Home counts as the room's humidity: a room with a printer whose
+  toner is at 70% then shows "Humidity 70%".
 - The plugin's version shows as the firmware, unless the printer gives its own as a version
   number Home can show (as many Brother and Canon printers do).
 - Low toner or ink is announced as **"battery is low"**. For a clearer message, turn on
@@ -208,7 +208,7 @@ words them its own way:
 
 ## Eve history
 
-With `eveHistory` and `tonerTile` on, the Eve app shows a graph of the toner or ink level
+With `eveHistory` and `tonerTile` on (and `tileType` set to `humidity`), the Eve app shows a graph of the toner or ink level
 over about the last 60 days on the toner / ink tiles: an entry every 10 minutes, and
 whenever the level changes. It's kept in Homebridge's storage folder
 (`homebridge-brother-printer-<id>-history.json`), so it survives restarts and renaming

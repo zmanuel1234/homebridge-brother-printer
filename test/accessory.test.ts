@@ -164,7 +164,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP in auto with levels: updates SNMP\'s tiles but removes none, and stores nothing', () => {
-    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' });
     const two = (b: number, c: number): QueryResult => {
       const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
       return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
@@ -198,10 +198,10 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP in auto: after a restart, SNMP having answered before still counts', () => {
-    const first = setup({ protocol: 'auto', tonerTile: true });
+    const first = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' });
     first.printer.apply({ ...reading(60), serial: 'E1' });
     assert.equal(first.acc.context.snmpAnswered, true);
-    const again = setup({ protocol: 'auto', tonerTile: true }, first.acc);
+    const again = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' }, first.acc);
     again.printer.apply(viaIpp({ ...reading(60), supplies: [], lowestSupply: null, serial: 'e1' }));
     assert.equal(first.acc.context.serial, 'E1', 'not changed by IPP');
     assert.ok(battery(first.acc), 'the battery stays');
@@ -284,7 +284,7 @@ function defineTests(hap: Hap): void {
 
   test('IPP from a real Epson XP-6000: photo black gets its own tile; the maker and model show in Home', () => {
     const epson = toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', 'epson-xp-6000.bin'))).printer);
-    const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true, tileType: 'humidity' });
     printer.apply(viaIpp({ ...epson, snmpVersion: null }));
     const photo = acc.getServiceById(S.HumiditySensor, 'tile-photoBlack');
     assert.equal(photo?.getCharacteristic(C.ConfiguredName).value, 'Photo Black Ink');
@@ -295,7 +295,7 @@ function defineTests(hap: Hap): void {
     assert.equal(info.getCharacteristic(C.Manufacturer).value, 'Epson');
     assert.equal(info.getCharacteristic(C.Model).value, 'XP-6000 Series');
     // Renaming the printer renames the extra tiles too
-    const renamed = setup({ protocol: 'ipp', tonerTile: true, name: 'Studio' }, acc);
+    const renamed = setup({ protocol: 'ipp', tonerTile: true, tileType: 'humidity', name: 'Studio' }, acc);
     assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Photo Black Ink');
   });
 
@@ -310,7 +310,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('supplies that couldn\'t be read this time: online, last levels, drum and sensors kept', async () => {
-    const { acc, printer } = setup({ lowTonerSensor: true, maintenanceSensor: true, tonerTile: true });
+    const { acc, printer } = setup({ lowTonerSensor: true, maintenanceSensor: true, tonerTile: true, tileType: 'humidity' });
     await pollWith(printer, { ...reading(8), drums: { black: { percent: 5 } }, drumPercent: 5 });
     assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 8);
     assert.equal(state(acc), OPEN);
@@ -492,7 +492,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
-    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(viaIpp(reading(50)));
     assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
     printer.apply(noLevels());
@@ -678,7 +678,7 @@ function defineTests(hap: Hap): void {
 
   test('Eve history: off by default, and needs the toner tiles', () => {
     entries = []; started = 0;
-    setup({ tonerTile: true }).printer.apply(reading(50));
+    setup({ tonerTile: true, tileType: 'humidity' }).printer.apply(reading(50));
     assert.equal(started, 0);
     const { printer, lines } = setup({ eveHistory: true });
     printer.apply(reading(50));
@@ -690,7 +690,7 @@ function defineTests(hap: Hap): void {
   test('Eve history: the lowest level, on a change or every 10 minutes', (t) => {
     entries = []; started = 0;
     t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
-    const { printer } = setup({ eveHistory: true, tonerTile: true });
+    const { printer } = setup({ eveHistory: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(reading(70));
     assert.equal(started, 1, 'started once the tiles exist');
     printer.apply(reading(70));
@@ -717,7 +717,7 @@ function defineTests(hap: Hap): void {
     storageDir = mkdtempSync(`${tmpdir()}/bp-history-`);
     t.after(() => { rmSync(storageDir, { recursive: true, force: true }); historyStarter = recordHistory; });
     historyStarter = startHistory;
-    const { acc, printer } = setup({ eveHistory: true, tonerTile: true });
+    const { acc, printer } = setup({ eveHistory: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(reading(55));
     const history = acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52');
     assert.ok(history, 'fakegato added Eve\'s history service');
@@ -825,8 +825,15 @@ function defineTests(hap: Hap): void {
     assert.equal(back.printer.main.UUID, S.OccupancySensor.UUID);
   });
 
+  test('toner tiles: light sensors by default', () => {
+    const { acc, printer } = setup({ tonerTile: true });
+    printer.apply(reading(70));
+    assert.equal(acc.getServiceById(S.LightSensor, 'tonerTile')?.getCharacteristic(C.CurrentAmbientLightLevel).value, 70);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined);
+  });
+
   test('toner tiles as light sensors (tileType light): the level in lux, not in the room\'s humidity', () => {
-    const first = setup({ tonerTile: true });
+    const first = setup({ tonerTile: true, tileType: 'humidity' });
     first.printer.apply(reading(40));
     const { acc, printer, lines } = setup({ tonerTile: true, tileType: 'light', eveHistory: true }, first.acc);
     assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'the humidity tile goes');
@@ -839,7 +846,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('sensor names: what they are; names from before 0.10 move over, names set in Home stay', () => {
-    const first = setup({ lowTonerSensor: true, tonerTile: true });
+    const first = setup({ lowTonerSensor: true, tonerTile: true, tileType: 'humidity' });
     first.printer.apply(reading(50));
     const low = service(first.acc, S.ContactSensor, 'lowToner')!;
     const problem = service(first.acc, S.ContactSensor, 'problem')!;
@@ -847,13 +854,13 @@ function defineTests(hap: Hap): void {
     low.setCharacteristic(C.ConfiguredName, 'Printer Toner Low');
     problem.setCharacteristic(C.ConfiguredName, 'Printer jams');
     first.acc.getServiceById(S.HumiditySensor, 'tonerTile')!.setCharacteristic(C.ConfiguredName, 'Printer Toner');
-    const again = setup({ lowTonerSensor: true, tonerTile: true }, first.acc);
+    const again = setup({ lowTonerSensor: true, tonerTile: true, tileType: 'humidity' }, first.acc);
     again.printer.apply(reading(50));
     assert.equal(low.getCharacteristic(C.ConfiguredName).value, 'Toner Low');
     assert.equal(problem.getCharacteristic(C.ConfiguredName).value, 'Printer jams');
     assert.equal(first.acc.getServiceById(S.HumiditySensor, 'tonerTile')!.getCharacteristic(C.ConfiguredName).value, 'Toner');
     // Color tiles: "Cyan Toner"
-    const color = setup({ tonerTile: true });
+    const color = setup({ tonerTile: true, tileType: 'humidity' });
     color.printer.apply(fromModel('dcp-l3550cdw'));
     assert.equal(color.acc.getServiceById(S.HumiditySensor, 'tile-cyan')!.getCharacteristic(C.ConfiguredName).value, 'Cyan Toner');
   });
@@ -884,11 +891,11 @@ function defineTests(hap: Hap): void {
   });
 
   test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {
-    const first = setup({ tonerTile: true });
+    const first = setup({ tonerTile: true, tileType: 'humidity' });
     first.printer.apply(reading(40));
     const tile = first.acc.getServiceById(S.HumiditySensor, 'tonerTile');
     assert.ok(tile, 'a tile for the black toner');
-    const again = setup({ tonerTile: true }, first.acc);
+    const again = setup({ tonerTile: true, tileType: 'humidity' }, first.acc);
     assert.equal(again.printer.tiles.black, tile, 'the cached tile is reused');
     setup({ tonerTile: false }, first.acc);
     assert.equal(first.acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'removed when turned off');
