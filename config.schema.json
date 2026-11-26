@@ -179,17 +179,17 @@
             },
             "tonerTile": {
               "title": "Show toner / ink % on tiles",
-              "description": "Adds a sensor whose value is the level: one for a mono printer, one per color for a color printer. HomeKit has no plain % sensor, so Home counts them as the room's humidity (or light level): the room and Home's summary then show the toner level as humidity.",
+              "description": "Adds a sensor whose value is the level: one for a mono printer, one per color for a color printer. HomeKit has no plain % sensor, so these are light sensors (the level in lux), or humidity sensors for Eve history, which Home then counts as the room's humidity.",
               "type": "boolean",
               "default": false
             },
             "tileType": {
               "title": "Show the tiles as",
               "type": "string",
-              "default": "humidity",
+              "default": "light",
               "oneOf": [
-                { "title": "Humidity sensors (% — needed for Eve history)", "enum": ["humidity"] },
-                { "title": "Light sensors (the level in lux; fewer rooms have one)", "enum": ["light"] }
+                { "title": "Light sensors (the level in lux; few rooms have another one)", "enum": ["light"] },
+                { "title": "Humidity sensors (% — needed for Eve history; Home counts them as the room's humidity)", "enum": ["humidity"] }
               ],
               "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].tonerTile === true;" }
             },
@@ -231,7 +231,7 @@
               "title": "Eve history of the toner / ink level",
               "type": "boolean",
               "default": false,
-              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too, as humidity sensors). On a color printer each tile shows the lowest color. The page count and drum level also show only in Eve, not in Apple's Home app. The first time, Homebridge takes a few seconds longer to start."
+              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too, and show them as humidity sensors). On a color printer each tile shows the lowest color. The page count and drum level also show only in Eve, not in Apple's Home app. The first time, Homebridge takes a few seconds longer to start."
             },
             "faultSensor": {
               "title": "Problem sensor",

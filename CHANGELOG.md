@@ -20,13 +20,16 @@ tray that runs out of paper.
   several printers they keep the printer's name in front. Names the plugin gave are renamed;
   names you set in the Home app stay. Color tiles are "Cyan Toner" (or Ink) rather than "Cyan".
 
+- **Toner / ink tiles are light sensors by default** (`tileType`), showing the level in lux:
+  as humidity sensors, Home counted them as the room's humidity ("Humidity 70%"). Existing
+  tiles are replaced by light sensors. **Eve history needs humidity tiles**: with
+  `eveHistory`, set `tileType` to `humidity` to keep it.
+
 ### Added
 - `printingSensor`: show printing as a contact sensor (open while printing) instead of an
   occupancy sensor, which makes the room show as occupied while a job prints. Default:
   occupancy, as before. Switching gives the printer a new tile.
-- `tileType`: show the toner / ink tiles as light sensors (the level in lux) instead of
-  humidity sensors, which Home counts as the room's humidity. Default: humidity, as before
-  (Eve history needs it).
+- `tileType`: `light` (the default) or `humidity`, for the toner / ink tiles.
 - The printer's own firmware version in Home, when it gives one Home can show (Brother's
   "Firmware Ver.1.14", Canon's "01.35"); otherwise the plugin's version, as before.
 
