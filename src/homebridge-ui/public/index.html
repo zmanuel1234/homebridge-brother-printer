@@ -2,9 +2,9 @@
   Brother Printer settings: a search for printers and a connection test above the
   usual settings form. Runs inside the Homebridge UI, which provides `homebridge`
   and its own stylesheet (Bootstrap 5 with the UI's themes, light and dark, in its
-  colors). This page uses only the classes those themes style: card, btn-primary,
-  btn-elegant, custom-input / custom-select, list-group, table, primary-text, and
-  the UI's font; nothing here sets a font or a color of its own.
+  colors). This page uses the classes those themes style (card, btn-primary,
+  btn-elegant, custom-input / custom-select, list-group, table) and the UI's font.
+  The few rules below only dim text, draw neutral lines, and fix readability on dark.
 -->
 <style>
   /* Secondary text and table lines: the theme's own text color, dimmed, so they read
@@ -12,6 +12,17 @@
   #bp-tools .bp-muted { color: inherit; opacity: 0.7; }
   #bp-tools .table { --bs-table-bg: transparent; --bs-table-color: inherit; color: inherit; }
   #bp-tools .table th, #bp-tools .table td { border-color: rgba(128, 128, 128, 0.35); }
+  /* The UI greys every table cell (#999), too faint on white; values use the text color */
+  #bp-tools .table td { color: inherit !important; }
+  /* Dark themes: Bootstrap's green and red are too dark on the dark card */
+  body.dark-mode #bp-tools .text-success { color: #75b798 !important; }
+  body.dark-mode #bp-tools .text-danger { color: #ea868f !important; }
+  /* Dark themes set the select's background shorthand, which drops its arrow; put a light one back */
+  body.dark-mode #bp-tools .custom-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23dddddd' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important; background-position: right .75rem center !important;
+    background-size: 16px 12px !important; padding-right: 2.25rem;
+  }
   #bp-tools .list-group-item { border-color: rgba(128, 128, 128, 0.35); }
 </style>
 <div class="card card-body mb-3" id="bp-tools">
@@ -160,7 +171,7 @@
         ['Read over', r.via],
       ];
       out.innerHTML = '<span class="text-success">Connected.</span><table class="table table-sm mb-0 mt-1"><tbody>'
-        + rows.map(([k, v]) => `<tr><th class="fw-normal" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
+        + rows.map(([k, v]) => `<tr><th class="fw-normal bp-muted" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
         + '</tbody></table>';
       if (r.serial && printer.serial !== r.serial) {
         out.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-elegant btn-sm mt-1" id="bp-keep-serial">
