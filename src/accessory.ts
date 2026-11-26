@@ -33,6 +33,8 @@ export interface PrinterContext {
   manufacturer?: string;
   /** The printer has answered SNMP (with protocol auto, IPP then only fills in) */
   snmpAnswered?: boolean;
+  /** The printer's name before a rename in the config, until its sensors have been relabelled */
+  previousName?: string;
   /** One reading a day: pages and levels, for usage and "toner left" estimates */
   usage?: UsageSample[];
   /** When the weekly usage line was last logged (Unix seconds) */
@@ -324,9 +326,12 @@ export class PrinterAccessory {
       const { Service: S, Characteristic: C } = this.hap;
       // The printer's own tile here; its sensors when they're labelled (label() knows
       // the old name). Only names the plugin gave: a name set in the Home app stays.
-      this.previousName = old;
+      // Kept until the sensors are relabelled after a reading, which may be in a later run
+      // when the printer is offline now
+      acc.context.previousName ??= old;
       for (const svc of acc.services) {
-        const own = (svc.UUID === S.OccupancySensor.UUID && !svc.subtype) || (svc.UUID === S.ContactSensor.UUID && svc.subtype === 'printing');
+        const own = (svc.UUID === S.OccupancySensor.UUID && !svc.subtype) || (svc.UUID === S.ContactSensor.UUID && svc.subtype === 'printing')
+          || svc.UUID === S.AccessoryInformation.UUID;
         if (!own) { continue; }
         for (const type of [C.Name, C.ConfiguredName]) {
           if (svc.testCharacteristic(type) && svc.getCharacteristic(type).value === old) { svc.updateCharacteristic(type, this.name); }
@@ -337,6 +342,7 @@ export class PrinterAccessory {
       this.log.info(`[${this.name}] Renamed from "${old}"; it keeps its room, automations and notifications in Home.`);
     }
     acc.context.name = this.name;
+    this.previousName = acc.context.previousName;
   }
 
   buildServices(): void {
@@ -730,6 +736,10 @@ export class PrinterAccessory {
       this.applySupplies(d);
       this.applyDrumAndParts(d);
       if (!this.standIn(d)) { this.recordUsage(d); }
+    }
+    // Every sensor has had today's name since the rename: the old name isn't needed any more
+    if (this.previousName && !d.suppliesUnread && !this.standIn(d) && (!this.paperTraySensors || d.trays)) {
+      this.remember({ previousName: undefined });
     }
     if (d.trays) {
       this.applyTrays(d.trays, this.standIn(d));

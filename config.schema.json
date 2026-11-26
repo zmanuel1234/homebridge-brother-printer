@@ -184,9 +184,8 @@
               "default": false
             },
             "tileType": {
-              "title": "Show the tiles as",
+              "title": "Show the tiles as (unset: light sensors, or humidity with Eve history on)",
               "type": "string",
-              "default": "light",
               "oneOf": [
                 { "title": "Light sensors (the level in lux; few rooms have another one)", "enum": ["light"] },
                 { "title": "Humidity sensors (% — needed for Eve history; Home counts them as the room's humidity)", "enum": ["humidity"] }
