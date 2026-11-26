@@ -19,6 +19,11 @@
 
 The new sensors are off by default; with your current config nothing changes.
 
+### Changed
+- README: how this plugin compares with AirPrint (IPP) plugins such as
+  @homebridge-plugins/homebridge-printer.
+- Issue forms for printer reports (with the probe output) and bugs.
+
 ## 0.5.2 - 2026-11-26
 
 No change to how the plugin works: the compiled plugin is identical to 0.5.1's.
