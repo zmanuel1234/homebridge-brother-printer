@@ -14,9 +14,9 @@ const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [com
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
                              [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
 SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
---auth none needs --priv none too. The passwords can also come from the environment
-variables BROTHER_SNMP_AUTH_PASS and BROTHER_SNMP_PRIV_PASS, which keeps them out of your
-shell history.`;
+--auth none needs --priv none too. Passwords given as options are saved in your shell
+history and visible in the process list; to avoid that, set the environment variables
+BROTHER_SNMP_AUTH_PASS and BROTHER_SNMP_PRIV_PASS with \`read -rs\` and \`export\` instead.`;
 
 function fail(message: string): never {
   console.error(message);

@@ -2,6 +2,8 @@
   "pluginAlias": "BrotherPrinter",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
+  "customUiPath": "./dist/homebridge-ui",
   "headerDisplay": "Shows Brother laser and inkjet printers in HomeKit: printing state, problems, and toner or ink levels. SNMP must be on in the printer's web page (Network > Protocol).",
   "schema": {
     "type": "object",
@@ -27,6 +29,11 @@
               "type": "string",
               "placeholder": "10.0.4.150",
               "description": "Required. Printers without an address are ignored."
+            },
+            "serial": {
+              "title": "Serial number",
+              "type": "string",
+              "description": "Optional; filled in by Search or Test connection above. Keeps this printer in Home (room, automations, notifications) when you rename it or its address changes."
             },
             "community": {
               "title": "SNMP community",
@@ -234,6 +241,7 @@
               "title": "Advanced",
               "expandable": true,
               "items": [
+                "printers[].serial",
                 "printers[].community",
                 {
                   "key": "printers[].port",

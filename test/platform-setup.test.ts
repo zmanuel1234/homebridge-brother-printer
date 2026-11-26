@@ -111,6 +111,187 @@ function defineTests(hap: Hap): void {
     }
   });
 
+  /* ------------------------------------------------------------- renaming */
+
+  const ctx = (a: PlatformAccessory) => a.context as { host?: string; serial?: string; name?: string };
+
+  test('renamed in the config: the same accessory is kept (by address) and its sensors renamed', () => {
+    const { calls, lines, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    const first = start([{ name: 'Office', host: '10.0.0.9' }], [cached]);
+    const problem = first.printers[0].problem!;
+    problem.setCharacteristic(hap!.Characteristic.ConfiguredName, 'Office Problem');
+    const toner = first.printers[0].toner!;
+    toner.setCharacteristic(hap!.Characteristic.ConfiguredName, 'My cartridge'); // renamed in Home
+
+    const again = homebridge();
+    const platform = again.start([{ name: 'Study', host: '10.0.0.9' }], [cached]);
+    assert.deepEqual(again.calls.registered, [], 'no new accessory');
+    assert.deepEqual(again.calls.unregistered, [], 'the old one is not removed');
+    assert.equal(platform.printers[0].accessory, cached);
+    assert.equal(ctx(cached).name, 'Study');
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Study Problem');
+    assert.equal(toner.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'My cartridge', 'a name set in Home is kept');
+    assert.ok(again.lines.some((l) => l.includes('Renamed from "Office"')), again.lines.join('\n'));
+    assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
+  });
+
+  test('renamed and moved to a new address: kept by serial number', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    ctx(cached).serial = 'E12345';
+    const platform = start([{ name: 'Study', host: '10.0.0.20', serial: 'E12345' }], [cached]);
+    assert.deepEqual(calls.registered, []);
+    assert.equal(platform.printers[0].accessory, cached);
+    assert.equal(ctx(cached).host, '10.0.0.20');
+  });
+
+  test('a different printer at an old address (serials differ) gets its own accessory', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    ctx(cached).serial = 'E12345';
+    start([{ name: 'New one', host: '10.0.0.9', serial: 'F99999' }], [cached]);
+    assert.equal(calls.registered.length, 1);
+    assert.deepEqual(calls.unregistered, [cached]);
+  });
+
+  test('name and address point to different printers: the address wins, and a serial number settles it', () => {
+    // Without serials, "Office moved and Study took its address" looks the same as
+    // "Office was renamed Study and a new Office added"; printers keep fixed addresses.
+    const { calls, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.9');
+    const platform = start([{ name: 'Study', host: '10.0.0.9' }, { name: 'Office', host: '10.0.0.10' }], [office]);
+    assert.equal(platform.printers.find((p) => p.name === 'Study')?.accessory, office);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Office']);
+
+    const withSerial = homebridge();
+    const office2 = withSerial.cachedAccessory('Office', '10.0.0.9');
+    ctx(office2).serial = 'E1';
+    const p2 = withSerial.start([{ name: 'Study', host: '10.0.0.9' }, { name: 'Office', host: '10.0.0.10', serial: 'E1' }], [office2]);
+    assert.equal(p2.printers.find((p) => p.name === 'Office')?.accessory, office2);
+  });
+
+  test('two renamed printers don\'t both take the same cached accessory', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    start([{ name: 'A', host: '10.0.0.9' }, { name: 'B', host: '10.0.0.9' }], [cached]);
+    assert.equal(calls.registered.length, 1, 'the second gets a new accessory');
+  });
+
+  test('after a rename, a new printer given the old name gets its own accessory', () => {
+    const first = homebridge();
+    const cached = first.cachedAccessory('Printer', '10.0.0.9');
+    first.start([{ name: 'Office', host: '10.0.0.9' }], [cached]); // renamed "Printer" -> "Office"
+    assert.equal(ctx(cached).name, 'Office');
+
+    const later = homebridge();
+    const platform = later.start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Printer', host: '10.0.0.30' }], [cached]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, cached, 'Office keeps its accessory');
+    assert.equal(later.calls.registered.length, 1);
+    const added = later.calls.registered[0];
+    assert.notEqual(added.UUID, cached.UUID, 'a different UUID, though the name\'s UUID is the old one\'s');
+    assert.equal(added.displayName, 'Printer');
+    assert.deepEqual(later.calls.unregistered, []);
+  });
+
+  test('renamed and a new printer added under the old name at once: the accessory stays at its address', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Printer', '10.0.0.9');
+    const platform = start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Printer', host: '10.0.0.30' }], [cached]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, cached);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Printer']);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('a printer that moved to a new address keeps its accessory by name', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    const platform = start([{ name: 'Office', host: '10.0.0.44' }], [cached]);
+    assert.equal(platform.printers[0].accessory, cached);
+    assert.deepEqual(calls.registered, []);
+  });
+
+  test('a printer that moved keeps its accessory when a different printer (by serial) takes its old address', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    ctx(office).serial = 'S1';
+    const platform = start([{ name: 'Office', host: '10.0.0.20' }, { name: 'Den', host: '10.0.0.10', serial: 'S2' }], [office]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, office);
+    assert.deepEqual(calls.unregistered, []);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Den']);
+  });
+
+  test('a wrong serial number in the settings doesn\'t replace the accessory', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    ctx(office).serial = 'REAL1';
+    const platform = start([{ name: 'Office', host: '10.0.0.10', serial: 'TYPO1' }], [office]);
+    assert.equal(platform.printers[0].accessory, office);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('a printer Home already has that can\'t be set up shows No Response, and stays', async () => {
+    const { calls, lines, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    start([{ name: 'Office', host: '10.0.0.10' }], [office]); // set it up once, so it has sensors
+    const again = homebridge();
+    again.start([{ name: 'Office', host: '10.0.0.10', snmpVersion: '3' }], [office]); // no SNMPv3 user
+    assert.ok(again.lines.some((l) => l.startsWith('error: [Office] Couldn\'t set up this printer: SNMPv3 needs a user name')));
+    assert.deepEqual(again.calls.unregistered, []);
+    const detected = office.getService(hap!.Service.OccupancySensor)!.getCharacteristic(hap!.Characteristic.OccupancyDetected);
+    await assert.rejects(Promise.resolve().then(() => detected.handleGetRequest()));
+    const name = office.getService(hap!.Service.OccupancySensor)!.getCharacteristic(hap!.Characteristic.ConfiguredName);
+    assert.equal(await name.handleGetRequest(), 'Office', 'names stay readable');
+    assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
+  });
+
+  test('two printers that both moved keep their accessories', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Printer', '10.0.0.10');
+    const b = cachedAccessory('Office', '10.0.0.30');
+    const platform = start([{ name: 'Printer', host: '10.0.0.20' }, { name: 'Office', host: '10.0.0.10' }], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Printer')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, b);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('two moved printers keep their accessories whichever is listed first', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Printer', '10.0.0.10');
+    const b = cachedAccessory('Office', '10.0.0.20');
+    const platform = start([{ name: 'Office', host: '10.0.0.30' }, { name: 'Printer', host: '10.0.0.20' }], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Printer')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, b);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {
+    const { start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Upstairs', '10.0.0.1');
+    const b = cachedAccessory('Downstairs', '10.0.0.2');
+    ctx(a).serial = 'SA';
+    ctx(b).serial = 'SB';
+    const platform = start([
+      { name: 'Downstairs', host: '10.0.0.1', serial: 'SA' },
+      { name: 'Upstairs', host: '10.0.0.2', serial: 'SB' },
+    ], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Downstairs')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Upstairs')?.accessory, b);
+  });
+
+  test('a name set in the Home app survives a rename, even if it starts with the old name', () => {
+    const { start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    const first = start([{ name: 'Office', host: '10.0.0.9' }], [cached]);
+    const problem = first.printers[0].problem!;
+    problem.setCharacteristic(hap!.Characteristic.ConfiguredName, 'Office upstairs');
+    homebridge().start([{ name: 'Study', host: '10.0.0.9' }], [cached]);
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Office upstairs');
+  });
+
   test('shutdown stops every printer\'s polling', () => {
     const { api, start } = homebridge();
     const platform = start([{ name: 'A', host: '10.0.0.1' }, { name: 'B', host: '10.0.0.2' }]);

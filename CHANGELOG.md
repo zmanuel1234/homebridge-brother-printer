@@ -16,10 +16,24 @@
   v3 is picked, with an optional context name; missing or invalid SNMPv3 settings (including an
   unknown protocol) are reported at startup. The probe
   command takes `--v3 <user>` and the matching options.
+- **Search for printers** and **Test connection** at the top of the settings screen: find
+  Brother printers on the network (one SNMP broadcast, no extra setup) and add them with
+  their address and serial number, or read a printer with the settings as entered before
+  saving.
+- Optional `serial` setting, filled in by the search.
 
 The new sensors are off by default; with your current config nothing changes.
 
 ### Changed
+- **Renaming a printer keeps it in Home**: its room, automations and notifications stay,
+  and its sensors are renamed to match, except ones renamed in the Home app. It's
+  recognised by its serial number (when set), its name and address, or its address alone
+  (the address wins when name and address point to different printers). Before, a new
+  name meant a new accessory.
+- A warning in the log when the printer at an address has a different serial number than
+  before, or than the one in the settings.
+- A printer that can't be set up (for example, invalid SNMPv3 settings) shows No Response
+  in Home instead of its last values.
 - README: how this plugin compares with AirPrint (IPP) plugins such as
   @homebridge-plugins/homebridge-printer.
 - Issue forms for printer reports (with the probe output) and bugs.

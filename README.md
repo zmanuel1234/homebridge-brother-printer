@@ -53,6 +53,7 @@ printer, the difference is in what each can read and show:
 | Page count | Yes (in Eve and Controller, not Apple Home) | No |
 | Out of paper, jam, cover open | A Problem sensor, an optional Out of Paper sensor, and the exact problem in the log | One general fault |
 | Printer turned off or unplugged | Online sensor, and No Response on the rest | Online switch |
+| Find printers from the settings screen | Yes, with a connection test | Yes |
 | Works with SNMP turned off | No (SNMP v1, v2c or v3 must be on) | Yes |
 
 Both read the printer locally, with no cloud account. Use an AirPrint plugin for other
@@ -93,7 +94,16 @@ Running it as a child bridge is recommended.
 
 ## Configuration
 
-Set it up in the plugin's settings screen, or in `config.json`:
+Set it up in the plugin's settings screen, or in `config.json`.
+
+At the top of the settings screen, **Search for printers** finds Brother printers on your
+network that have SNMP on, and **Add** fills in a printer's name, address and serial
+number. **Test connection** reads a printer with the settings as entered, before you
+save, and shows its model, status and levels. The search sends one SNMP broadcast on the
+Homebridge machine's networks, so it can't find printers on another network or ones with
+only SNMPv3 on; enter those by hand.
+
+In `config.json`:
 
 ```json
 {
@@ -109,7 +119,8 @@ Set it up in the plugin's settings screen, or in `config.json`:
 
 | Option | Default | Description |
 |---|---|---|
-| `name` | `Printer` | Accessory name. Must be unique per printer. Changing it later creates a new accessory: its room, automations and notification settings in Home start over. |
+| `name` | `Printer` | Accessory name. Must be unique per printer. You can change it later: the printer keeps its room, automations and notifications in Home, and its sensors are renamed to match (except ones you renamed in the Home app). |
+| `serial` | | Printer serial number, filled in by the settings screen. Optional. With it, a printer is kept in Home even when its name and address change at the same time; without it, it's recognised by name or address (by address when the two disagree, since printers keep fixed addresses). |
 | `host` | | Printer IP address or hostname. Printers without one are ignored. |
 | `community` | `public` | SNMP community string. |
 | `port` | `161` | SNMP port. |
@@ -186,7 +197,8 @@ SNMPv3 fields once you pick v3.
 
 The plugin only reads, so a read-only SNMPv3 user is enough. With missing or invalid
 SNMPv3 settings (no user, a password under 8 characters, an unknown protocol, encryption
-without authentication), the printer isn't set up and the log says why.
+without authentication), the printer isn't set up: it shows No Response in Home and the log
+says why.
 
 ## Checking what your printer reports
 
@@ -198,12 +210,17 @@ npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150
 
 With SNMPv3, add the user and passwords. SHA and AES are the defaults; `--priv none`
 turns encryption off, and `--auth none` needs `--priv none` too. The passwords can also
-come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_PRIV_PASS`,
-which keeps them out of your shell history:
+come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_PRIV_PASS`:
 
 ```bash
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user> --auth-pass <password> --priv-pass <password>
+read -rs BROTHER_SNMP_AUTH_PASS && export BROTHER_SNMP_AUTH_PASS   # type it, then Enter
+read -rs BROTHER_SNMP_PRIV_PASS && export BROTHER_SNMP_PRIV_PASS
+npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
+unset BROTHER_SNMP_AUTH_PASS BROTHER_SNMP_PRIV_PASS
 ```
+
+Passwords given with `--auth-pass` and `--priv-pass` are saved in your shell history and
+visible to other users in the process list; `read -s` keeps them out of both.
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
 match, or values are `null`, please open a

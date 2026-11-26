@@ -1,0 +1,180 @@
+<!--
+  Brother Printer settings: a search for printers and a connection test above the
+  usual settings form. Runs inside the Homebridge UI, which provides `homebridge`
+  and Bootstrap's styles.
+-->
+<div class="card card-body mb-3" id="bp-tools">
+  <h5 class="card-title mb-2">Find and test printers</h5>
+  <p class="small text-muted mb-2">
+    Searches this network for Brother printers with SNMP turned on, and fills in a new printer's address and serial
+    number. The serial number lets the plugin keep a printer in Home when you rename it or its address changes.
+  </p>
+  <div class="d-flex flex-wrap align-items-end mb-2" style="gap: .5rem">
+    <div>
+      <label class="small mb-0" for="bp-community">SNMP community</label>
+      <input class="form-control form-control-sm" id="bp-community" value="public" style="width: 10rem" autocomplete="off">
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="bp-search">Search for printers</button>
+  </div>
+  <div id="bp-found"></div>
+
+  <hr class="my-2">
+  <div class="d-flex flex-wrap align-items-end" style="gap: .5rem">
+    <div>
+      <label class="small mb-0" for="bp-which">Test the settings below for</label>
+      <select class="form-control form-control-sm" id="bp-which" style="min-width: 12rem"></select>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" id="bp-test">Test connection</button>
+  </div>
+  <div id="bp-result" class="small mt-2"></div>
+</div>
+
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const errorText = (err) => (err && (err.message || (err.error && err.error.message))) || String(err);
+
+  // The platform block, created if this is a new install
+  async function platformConfig() {
+    const blocks = await homebridge.getPluginConfig();
+    if (!blocks.length) { blocks.push({ platform: 'BrotherPrinter', name: 'Brother Printer', printers: [] }); }
+    if (!Array.isArray(blocks[0].printers)) { blocks[0].printers = []; }
+    return blocks;
+  }
+
+  async function refreshPrinterList() {
+    const blocks = await platformConfig();
+    const select = $('bp-which');
+    const previous = select.value;
+    select.innerHTML = blocks[0].printers
+      .map((p, i) => `<option value="${i}">${esc(p.name || 'Printer')}${p.host ? ` (${esc(p.host)})` : ' (no address yet)'}</option>`)
+      .join('') || '<option value="">No printers yet</option>';
+    if ([...select.options].some((o) => o.value === previous)) { select.value = previous; }
+  }
+
+  homebridge.showSchemaForm();
+  // Changes in the form below (a new printer, a new address) update the list right away
+  homebridge.addEventListener('configChanged', () => { refreshPrinterList().catch(() => {}); });
+  await refreshPrinterList();
+
+  /* ---------------------------------------------------------------- search */
+
+  let found = [];
+
+  $('bp-search').addEventListener('click', async () => {
+    const out = $('bp-found');
+    out.innerHTML = '<span class="small text-muted">Searching (a few seconds)…</span>';
+    $('bp-search').disabled = true;
+    try {
+      found = await homebridge.request('/discover', { community: $('bp-community').value.trim() || 'public' });
+      const configured = (await platformConfig())[0].printers;
+      if (!found.length) {
+        out.innerHTML = '<p class="small mb-0">No Brother printers answered. Check that SNMP is on in the printer\'s web page '
+          + '(Network &gt; Protocol) and the community above, or enter the address in the form below. '
+          + 'The search can\'t find printers that only have SNMPv3 on, or that are on another network.</p>';
+        return;
+      }
+      out.innerHTML = '<ul class="list-group list-group-flush mb-0">' + found.map((p, i) => {
+        const have = configured.find((c) => (p.serial && String(c.serial || '').trim() === p.serial)
+          || String(c.host || '').trim() === p.host);
+        const action = have
+          ? `<span class="small text-muted">Already added as “${esc(have.name || 'Printer')}”</span>`
+          : `<button type="button" class="btn btn-outline-primary btn-sm" data-add="${i}">Add</button>`;
+        return `<li class="list-group-item d-flex justify-content-between align-items-center px-0">
+          <span><strong>${esc(p.model)}</strong> · ${esc(p.host)}<br>
+          <span class="small text-muted">${esc(p.levels)}${p.serial ? ` · serial ${esc(p.serial)}` : ''}</span></span>
+          ${action}</li>`;
+      }).join('') + '</ul>';
+    } catch (err) {
+      out.innerHTML = `<p class="small text-danger mb-0">${esc(errorText(err))}</p>`;
+    } finally {
+      $('bp-search').disabled = false;
+    }
+  });
+
+  $('bp-found').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-add]');
+    if (!button || button.disabled) { return; }
+    button.disabled = true; // a double click adds it once
+    try {
+      await addPrinter(button);
+    } catch (err) {
+      button.disabled = false;
+      homebridge.toast.error(errorText(err), 'Brother Printer');
+    }
+  });
+
+  async function addPrinter(button) {
+    const p = found[Number(button.dataset.add)];
+    const blocks = await platformConfig();
+    const printers = blocks[0].printers;
+    const names = new Set(printers.map((c) => c.name || 'Printer'));
+    let name = p.model;
+    for (let n = 2; names.has(name); n++) { name = `${p.model} ${n}`; }
+    const entry = { name, host: p.host };
+    if (p.serial) { entry.serial = p.serial; }
+    const community = $('bp-community').value.trim();
+    if (community && community !== 'public') { entry.community = community; }
+    // Replace the untouched blank row a new install starts with, rather than adding beside it
+    const blank = printers.findIndex((c) => !c.host && (!c.name || c.name === 'Printer'));
+    if (blank >= 0) { printers[blank] = { ...printers[blank], ...entry }; } else { printers.push(entry); }
+    await homebridge.updatePluginConfig(blocks);
+    // Show the new printer in the form
+    homebridge.hideSchemaForm();
+    homebridge.showSchemaForm();
+    button.outerHTML = `<span class="small text-muted">Added as “${esc(name)}”. Save to keep it.</span>`;
+    homebridge.toast.success(`Added ${name}. Click Save to keep it.`, 'Brother Printer');
+    await refreshPrinterList();
+  }
+
+  /* ------------------------------------------------------------------ test */
+
+  $('bp-test').addEventListener('click', async () => {
+    const out = $('bp-result');
+    const index = $('bp-which').value;
+    if (index === '') { out.innerHTML = '<span class="text-muted">Add a printer first.</span>'; return; }
+    const printer = (await platformConfig())[0].printers[Number(index)];
+    out.innerHTML = '<span class="text-muted">Reading the printer…</span>';
+    $('bp-test').disabled = true;
+    try {
+      const r = await homebridge.request('/test', printer);
+      const rows = [
+        ['Model', r.model || 'unknown'],
+        ['Status', r.status],
+        ['Levels', r.levels],
+        ...(r.drum ? [['Drum', r.drum]] : []),
+        ['Pages printed', r.pages ?? 'unknown'],
+        ['Serial number', r.serial || 'unknown'],
+        ['SNMP', `v${r.snmpVersion}`],
+      ];
+      out.innerHTML = '<span class="text-success">Connected.</span><table class="table table-sm mb-0 mt-1"><tbody>'
+        + rows.map(([k, v]) => `<tr><th class="font-weight-normal text-muted" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
+        + '</tbody></table>';
+      if (r.serial && printer.serial !== r.serial) {
+        out.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="bp-keep-serial">
+          Save serial number ${esc(r.serial)} with this printer</button>`);
+        $('bp-keep-serial').addEventListener('click', async () => {
+          try {
+            // The printer that was tested, even if rows were added or removed since
+            const blocks = await platformConfig();
+            const target = blocks[0].printers.find((c) => c.host === printer.host && (c.name || 'Printer') === (printer.name || 'Printer'));
+            if (!target) { throw new Error('That printer is no longer in the list; test it again.'); }
+            target.serial = r.serial;
+            await homebridge.updatePluginConfig(blocks);
+            homebridge.hideSchemaForm();
+            homebridge.showSchemaForm();
+            $('bp-keep-serial').outerHTML = '<span class="text-muted">Serial number added. Save to keep it.</span>';
+          } catch (err) {
+            homebridge.toast.error(errorText(err), 'Brother Printer');
+          }
+        });
+      }
+    } catch (err) {
+      out.innerHTML = `<span class="text-danger">${esc(errorText(err))}</span>`;
+    } finally {
+      $('bp-test').disabled = false;
+    }
+  });
+})();
+</script>

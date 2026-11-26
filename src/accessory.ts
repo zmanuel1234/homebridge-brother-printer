@@ -19,12 +19,16 @@ export interface PrinterContext {
   kind?: Kind;
   /** The printer reported no supply levels last time */
   noLevels?: boolean;
+  /** The name in the config when the accessory was last set up */
+  name?: string;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
 export interface PrinterConfig {
   name: string;
   host: string;
+  /** Printer serial number, filled in by the settings screen's search */
+  serial?: unknown;
   community?: string;
   port?: unknown;
   snmpVersion?: unknown;
@@ -104,6 +108,10 @@ const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
   serviceRequested: 'service requested', inputTrayMissing: 'tray missing', outputTrayMissing: 'output tray missing',
   markerSupplyMissing: 'cartridge missing', outputFull: 'output tray full',
 };
+/** What the plugin adds after the printer's name when it names a sensor */
+const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
+  ' Out of Paper', ' Online', ' Black', ' Cyan', ' Magenta', ' Yellow']);
+
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
   paperFeed1: 'Paper feed kit (tray 1)', paperFeedMP: 'Paper feed kit (MP tray)', inkWasteBox: 'Ink waste box',
@@ -115,6 +123,36 @@ interface LastSeen {
   summary?: boolean;
   supplies?: Partial<Record<Color, { level: number; low: boolean }>>;
   warned?: Record<string, boolean>;
+}
+
+/**
+ * How to reach a printer, from its config entry. Throws on SNMPv3 settings that
+ * can't work, so they're reported at startup rather than as "can't reach".
+ * The settings screen's connection test uses this too.
+ */
+export function queryOptions(config: PrinterConfig): QueryOptions & { host: string } {
+  const snmpVersion = String(config.snmpVersion);
+  const options: QueryOptions & { host: string } = {
+    host: String(config.host).trim(),
+    port: setting(config.port, 161, 1, 65535),
+    community: config.community || 'public',
+    timeout: 5000,
+    retries: 1,
+    version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
+    state: {},
+  };
+  if (options.version === '3') {
+    options.v3 = {
+      user: String(config.v3User ?? '').trim(),
+      authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
+      authPassword: String(config.v3AuthPassword ?? ''),
+      privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
+      privPassword: String(config.v3PrivPassword ?? ''),
+      context: String(config.v3Context ?? '').trim(),
+    };
+    v3User(options.v3);
+  }
+  return options;
 }
 
 export class PrinterAccessory {
@@ -136,6 +174,8 @@ export class PrinterAccessory {
   readonly maintenanceSensor: boolean;
   readonly paperSensor: boolean;
   readonly onlineSensor: boolean;
+  /** The serial number from the settings, if any */
+  readonly configSerial: string;
   readonly offlineAfter: number;
   readonly debug: boolean;
 
@@ -169,27 +209,7 @@ export class PrinterAccessory {
     this.accessory = accessory;
     this.name = config.name;
 
-    const snmpVersion = String(config.snmpVersion);
-    this.options = {
-      host: config.host,
-      port: setting(config.port, 161, 1, 65535),
-      community: config.community || 'public',
-      timeout: 5000,
-      retries: 1,
-      version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
-      state: {},
-    };
-    if (this.options.version === '3') {
-      this.options.v3 = {
-        user: String(config.v3User ?? '').trim(),
-        authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
-        authPassword: String(config.v3AuthPassword ?? ''),
-        privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
-        privPassword: String(config.v3PrivPassword ?? ''),
-        context: String(config.v3Context ?? '').trim(),
-      };
-      v3User(this.options.v3); // a setting that can't work is reported at startup, not as "can't reach"
-    }
+    this.options = queryOptions(config);
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
@@ -200,15 +220,42 @@ export class PrinterAccessory {
     this.maintenanceSensor = config.maintenanceSensor === true;
     this.paperSensor = config.paperSensor === true;
     this.onlineSensor = config.onlineSensor === true;
+    this.configSerial = String(config.serial ?? '').trim();
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
+    this.renameFrom(accessory.context.name ?? accessory.displayName);
     this.buildServices();
     this.guardReads();
     void this.poll();
   }
 
   /* ------------------------------------------------------------ services */
+
+  /**
+   * After the printer is renamed in the config, rename its sensors in Home to
+   * match, except ones the user renamed in the Home app.
+   */
+  renameFrom(old: string | undefined): void {
+    const acc = this.accessory;
+    if (old && old !== this.name) {
+      const C = this.hap.Characteristic;
+      for (const svc of acc.services) {
+        for (const type of [C.Name, C.ConfiguredName]) {
+          if (!svc.testCharacteristic(type)) { continue; }
+          const value = svc.getCharacteristic(type).value;
+          // Only names the plugin gave; a name set in the Home app stays
+          if (typeof value === 'string' && value.startsWith(old) && OWN_SUFFIXES.has(value.slice(old.length))) {
+            svc.updateCharacteristic(type, this.name + value.slice(old.length));
+          }
+        }
+      }
+      const named = acc as unknown as { updateDisplayName?: (name: string) => void };
+      if (typeof named.updateDisplayName === 'function') { named.updateDisplayName(this.name); }
+      this.log.info(`[${this.name}] Renamed from "${old}"; it keeps its room, automations and notifications in Home.`);
+    }
+    acc.context.name = this.name;
+  }
 
   buildServices(): void {
     const { Service: S, Characteristic: C } = this.hap;
@@ -689,7 +736,19 @@ export class PrinterAccessory {
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
-    if (d.serial && d.serial !== ctx.serial) { ctx.serial = d.serial; changed = true; }
+    if (this.configSerial && d.serial && d.serial !== this.configSerial) {
+      this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
+        + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
+    }
+    if (d.serial && d.serial !== ctx.serial) {
+      if (ctx.serial) {
+        this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `
+          + 'as before: it looks like a different printer, now shown with this one\'s room and automations in Home. '
+          + 'If that\'s not what you want, remove it and add it again (or use Search in the settings).');
+      }
+      ctx.serial = d.serial;
+      changed = true;
+    }
     if (!changed) { return; }
     this.accessory.getService(S.AccessoryInformation)!
       .updateCharacteristic(C.Model, ctx.model || 'Brother printer')

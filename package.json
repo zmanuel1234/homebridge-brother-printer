@@ -35,7 +35,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/homebridge-ui/public','dist/homebridge-ui/public',{recursive:true})\"",
     "check": "tsc -p .",
     "lint": "oxlint && npm run check",
     "test": "node --import tsx --test test/*.test.ts",
@@ -68,6 +68,7 @@
     "homebridge": "^1.6.0 || ^2.0.0"
   },
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.3.0",
     "net-snmp": "^3.29.2"
   },
   "devDependencies": {
