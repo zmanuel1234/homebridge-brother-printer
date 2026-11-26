@@ -8,7 +8,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { trayName, traysFromIpp, traysFromTable } from '../src/trays';
-import { INPUT_TABLE, query } from '../src/snmp';
+import { INPUT_TABLE, query, readTrays } from '../src/snmp';
+import type * as snmpLib from 'net-snmp';
 import { parseResponse, toPrinterData } from '../src/ipp';
 import { readFileSync } from 'node:fs';
 import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from '../src/usage';
@@ -93,6 +94,24 @@ test('trays: from IPP printer-input-tray', () => {
   ]);
   assert.equal(show(trays), 'Manual* unknown, Tray 1 empty 0');
   assert.deepEqual(trays.map((t) => t.key), ['manual', 'tray-1']);
+});
+
+test('trays: a column the printer doesn\'t answer (type, status) loses only itself', async () => {
+  // A session whose walks of the type (2) and status (11) columns fail, as on a printer without them
+  const session = {
+    subtree(oid: string, _max: number, feed: (vbs: snmpLib.Varbind[]) => boolean, done: (err?: Error) => void) {
+      const col = Number(oid.split('.').pop());
+      if (col === 2 || col === 11) { done(new Error('Request failed: GenErr')); return; }
+      const value = col === 9 ? 250 : col === 10 ? -3 : Buffer.from('TRAY1');
+      feed([{ oid: `${oid}.1.1`, type: 2, value } as snmpLib.Varbind]);
+      done();
+    },
+  } as unknown as snmpLib.Session;
+  const trays = traysFromTable((await readTrays(session))!, INPUT_TABLE);
+  assert.equal(show(trays), 'Tray 1 ok');
+  // Nothing answers: undefined, never an error
+  const none = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(new Error('timeout')) } as unknown as snmpLib.Session;
+  assert.equal(await readTrays(none), undefined);
 });
 
 test('trays: read over SNMP on request, or when the printer reports paper low or out', async (t) => {

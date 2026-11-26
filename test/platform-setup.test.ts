@@ -130,7 +130,8 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(again.calls.unregistered, [], 'the old one is not removed');
     assert.equal(platform.printers[0].accessory, cached);
     assert.equal(ctx(cached).name, 'Study');
-    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Study Problem');
+    // One printer: sensors are named for what they are, so a rename leaves them as they are
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Problem');
     assert.equal(toner.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'My cartridge', 'a name set in Home is kept');
     assert.ok(again.lines.some((l) => l.includes('Renamed from "Office"')), again.lines.join('\n'));
     assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);

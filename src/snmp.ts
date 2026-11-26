@@ -138,6 +138,8 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
+  /** The printer's firmware version as it gives it ("1.14", "SWP1FN1514BR"), when it does */
+  firmware?: string | null;
 }
 
 export interface QueryResult extends PrinterData {
@@ -265,17 +267,21 @@ export async function readSupplies(session: snmp.Session, charset: number | null
   }
 }
 
-/** The paper trays' rows (only the columns used); undefined when they can't be read (never fails the poll) */
-async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
-  try {
-    const rows: { oid: string; value: unknown }[] = [];
-    for (const col of TRAY_COLUMNS) {
+/**
+ * The paper trays' rows (only the columns used), each column on its own: a printer that
+ * doesn't answer one (some don't have the type or status) still gives the others.
+ * Undefined when none can be read (never fails the poll).
+ */
+export async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
+  const rows: { oid: string; value: unknown }[] = [];
+  let read = false;
+  for (const col of TRAY_COLUMNS) {
+    try {
       rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32)).map((vb) => ({ oid: vb.oid, value: vb.value })));
-    }
-    return rows;
-  } catch {
-    return undefined;
+      read = true;
+    } catch { /* this column only */ }
   }
+  return read ? rows : undefined;
 }
 
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
@@ -445,5 +451,7 @@ export function parse(raw: RawReadings): PrinterData {
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
     ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
+    // "Brother NC-8300h, Firmware Ver.1.14  (14.11.06),MID …"
+    firmware: /firmware\s+ver(?:sion)?\.?\s*([\w.-]+)/i.exec(sysDescr)?.[1] ?? null,
   };
 }

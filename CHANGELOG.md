@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Breaking
+- **The Online sensor is now an Offline contact sensor** (`onlineSensor`): it opens when the
+  printer stops answering. The occupancy sensor it was ("Online: Triggered") made the room
+  show as occupied all the time. It's a new sensor in Home: automations and notifications on
+  the old Online sensor need setting up again.
+- **`showDrum` is gone**: Home shows only one battery per accessory, so the drum battery never
+  showed. An existing drum battery is removed; the drum stays in the log, Test connection and
+  the Maintenance sensor. The setting is ignored, with a note in the log.
+- **Sensor names are what they are** ("Toner Low", "Problem", "Tray 1", "Cyan Toner") instead
+  of starting with the printer's name, which Home cut off ("Brother Printer Tone…"). With
+  several printers they keep the printer's name in front. Names the plugin gave are renamed;
+  names you set in the Home app stay. Color tiles are "Cyan Toner" (or Ink) rather than "Cyan".
+
+### Added
+- `printingSensor`: show printing as a contact sensor (open while printing) instead of an
+  occupancy sensor, which makes the room show as occupied while a job prints. Default:
+  occupancy, as before. Switching gives the printer a new tile.
+- `tileType`: show the toner / ink tiles as light sensors (the level in lux) instead of
+  humidity sensors, which Home counts as the room's humidity. Default: humidity, as before
+  (Eve history needs it).
+- The printer's own firmware version in Home, when it gives one Home can show (Brother's
+  "Firmware Ver.1.14", Canon's "01.35"); otherwise the plugin's version, as before.
+
+### Fixed
+- **Paper trays over SNMP** didn't show on printers that don't answer some of the tray
+  table's columns (such as Brother's MFC-L2750DW): each column is now read on its own.
+
+### Changed
+- Settings and README: what IPP (AirPrint) reads and doesn't; that the toner tiles count as
+  the room's humidity; that the page count and drum show only in Eve and Test connection.
+
+## Unreleased
+
 ### Added
 - **Pages printed and time left**: once a day the plugin notes the page count and levels.
   Test connection in the settings shows pages printed in the last 7 and 30 days and how
