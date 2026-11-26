@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 - 2026-11-26
+
+No change to how the plugin works.
+
+### Changed
+- Development only: CI runs the tests on Node 22, 24 and 26 in a single check.
+
 ## 0.5.0 - 2026-11-22
 
 No new settings; with your current config, 0.5.0 behaves like 0.4.0. Check your Node.js version
