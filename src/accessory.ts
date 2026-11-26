@@ -25,6 +25,8 @@ export interface PrinterContext {
   noLevels?: boolean;
   /** The name in the config when the accessory was last set up */
   name?: string;
+  /** The printer has answered SNMP (with protocol auto, IPP then only fills in) */
+  snmpAnswered?: boolean;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -256,6 +258,9 @@ export class PrinterAccessory {
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
+    // Kept across restarts, so a first poll that falls back to IPP after a
+    // restart doesn't count in full against what SNMP set up
+    this.snmpAnswered = accessory.context.snmpAnswered === true;
     this.renameFrom(accessory.context.name ?? accessory.displayName);
     this.buildServices();
     this.guardReads();
@@ -580,7 +585,10 @@ export class PrinterAccessory {
     const log = (m: string): void => (this.debug ? this.log.info(m) : this.log.debug(m));
 
     log(`[${this.name}] ${JSON.stringify(d)}`);
-    if (d.via !== 'ipp') { this.snmpAnswered = true; }
+    if (d.via !== 'ipp' && !this.snmpAnswered) {
+      this.snmpAnswered = true;
+      this.remember({ snmpAnswered: true });
+    }
     this.setOnline(true);
     this.updateInfo(d);
 
@@ -645,15 +653,26 @@ export class PrinterAccessory {
     const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
 
     if (this.standIn(d)) {
-      // IPP standing in for SNMP: update the sensors SNMP set up with any levels
-      // IPP has, and raise a low flag, but add, remove or clear nothing
-      const low = d.supplies.some((s) => s.level <= this.lowToner);
-      if (this.toner && d.lowestSupply) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(d.lowestSupply.level)); }
+      // IPP standing in for SNMP: its levels update the sensors SNMP set up,
+      // combined with SNMP's last levels for colors IPP doesn't report. It adds,
+      // removes and stores nothing, and clears a low warning only when it
+      // reports every color SNMP did.
+      const known = this.last.supplies || {};
+      const levels: Partial<Record<Color, number>> = Object.fromEntries(
+        Object.entries(known).map(([color, v]) => [color, v.level]));
+      for (const s of d.supplies) { levels[s.color] = s.level; }
+      const values = Object.values(levels) as number[];
+      const covers = Object.keys(known).length > 0 && Object.keys(known).every((c) => d.supplies.some((s) => s.color === c));
+      const low = flagged || values.some((v) => v <= this.lowToner);
+      if (this.toner && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
       for (const s of d.supplies) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
-      if (flagged || low) {
-        this.toner?.updateCharacteristic(C.StatusLowBattery, C.StatusLowBattery.BATTERY_LEVEL_LOW);
-        this.lowSensor?.updateCharacteristic(C.ContactSensorState, C.ContactSensorState.CONTACT_NOT_DETECTED);
+      if (low || covers) {
+        this.toner?.updateCharacteristic(C.StatusLowBattery, low
+          ? C.StatusLowBattery.BATTERY_LEVEL_LOW : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
+        this.lowSensor?.updateCharacteristic(C.ContactSensorState, low
+          ? C.ContactSensorState.CONTACT_NOT_DETECTED : C.ContactSensorState.CONTACT_DETECTED);
       }
+      if (d.supplies.length && values.length) { this.logHistory(clamp(Math.min(...values))); }
       return;
     }
     if (!d.supplies.length || !d.lowestSupply) {
@@ -760,16 +779,19 @@ export class PrinterAccessory {
     if (drums.length) {
       const [color, lowest] = drums.reduce((a, b) => (b[1].percent < a[1].percent ? b : a));
       const level = clamp(lowest.percent);
-      if (this.drum) { this.setBattery(this.drum, level, this.lowDrum); }
       due = level <= this.lowDrum;
+      // A stand-in reading only lowers the drum or marks it low, never clears it
+      if (this.drum && (!standIn || due)) { this.setBattery(this.drum, level, this.lowDrum); }
       const name = drums.length > 1 ? `${cap(color)} drum` : 'Drum';
-      this.warnOnce('drum', level <= this.lowDrum,
-        `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
+      if (!standIn || due) {
+        this.warnOnce('drum', due, `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
+      }
     }
     for (const [key, part] of Object.entries(d.parts) as [PartKey, { percent?: number; pagesRemaining?: number }][]) {
       if (typeof part.percent !== 'number' || !PART_NAMES[key]) { continue; }
       if (part.percent <= this.lowDrum) { due = true; }
       const left = part.pagesRemaining !== undefined ? `, ${part.pagesRemaining} pages left` : '';
+      if (standIn && part.percent > this.lowDrum) { continue; }
       this.warnOnce(`part-${key}`, part.percent <= this.lowDrum,
         `${PART_NAMES[key]} is near end of life (${part.percent}%${left}).`);
     }

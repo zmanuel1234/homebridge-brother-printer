@@ -176,6 +176,45 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(acc.context, remembered, 'nothing stored from the stand-in reading');
   });
 
+  test('IPP in auto: the battery is the lowest of IPP\'s and SNMP\'s last levels; a full reading can clear low', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    const sup = (b: number, c: number): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    printer.apply(sup(60, 50));
+    printer.apply(viaIpp({ ...reading(55), drums: {}, parts: {} })); // black only
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 50, 'cyan is still at 50');
+    printer.apply(viaIpp({ ...reading(5), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN);
+    printer.apply(viaIpp({ ...reading(100), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'black only: not enough to clear');
+    printer.apply(viaIpp({ ...sup(100, 50), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED, 'every color SNMP had, none low: cleared');
+    assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
+  });
+
+  test('IPP in auto: after a restart, SNMP having answered before still counts', () => {
+    const first = setup({ protocol: 'auto', tonerTile: true });
+    first.printer.apply({ ...reading(60), serial: 'E1' });
+    assert.equal(first.acc.context.snmpAnswered, true);
+    const again = setup({ protocol: 'auto', tonerTile: true }, first.acc);
+    again.printer.apply(viaIpp({ ...reading(60), supplies: [], lowestSupply: null, serial: 'e1' }));
+    assert.equal(first.acc.context.serial, 'E1', 'not changed by IPP');
+    assert.ok(battery(first.acc), 'the battery stays');
+  });
+
+  test('IPP in auto: a drum reading only lowers the drum, and warns once', () => {
+    const { acc, printer, lines } = setup({ protocol: 'auto', showDrum: true });
+    printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
+    const drum = acc.getServiceById(S.Battery, 'drum');
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 40 } }, parts: {} }));
+    assert.equal(drum?.getCharacteristic(C.BatteryLevel).value, 5);
+    assert.equal(drum?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+    printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
+    assert.equal(lines.filter((l) => l.includes('Drum is near end of life')).length, 1);
+  });
+
   test('IPP in auto: an ink tank printer without levels over SNMP doesn\'t get a battery from IPP', () => {
     const { acc, printer } = setup({ protocol: 'auto' });
     printer.apply({ ...reading(50), supplies: [], lowestSupply: null });

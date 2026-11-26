@@ -221,9 +221,12 @@ life, and the page count. Set `protocol` to:
 - `ipp` for a printer with SNMP turned off, or a model that reports no levels over SNMP:
   IPP only (the SNMP settings, including SNMPv3, aren't used).
 - `auto` to read over SNMP but carry on over IPP when SNMP doesn't answer. Until SNMP has
-  answered once since Homebridge started, IPP readings count in full. After that IPP only
-  fills in: it updates the sensors SNMP set up and can raise low or maintenance warnings,
-  but doesn't add, remove or clear anything, so a missed SNMP answer doesn't change Home.
+  answered once, IPP readings count in full. After that IPP only fills in: it updates the
+  sensors SNMP set up (combining its levels with SNMP's last ones) and can raise low or
+  maintenance warnings, but doesn't add or remove sensors, so a missed SNMP answer doesn't
+  change Home. It clears a low-toner warning only if it reports every color SNMP did;
+  drum and parts warnings stay until SNMP answers again. If SNMP is turned off for good,
+  switch to `ipp`.
 
 Over IPP the plugin reads the printer's state, its problems (paper, jam, cover, toner)
 and the supplies it lists. What that includes depends on the printer: many Brother lasers
