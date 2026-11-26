@@ -26,6 +26,8 @@ export interface MarkerReadings {
   parts: Partial<Record<PartKey, Part>>;
   /** An ink printer, by its supplies */
   ink: boolean;
+  /** A toner printer, by its supplies (so its model name isn't taken for an inkjet's) */
+  toner: boolean;
 }
 
 // Color words beyond English, for printers that name supplies in their language
@@ -58,6 +60,10 @@ export function markerColor(name: string, colors: string, supply = true): Color 
   if (/light\s*cyan|photo\s*cyan|\blc\b/.test(n)) { return 'lightCyan'; }
   if (/light\s*magenta|photo\s*magenta|\blm\b/.test(n)) { return 'lightMagenta'; }
   for (const [re, color] of WORDS) { if (re.test(n)) { return color; } }
+  // Kyocera, Utax and Triumph-Adler name toners by part number, the color as the last
+  // letter: TK-5240K black, TK-5240C cyan, CK-5512M, PK-5015Y
+  const part = /\b(?:tk|ck|pk)-?\d{3,5}([kcmy])\b/.exec(n)?.[1];
+  if (part) { return ({ k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[part]; }
   const code = /\b(pgbk|bk|k|c|m|y)\b(?![-\d])/.exec(n)?.[1];
   if (code) { return ({ pgbk: 'black', bk: 'black', k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[code]; }
   // Several colors for one marker: a tri-color cartridge (for a drum: shared, no color)
@@ -115,8 +121,11 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   const supplies: Supply[] = [];
   const drums: Partial<Record<Color, Drum>> = {};
   const parts: Partial<Record<PartKey, Part>> = {};
+  // Some printers (Sharp) give a drum's or waste box's level in % but its maximum as
+  // unknown (-2) or unavailable (-1); when their other markers count to 100, so does this one
+  const inPercent = markers.some((m) => m.high === 100);
   const percentOf = (m: Marker): number | null => {
-    const high = m.high ?? 100;
+    const high = m.high !== null && m.high < 0 && inPercent && m.level !== null && m.level <= 100 ? 100 : m.high ?? 100;
     // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
     return m.level !== null && m.level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(m.level * 100 / high))) : null;
   };
@@ -139,9 +148,11 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   }
 
   let ink = false;
+  let toner = false;
   markers.forEach((m, i) => {
     const percent = percentOf(m);
     if (/ink/.test(m.type)) { ink = true; }
+    if (/^toner/.test(m.type) || (isSupply(m) && /toner|トナー|碳粉|토너/i.test(m.name))) { toner = true; }
     if (isSupply(m)) {
       if (/\bink\b/i.test(m.name)) { ink = true; }
       const color = supplyColor[i];
@@ -164,7 +175,8 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   });
   supplies.sort((x, y) => ALL_COLORS.indexOf(x.color) - ALL_COLORS.indexOf(y.color));
   const lowestSupply = supplies.length ? supplies.reduce((x, y) => (y.level < x.level ? y : x)) : null;
-  return { supplies, lowestSupply, drums, parts, ink: ink || !!parts.inkWasteBox };
+  const isInk = ink || !!parts.inkWasteBox;
+  return { supplies, lowestSupply, drums, parts, ink: isInk, toner: toner && !isInk };
 }
 
 const MAKERS: Record<string, string> = {

@@ -39,6 +39,8 @@ export type OidName = keyof typeof OID;
 export type RawReadings = Partial<Record<OidName, RawValue>> & {
   /** Printer MIB supplies, when read */
   markers?: Marker[];
+  /** The supplies table has been read before but couldn't be read this time */
+  suppliesUnread?: boolean;
 };
 export type SnmpVersion = '1' | '2c' | '3';
 
@@ -117,6 +119,11 @@ export interface PrinterData extends StatusSummary {
   drumPagesUsed: number | null;
   drumPagesRemaining: number | null;
   unknown: Record<string, number>;
+  /**
+   * The printer answered, but its supplies table (read before) couldn't be read this
+   * time: supplies, drums and parts are missing from this reading, not gone
+   */
+  suppliesUnread?: boolean;
 }
 
 export interface QueryResult extends PrinterData {
@@ -221,11 +228,12 @@ export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], co
 /**
  * Read the Printer MIB supplies: only the columns used, and the colorant names
  * only when a supply refers to one. An empty list when the printer has no table.
- * A walk that fails partway counts as a failed poll once the table has been read
- * before (a lost packet mustn't look like "no supplies" and take sensors away);
- * a printer whose table never reads is treated as having none.
+ * A walk that fails once the table has been read before gives null: the supplies
+ * are unknown this time, not gone (a lost packet mustn't take sensors away, and a
+ * printer that answers everything else isn't offline); a printer whose table never
+ * reads is treated as having none.
  */
-export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[]> {
+export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[] | null> {
   try {
     const rows: snmp.Varbind[] = [];
     for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
@@ -238,9 +246,8 @@ export async function readSupplies(session: snmp.Session, charset: number | null
       colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
     if (markers.length) { state.suppliesRead = true; }
     return markers;
-  } catch (err) {
-    if (state.suppliesRead) { throw err; }
-    return [];
+  } catch {
+    return state.suppliesRead ? null : [];
   }
 }
 
@@ -281,7 +288,8 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         const brother = decode.supplyList(decode.decodeMaintenance(raw.maintenance, raw.nextCare).supplies);
         if (!brother.length) {
           const charset = typeof raw.charset === 'number' ? raw.charset : Number(decode.decodeText(raw.charset)) || null;
-          raw.markers = await readSupplies(session, charset, options.state ||= {});
+          const markers = await readSupplies(session, charset, options.state ||= {});
+          if (markers) { raw.markers = markers; } else { raw.suppliesUnread = true; }
         }
         return raw;
       } catch (err) {
@@ -359,7 +367,7 @@ export function parse(raw: RawReadings): PrinterData {
   // Without Brother's records: the standard supplies table (any make of printer)
   const mib = !brotherSupplies.length && raw.markers?.length ? mapMarkers(raw.markers) : null;
   const supplies = mib ? mib.supplies : brotherSupplies;
-  const type = mib?.ink ? 'ink' : decode.printerType(model, maint, deviceId);
+  const type = mib?.ink ? 'ink' : mib?.toner ? 'laser' : decode.printerType(model, maint, deviceId);
   const mfg = /(?:^|;)\s*(?:MFG|MANUFACTURER):([^;]+)/i.exec(deviceId)?.[1]?.trim() ?? '';
   const isBrother = brotherSupplies.length > 0 || /brother/i.test(`${mfg} ${model}`);
   // null for a maker the plugin can't name: Home then shows "Printer", never Brother
@@ -405,5 +413,6 @@ export function parse(raw: RawReadings): PrinterData {
     drumPagesUsed: black.pagesUsed ?? null,
     drumPagesRemaining: black.pagesRemaining ?? null,
     unknown: maint.unknown,
+    ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
   };
 }

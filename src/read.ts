@@ -23,21 +23,31 @@ export async function readIpp(options: QueryOptions): Promise<QueryResult> {
 
 const message = (err: unknown): string => (err as { message?: string } | null)?.message || String(err);
 
+/** The two readers, as an object tests can stand in for */
+export const readers = { query, readIpp };
+
 /** Read the printer. Rejects only when it can't be read by any allowed protocol. */
 export async function readPrinter(options: QueryOptions): Promise<QueryResult> {
+  const { query: readSnmp, readIpp: readOverIpp } = readers;
   const protocol = options.protocol ?? 'snmp';
-  if (protocol === 'ipp') { return readIpp(options); }
-  if (protocol === 'snmp') { return query(options); }
+  if (protocol === 'ipp') { return readOverIpp(options); }
+  if (protocol === 'snmp') { return readSnmp(options); }
 
   // auto: SNMP on every poll, since it has the most detail; IPP only when SNMP
   // doesn't answer, so one lost packet doesn't change what Home shows for long
+  let snmp: QueryResult;
   try {
-    return await query(options);
+    snmp = await readSnmp(options);
   } catch (snmpErr) {
     try {
-      return await readIpp(options);
+      return await readOverIpp(options);
     } catch (ippErr) {
       throw new Error(`SNMP: ${message(snmpErr)}; IPP: ${message(ippErr)}`, { cause: ippErr });
     }
   }
+  // SNMP answered but its supplies table didn't: IPP's levels stand in for this poll
+  if (snmp.suppliesUnread) {
+    try { return await readOverIpp(options); } catch { /* SNMP's reading, without supplies */ }
+  }
+  return snmp;
 }

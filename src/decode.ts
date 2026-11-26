@@ -295,11 +295,30 @@ export function modelFromDeviceId(text: string | null | undefined): string | nul
 }
 
 /** "laser" or "ink", from what the printer reports */
+/**
+ * Inkjet lines of other makers, by model name, for printers that don't say ink in
+ * their supplies (or list none): HP OfficeJet / DeskJet / ENVY…, Canon PIXMA /
+ * MAXIFY / imagePROGRAF / MegaTank, Epson WorkForce / EcoTank / Expression and
+ * their model codes (XP-, ET-, WF-, L…). Maker-specific codes only count after the
+ * maker's name, so Brother's HL-L2350DW isn't taken for an Epson L.
+ */
+export function inkjetModel(model: string): boolean {
+  // Epson's lasers: AcuLaser, AL- (some sold as "WorkForce AL-M300")
+  if (/aculaser|\bAL-[A-Z]{0,2}\d/i.test(model)) { return false; }
+  if (/officejet|deskjet|designjet|\benvy\b|photosmart|pagewide|smart ?tank|ink ?tank|\bpixma\b|\bmaxify\b|imageprograf|megatank|workforce|ecotank|\bexpression\b|\bstylus\b|surecolor|\bartisan\b|geljet/i.test(model)) {
+    return true;
+  }
+  // Model codes, after the maker's name or alone (as some printers give the model)
+  if (/^(?:epson\s+)?(?:XP|ET|WF|PX|EW|EP)-[A-Z]?\d/i.test(model) || /^epson\s+(?:L|SC|M)-?[A-Z]?\d/i.test(model)) { return true; }
+  return /^canon\s+(?:TS|TR|MG|MX|MB|iP|iX|GX|GM|G|E|TM|TA|TX)-?\d/i.test(model) || /^(?:TS|TR|MG)\d{3,4}\b/i.test(model);
+}
+
 export function printerType(model: string | null | undefined, decoded: Maintenance | null | undefined,
   deviceId?: string | null): PrinterType {
   if (decoded && decoded.parts.inkWasteBox) { return 'ink'; }
   if (/CID:[^;]*Laser/i.test(deviceId || '')) { return 'laser'; }
   if (/\b(?:DCP|MFC|HL)-[JT]/i.test(model || '')) { return 'ink'; }
+  if (inkjetModel(model || '')) { return 'ink'; }
   // The current/max record format is only used by older inkjets
   if (decoded && decoded.misc.legacy) { return 'ink'; }
   return 'laser';

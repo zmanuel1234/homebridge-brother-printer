@@ -212,9 +212,9 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     level: num('marker-levels', i),
     high: num('marker-high-levels', i),
   }));
-  const { supplies, lowestSupply: lowest, drums, parts, ink } = mapMarkers(markers);
+  const { supplies, lowestSupply: lowest, drums, parts, ink, toner } = mapMarkers(markers);
   const black = drums.black || {};
-  const type = ink ? 'ink' : printerType(model, null, deviceId);
+  const type = ink ? 'ink' : toner ? 'laser' : printerType(model, null, deviceId);
 
   return {
     model: model || null,
