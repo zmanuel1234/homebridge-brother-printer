@@ -108,6 +108,10 @@ const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
   serviceRequested: 'service requested', inputTrayMissing: 'tray missing', outputTrayMissing: 'output tray missing',
   markerSupplyMissing: 'cartridge missing', outputFull: 'output tray full',
 };
+/** What the plugin adds after the printer's name when it names a sensor */
+const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
+  ' Out of Paper', ' Online', ' Black', ' Cyan', ' Magenta', ' Yellow']);
+
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
   paperFeed1: 'Paper feed kit (tray 1)', paperFeedMP: 'Paper feed kit (MP tray)', inkWasteBox: 'Ink waste box',
@@ -237,7 +241,8 @@ export class PrinterAccessory {
         for (const type of [C.Name, C.ConfiguredName]) {
           if (!svc.testCharacteristic(type)) { continue; }
           const value = svc.getCharacteristic(type).value;
-          if (typeof value === 'string' && (value === old || value.startsWith(`${old} `))) {
+          // Only names the plugin gave; a name set in the Home app stays
+          if (typeof value === 'string' && value.startsWith(old) && OWN_SUFFIXES.has(value.slice(old.length))) {
             svc.updateCharacteristic(type, this.name + value.slice(old.length));
           }
         }
@@ -728,7 +733,15 @@ export class PrinterAccessory {
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
-    if (d.serial && d.serial !== ctx.serial) { ctx.serial = d.serial; changed = true; }
+    if (d.serial && d.serial !== ctx.serial) {
+      if (ctx.serial) {
+        this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `
+          + 'as before: it looks like a different printer, now shown with this one\'s room and automations in Home. '
+          + 'If that\'s not what you want, remove it and add it again (or use Search in the settings).');
+      }
+      ctx.serial = d.serial;
+      changed = true;
+    }
     if (!changed) { return; }
     this.accessory.getService(S.AccessoryInformation)!
       .updateCharacteristic(C.Model, ctx.model || 'Brother printer')

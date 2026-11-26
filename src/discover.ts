@@ -111,7 +111,9 @@ export function findResponders(options: DiscoverOptions = {}): Promise<string[]>
     socket.on('error', (err) => finish(err));
     // Any SNMP answer counts; the community or version may still be wrong for a
     // full read, which the query afterwards finds out.
-    socket.on('message', (msg, rinfo) => { if (msg[0] === 0x30) { found.add(rinfo.address); } });
+    // Only answers to this request (its id in the reply)
+    const id = integer(requestId);
+    socket.on('message', (msg, rinfo) => { if (msg[0] === 0x30 && msg.includes(id)) { found.add(rinfo.address); } });
     socket.bind(0, () => {
       try { socket.setBroadcast(true); } catch { /* not allowed here; unicast targets still work */ }
       for (const target of targets) {
@@ -134,7 +136,15 @@ function summary(d: QueryResult): string {
 export async function discover(options: DiscoverOptions = {}): Promise<FoundPrinter[]> {
   const read = options.read ?? query;
   const hosts = await findResponders(options);
-  const results = await Promise.all(hosts.map(async (host) => {
+  const results: (FoundPrinter | null)[] = [];
+  // A few at a time, so a busy network doesn't get hundreds of requests at once
+  for (let i = 0; i < hosts.length; i += 16) {
+    results.push(...await Promise.all(hosts.slice(i, i + 16).map(readOne)));
+  }
+  const ip = (h: string): number => h.split('.').reduce((n, v) => n * 256 + Number(v), 0);
+  return results.filter((r): r is FoundPrinter => r !== null).sort((a, b) => ip(a.host) - ip(b.host));
+
+  async function readOne(host: string): Promise<FoundPrinter | null> {
     try {
       const d = await read({
         host, port: options.port ?? 161, community: options.community || 'public', timeout: 2000, retries: 0,
@@ -148,7 +158,5 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
     } catch {
       return null; // not a printer, or not readable with this community
     }
-  }));
-  const ip = (h: string): number => h.split('.').reduce((n, v) => n * 256 + Number(v), 0);
-  return results.filter((r): r is FoundPrinter => r !== null).sort((a, b) => ip(a.host) - ip(b.host));
+  }
 }

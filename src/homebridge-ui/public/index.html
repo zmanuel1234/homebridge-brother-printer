@@ -95,6 +95,14 @@
   $('bp-found').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-add]');
     if (!button) { return; }
+    try {
+      await addPrinter(button);
+    } catch (err) {
+      homebridge.toast.error(errorText(err), 'Brother Printer');
+    }
+  });
+
+  async function addPrinter(button) {
     const p = found[Number(button.dataset.add)];
     const blocks = await platformConfig();
     const printers = blocks[0].printers;
@@ -105,8 +113,8 @@
     if (p.serial) { entry.serial = p.serial; }
     const community = $('bp-community').value.trim();
     if (community && community !== 'public') { entry.community = community; }
-    // Replace the blank row a new install starts with, rather than adding beside it
-    const blank = printers.findIndex((c) => !c.host);
+    // Replace the untouched blank row a new install starts with, rather than adding beside it
+    const blank = printers.findIndex((c) => !c.host && (!c.name || c.name === 'Printer'));
     if (blank >= 0) { printers[blank] = { ...printers[blank], ...entry }; } else { printers.push(entry); }
     await homebridge.updatePluginConfig(blocks);
     // Show the new printer in the form
@@ -115,7 +123,7 @@
     button.outerHTML = `<span class="small text-muted">Added as “${esc(name)}”. Save to keep it.</span>`;
     homebridge.toast.success(`Added ${name}. Click Save to keep it.`, 'Brother Printer');
     await refreshPrinterList();
-  });
+  }
 
   /* ------------------------------------------------------------------ test */
 
@@ -144,12 +152,19 @@
         out.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="bp-keep-serial">
           Save serial number ${esc(r.serial)} with this printer</button>`);
         $('bp-keep-serial').addEventListener('click', async () => {
-          const blocks = await platformConfig();
-          blocks[0].printers[Number(index)].serial = r.serial;
-          await homebridge.updatePluginConfig(blocks);
-          homebridge.hideSchemaForm();
-          homebridge.showSchemaForm();
-          $('bp-keep-serial').outerHTML = '<span class="text-muted">Serial number added. Save to keep it.</span>';
+          try {
+            // The printer that was tested, even if rows were added or removed since
+            const blocks = await platformConfig();
+            const target = blocks[0].printers.find((c) => c.host === printer.host && (c.name || 'Printer') === (printer.name || 'Printer'));
+            if (!target) { throw new Error('That printer is no longer in the list; test it again.'); }
+            target.serial = r.serial;
+            await homebridge.updatePluginConfig(blocks);
+            homebridge.hideSchemaForm();
+            homebridge.showSchemaForm();
+            $('bp-keep-serial').outerHTML = '<span class="text-muted">Serial number added. Save to keep it.</span>';
+          } catch (err) {
+            homebridge.toast.error(errorText(err), 'Brother Printer');
+          }
         });
       }
     } catch (err) {

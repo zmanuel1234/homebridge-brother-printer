@@ -171,6 +171,46 @@ function defineTests(hap: Hap): void {
     assert.equal(calls.registered.length, 1, 'the second gets a new accessory');
   });
 
+  test('after a rename, a new printer given the old name gets its own accessory', () => {
+    const first = homebridge();
+    const cached = first.cachedAccessory('Printer', '10.0.0.9');
+    first.start([{ name: 'Office', host: '10.0.0.9' }], [cached]); // renamed "Printer" -> "Office"
+    assert.equal(ctx(cached).name, 'Office');
+
+    const later = homebridge();
+    const platform = later.start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Printer', host: '10.0.0.30' }], [cached]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, cached, 'Office keeps its accessory');
+    assert.equal(later.calls.registered.length, 1);
+    const added = later.calls.registered[0];
+    assert.notEqual(added.UUID, cached.UUID, 'a different UUID, though the name\'s UUID is the old one\'s');
+    assert.equal(added.displayName, 'Printer');
+    assert.deepEqual(later.calls.unregistered, []);
+  });
+
+  test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {
+    const { start, cachedAccessory } = homebridge();
+    const a = cachedAccessory('Upstairs', '10.0.0.1');
+    const b = cachedAccessory('Downstairs', '10.0.0.2');
+    ctx(a).serial = 'SA';
+    ctx(b).serial = 'SB';
+    const platform = start([
+      { name: 'Downstairs', host: '10.0.0.1', serial: 'SA' },
+      { name: 'Upstairs', host: '10.0.0.2', serial: 'SB' },
+    ], [a, b]);
+    assert.equal(platform.printers.find((p) => p.name === 'Downstairs')?.accessory, a);
+    assert.equal(platform.printers.find((p) => p.name === 'Upstairs')?.accessory, b);
+  });
+
+  test('a name set in the Home app survives a rename, even if it starts with the old name', () => {
+    const { start, cachedAccessory } = homebridge();
+    const cached = cachedAccessory('Office', '10.0.0.9');
+    const first = start([{ name: 'Office', host: '10.0.0.9' }], [cached]);
+    const problem = first.printers[0].problem!;
+    problem.setCharacteristic(hap!.Characteristic.ConfiguredName, 'Office upstairs');
+    homebridge().start([{ name: 'Study', host: '10.0.0.9' }], [cached]);
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Office upstairs');
+  });
+
   test('shutdown stops every printer\'s polling', () => {
     const { api, start } = homebridge();
     const platform = start([{ name: 'A', host: '10.0.0.1' }, { name: 'B', host: '10.0.0.2' }]);

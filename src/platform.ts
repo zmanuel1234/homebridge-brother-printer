@@ -47,18 +47,12 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
   setup(): void {
     // Homebridge types the config as any: a list of entries, each checked below
     const printers: unknown = this.config.printers;
-    const entries = Array.isArray(printers) ? (printers as (PrinterEntry | null | undefined)[]) : [];
-    const active = new Set<string>();
-    const named = new Set<string>();
-    const nameUuid = (name: string): string => this.api.hap.uuid.generate(`${PLUGIN_NAME}:${name}`);
+    const raw = Array.isArray(printers) ? (printers as (PrinterEntry | null | undefined)[]) : [];
 
-    // Accessories that some printer in the config still has by name aren't
-    // available to a renamed one.
-    const byName = new Set(entries
-      .filter((e) => e && String(e.host || '').trim())
-      .map((e) => nameUuid(String(e!.name || 'Printer').trim())));
-
-    entries.forEach((rawEntry, idx) => {
+    interface Entry { raw: PrinterEntry; name: string; host: string; serial: string }
+    const entries: Entry[] = [];
+    const names = new Set<string>();
+    raw.forEach((rawEntry, idx) => {
       if (!rawEntry || !String(rawEntry.host || '').trim()) {
         // The settings screen can save a blank row; only warn when it was filled in
         const filled = !!rawEntry && Object.entries(rawEntry).some(([k, v]) => k !== 'host' && v !== DEFAULTS[k] && v !== '');
@@ -66,47 +60,66 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         if (filled) { this.log.warn(msg); } else { this.log.debug(msg); }
         return;
       }
-      const host = String(rawEntry.host).trim();
       const name = String(rawEntry.name || 'Printer').trim();
-      const serial = String(rawEntry.serial ?? '').trim();
-      const uuid = nameUuid(name);
-      if (named.has(uuid)) {
+      if (names.has(name)) {
         this.log.warn(`Two printers are named "${name}". Give each a unique name; skipping the second.`);
         return;
       }
-      named.add(uuid);
+      names.add(name);
+      entries.push({ raw: rawEntry, name, host: String(rawEntry.host).trim(), serial: String(rawEntry.serial ?? '').trim() });
+    });
 
-      // By name; or, after a rename, the accessory of the same printer: the same
-      // serial number, or else the same address (unless both serials are known
-      // and differ). It keeps its room, automations and notifications in Home.
-      let accessory = this.cached.get(uuid);
-      if (!accessory) {
-        const free = [...this.cached.values()].filter((a) => !active.has(a.UUID) && !byName.has(a.UUID));
-        accessory = (serial && free.find((a) => a.context.serial === serial))
-          || free.find((a) => a.context.host === host && !(serial && a.context.serial && a.context.serial !== serial));
+    // Which cached accessory is which printer. An accessory keeps the UUID it was
+    // made with, so after a rename its UUID no longer says its name; what it was
+    // last set up as is in its context. In order of trust: the same serial
+    // number, the same name, the same address. A name or address match doesn't
+    // count when both serial numbers are known and differ.
+    const ctxName = (a: PlatformAccessory<PrinterContext>): string => a.context.name ?? a.displayName;
+    const agrees = (e: Entry, a: PlatformAccessory<PrinterContext>): boolean =>
+      !(e.serial && a.context.serial && a.context.serial !== e.serial);
+    const match = new Map<Entry, PlatformAccessory<PrinterContext>>();
+    const taken = new Set<string>();
+    const pass = (test: (e: Entry, a: PlatformAccessory<PrinterContext>) => boolean): void => {
+      for (const e of entries) {
+        if (match.has(e)) { continue; }
+        const a = [...this.cached.values()].find((c) => !taken.has(c.UUID) && test(e, c));
+        if (a) { match.set(e, a); taken.add(a.UUID); }
       }
+    };
+    pass((e, a) => !!e.serial && a.context.serial === e.serial);
+    pass((e, a) => ctxName(a) === e.name && agrees(e, a));
+    pass((e, a) => a.context.host === e.host && agrees(e, a));
+
+    const active = new Set<string>();
+    for (const e of entries) {
+      let accessory = match.get(e);
       const isNew = !accessory;
       if (!accessory) {
-        accessory = new this.api.platformAccessory<PrinterContext>(name, uuid, this.api.hap.Categories.SENSOR);
+        // The UUID from the name, unless a cached accessory (a renamed printer) already has it
+        let uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${e.name}`);
+        for (let n = 2; this.cached.has(uuid) || active.has(uuid); n++) {
+          uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${e.name}:${n}`);
+        }
+        accessory = new this.api.platformAccessory<PrinterContext>(e.name, uuid, this.api.hap.Categories.SENSOR);
       }
       active.add(accessory.UUID);
-      accessory.context.host = host;
+      accessory.context.host = e.host;
 
       try {
-        this.printers.push(new PrinterAccessory(this, accessory, { ...rawEntry, host, name }));
+        this.printers.push(new PrinterAccessory(this, accessory, { ...e.raw, host: e.host, name: e.name }));
       } catch (err) {
-        const e = err as { message?: string } | null;
-        this.log.error(`[${name}] Couldn't set up this printer: ${e?.message || String(err)}`);
-        return;
+        const msg = (err as { message?: string } | null)?.message || String(err);
+        this.log.error(`[${e.name}] Couldn't set up this printer: ${msg}`);
+        continue;
       }
 
       if (isNew) {
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-        this.log.info(`Added printer "${name}" (${host}).`);
+        this.log.info(`Added printer "${e.name}" (${e.host}).`);
       } else {
         this.api.updatePlatformAccessories([accessory]);
       }
-    });
+    }
 
     const stale = [...this.cached.values()].filter((a) => !active.has(a.UUID));
     if (stale.length) {
