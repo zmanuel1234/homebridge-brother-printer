@@ -15,6 +15,8 @@
   SHA authentication and DES or AES encryption. The settings screen shows these fields once
   v3 is picked; missing or invalid SNMPv3 settings are reported at startup. The probe
   command takes `--v3 <user>` and the matching options.
+- README: how this plugin compares with AirPrint (IPP) plugins such as homebridge-printer.
+- Issue forms for printer reports (with the probe output) and bugs.
 
 The new sensors are off by default; with your current config nothing changes.
 

@@ -39,6 +39,26 @@ Each printer gets these sensors:
 
 While the printer can't be reached, all of them except Online show No Response.
 
+## Brother plugin or an AirPrint plugin?
+
+[homebridge-printer](https://github.com/homebridge-plugins/homebridge-printer) reads printers
+over AirPrint (IPP) and works with most brands. If you have a Brother printer, the
+difference is in what each can read:
+
+| | This plugin (SNMP) | AirPrint (IPP) plugins |
+|---|---|---|
+| Printer brands | Brother only | Most AirPrint printers |
+| Toner / ink level | The exact % from the printer's web page | On many Brother printers only "some remaining", not a % |
+| Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Not available |
+| Page count | Yes | Depends on the printer |
+| Out of paper, jam, cover open | Separate problem codes, with an Out of Paper sensor | General printer state |
+| Printer turned off or unplugged | Online sensor, and No Response on the rest | Online switch |
+| Works with SNMP turned off | No (SNMP v1, v2c or v3 must be on) | Yes |
+
+Both read the printer locally, with no cloud account. Use an AirPrint plugin for other
+brands, or for a Brother printer that doesn't report levels over SNMP (see the table
+below).
+
 ## Requirements
 
 - A Brother printer with SNMP. Tested on a real **MFC-L2750DW**, and against SNMP
@@ -53,7 +73,8 @@ While the printer can't be reached, all of them except Online show No Response.
   | Older / ink tank | HL-2270DW, HL-5350DN, MFC-T910DW | Status, problems, page count; these don't report levels |
 
   Other Brother models generally use the same records. Reports, with the probe output
-  below, are welcome.
+  below, are welcome as a
+  [printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml).
 - SNMP turned on in the printer's web page: **Network → Protocol → SNMP** (v1/v2c,
   read-only is enough). The default community is `public`. SNMPv3 works too (below).
 - A fixed address for the printer: reserve its IP in your router, or use its mDNS
@@ -182,8 +203,9 @@ npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user> -
 ```
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
-match, or values are `null`, please open an issue with the probe output and your printer
-model.
+match, or values are `null`, please open a
+[printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml)
+with the probe output and your printer model.
 
 ## Troubleshooting
 

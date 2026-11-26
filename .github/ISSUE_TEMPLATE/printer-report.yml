@@ -1,0 +1,61 @@
+name: Printer report
+description: Wrong or missing levels, or a model that isn't listed yet. Includes the probe output.
+title: "[Printer] "
+labels: ["printer report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! The probe output is what lets a model be added or fixed. It contains no passwords,
+        but it does include your printer's serial number; you can replace that with `xxx` if you like.
+  - type: input
+    id: model
+    attributes:
+      label: Printer model
+      placeholder: MFC-L2750DW
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of printer
+      options:
+        - Mono laser
+        - Color laser
+        - Inkjet
+        - Ink tank
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: probe
+    attributes:
+      label: Probe output
+      description: |
+        From the Homebridge machine run, with your printer's address:
+        `npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150`
+        (for SNMPv3, add `--v3 <user> --auth-pass <password> --priv-pass <password>`; the passwords aren't printed).
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: web-page
+    attributes:
+      label: What the printer's web page shows
+      description: The **Remaining Life** percentages (toner or ink, drum and other parts) from the printer's web page, and its status text.
+      placeholder: |
+        Toner: 70%
+        Drum: 60%
+        Status: Sleep
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: What's wrong or missing
+      description: For example, "the battery shows 0% with a new cartridge" or "no ink levels for cyan".
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      placeholder: 0.6.0

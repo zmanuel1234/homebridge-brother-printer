@@ -56,7 +56,14 @@
     "inkjet",
     "toner",
     "ink",
-    "snmp"
+    "snmp",
+    "brother-printer",
+    "laser-printer",
+    "mfc",
+    "hl",
+    "dcp",
+    "drum",
+    "out-of-paper"
   ],
   "engines": {
     "node": "^22.19.0 || ^24.0.0 || ^26.0.0",
