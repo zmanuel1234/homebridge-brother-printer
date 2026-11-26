@@ -15,7 +15,7 @@ import type { QueryOptions } from '../snmp';
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
                              [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
-       brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>] [--ipp-self-signed yes]
+       brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>] [--ipp-self-signed yes|no]
 SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
 --auth none needs --priv none too. Passwords given as options are saved in your shell
 history and visible in the process list; to avoid that, set the environment variables

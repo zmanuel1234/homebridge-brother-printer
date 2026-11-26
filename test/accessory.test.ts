@@ -220,6 +220,8 @@ function defineTests(hap: Hap): void {
     assert.equal(state(acc), OPEN);
     printer.apply(viaIpp({ ...sup(60, 20), drums: {}, parts: {} }));
     assert.equal(state(acc), OPEN, 'not cleared by IPP, which has no finer reading');
+    printer.apply(viaIpp({ ...sup(60, 25), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'IPP rounding a little higher isn\'t a new cartridge');
     printer.apply(viaIpp({ ...sup(60, 100), drums: {}, parts: {} }));
     assert.equal(state(acc), CLOSED, 'a new cartridge clears it');
   });
