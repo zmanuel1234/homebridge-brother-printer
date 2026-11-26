@@ -82,7 +82,7 @@ export function toTray(rawName: string, level: number | null, max: number | null
   }
   const capacity = max !== null && max > 0 ? max : null;
   // Only what doesn't change with the paper in it: name, size, a manual-feed type. (Not the
-  // status: HP marks an empty cassette "on request" just as it does its bypass tray.)
+  // status: HP marks its bypass tray "on request", and a printer may mark an empty cassette so too.)
   const secondary = SECONDARY.test(name) || capacity === 1 || info.manual === true;
   return { name, key: keyOf(name), percent, state, capacity, secondary };
 }

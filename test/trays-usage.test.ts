@@ -63,8 +63,8 @@ test('trays: type and status (HP marks its bypass tray "on request"; unknown sta
     { oid: `${INPUT_TABLE}.2.1.${i + 1}`, value: type },
     { oid: `${INPUT_TABLE}.11.1.${i + 1}`, value: status },
   ]);
-  // HP LaserJet M880: Tray 1 is the bypass by its size; "on request" (9) is no sign of one, since
-  // HP marks an empty cassette the same way: Tray 2, empty, stays a main tray from the start
+  // HP LaserJet M880: Tray 1 is the bypass by its size; "on request" (9) isn't taken as a sign of
+  // one, since an empty cassette may be marked the same way: Tray 2 (made up here) stays a main tray
   assert.equal(show(traysFromTable(withCols([['Tray 1', 100, 0, 4, 9], ['Tray 2', 500, 0, 4, 9], ['Tray 3', 1500, 300, 3, 0]]), INPUT_TABLE)),
     'Tray 1* empty 0, Tray 2 empty 0, Tray 3 ok 20');
   // A manual feed by type, however big; a tray at 0 whose status is unknown (5)
