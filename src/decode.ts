@@ -304,7 +304,7 @@ export function modelFromDeviceId(text: string | null | undefined): string | nul
  */
 export function inkjetModel(model: string): boolean {
   // Epson's lasers: AcuLaser, AL- (some sold as "WorkForce AL-M300")
-  if (/aculaser|\bAL-[CM]?\d/i.test(model)) { return false; }
+  if (/aculaser|\bAL-[A-Z]{0,2}\d/i.test(model)) { return false; }
   if (/officejet|deskjet|designjet|\benvy\b|photosmart|pagewide|smart ?tank|ink ?tank|\bpixma\b|\bmaxify\b|imageprograf|megatank|workforce|ecotank|\bexpression\b|\bstylus\b|surecolor|\bartisan\b|geljet/i.test(model)) {
     return true;
   }

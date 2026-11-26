@@ -237,11 +237,12 @@ test('Printer MIB: inkjets of other makes read as ink, by their model, when thei
     assert.equal(parse({ model: Buffer.from(model) }).type, 'ink', model);
   }
   // Epson's lasers, even under the WorkForce name; and supplies that say toner win over the name
-  for (const model of ['EPSON WorkForce AL-M300DN', 'EPSON AL-C300DN', 'EPSON AcuLaser C1700']) {
+  for (const model of ['EPSON WorkForce AL-M300DN', 'EPSON WorkForce AL-MX300DNF', 'EPSON AL-C300DN', 'EPSON AcuLaser C1700']) {
     assert.equal(parse({ model: Buffer.from(model) }).type, 'laser', model);
   }
   const toner = [{ name: 'Black Toner Cartridge', type: 'toner', colors: '', level: 40, high: 100 }];
   assert.equal(reading(toner, { model: Buffer.from('EPSON WorkForce Pro WF-M5799') }).type, 'laser');
+  assert.equal(reading(toner, { model: Buffer.from('HP OfficeJet Pro 9015e') }).type, 'laser', 'toner in the supplies wins over the name');
 });
 
 test('Printer MIB: names follow the printer\'s character set', () => {
