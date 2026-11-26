@@ -248,6 +248,9 @@ export class PrinterAccessory {
     this.name = config.name;
 
     this.options = queryOptions(config);
+    // Supplies shown before a restart: a supplies walk that fails on the first poll is a
+    // failed poll, not "no supplies" (which would take the battery and tiles away)
+    this.options.state!.suppliesRead = accessory.context.noLevels === false;
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
@@ -305,7 +308,7 @@ export class PrinterAccessory {
 
     acc.getService(S.AccessoryInformation)!
       .setCharacteristic(C.Manufacturer, acc.context.manufacturer || 'Brother')
-      .setCharacteristic(C.Model, acc.context.model || 'Brother printer')
+      .setCharacteristic(C.Model, acc.context.model || (acc.context.manufacturer ? 'Printer' : 'Brother printer'))
       .setCharacteristic(C.SerialNumber, acc.context.serial || this.options.host)
       .setCharacteristic(C.FirmwareRevision, version);
 
@@ -897,7 +900,7 @@ export class PrinterAccessory {
     if (!changed) { return; }
     this.accessory.getService(S.AccessoryInformation)!
       .updateCharacteristic(C.Manufacturer, ctx.manufacturer || 'Brother')
-      .updateCharacteristic(C.Model, ctx.model || 'Brother printer')
+      .updateCharacteristic(C.Model, ctx.model || (ctx.manufacturer && ctx.manufacturer !== 'Brother' ? 'Printer' : 'Brother printer'))
       .updateCharacteristic(C.SerialNumber, ctx.serial || this.options.host);
     this.api.updatePlatformAccessories([this.accessory]);
   }

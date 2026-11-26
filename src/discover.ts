@@ -157,7 +157,7 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
         || /brother/i.test(d.model || ''));
       if (!printer) { return null; }
       const found: FoundPrinter = {
-        host, model: cleanModel(d.model || 'Brother printer'), serial: d.serial, type: d.type, levels: summary(d),
+        host, model: cleanModel(d.model || (d.manufacturer && d.manufacturer !== 'Brother' ? `${d.manufacturer} printer` : 'Printer')), serial: d.serial, type: d.type, levels: summary(d),
       };
       return found;
     } catch {

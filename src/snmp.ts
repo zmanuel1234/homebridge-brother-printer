@@ -177,8 +177,8 @@ const clean = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') :
 /** The Printer MIB supplies table as markers, from walked values */
 export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], colorants: { oid: string; value: unknown }[],
   charset: number | null = null): Marker[] {
-  // Names follow the printer's character set (prtLocalizationCharacterSet), as its display
-  // text does; without one, UTF-8 if they are valid UTF-8 (Chinese, Japanese…), else Latin-1
+  // Names: valid UTF-8 as such, else the printer's character set (prtLocalizationCharacterSet),
+  // as for its display text, else Latin-1
   const utf8 = new TextDecoder('utf-8', { fatal: true });
   const text = (v: unknown): string => {
     if (!Buffer.isBuffer(v)) { return clean(v); }
@@ -230,8 +230,10 @@ export async function readSupplies(session: snmp.Session, charset: number | null
     const rows: snmp.Varbind[] = [];
     for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
     const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
-    // Colors may come only from here (supplies named by part number), so a failure counts like the walk's
-    const colorants = wantsColorant ? await subtree(session, COLORANT_VALUES, MAX_ROWS) : [];
+    // Colors may come only from here (supplies named by part number), so once supplies have been
+    // read a failure counts like the walk's; before that, carry on without the colorant names
+    const colorants = !wantsColorant ? []
+      : await subtree(session, COLORANT_VALUES, MAX_ROWS).catch((err: unknown) => { if (state.suppliesRead) { throw err; } return []; });
     const markers = suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
       colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
     if (markers.length) { state.suppliesRead = true; }

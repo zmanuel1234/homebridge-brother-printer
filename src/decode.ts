@@ -270,7 +270,8 @@ export function decodeCounters(input: RawValue): Counters {
 
 /** prtLocalizationCharacterSet (IANA MIBenum) to a TextDecoder label */
 const CHARSETS: Record<number, string> = {
-  3: 'ascii', 4: 'latin1', 5: 'iso-8859-2', 8: 'iso-8859-5', 12: 'iso-8859-9', 106: 'utf-8',
+  3: 'ascii', 4: 'latin1', 5: 'iso-8859-2', 8: 'iso-8859-5', 12: 'iso-8859-9', 17: 'shift_jis', 106: 'utf-8',
+  2026: 'big5',
 };
 
 /** Decode an SNMP OctetString that holds text */

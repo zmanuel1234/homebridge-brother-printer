@@ -266,7 +266,7 @@ the printer's own maker and model.
 
 The IPP reading is checked against 49 answers recorded from about 44 real printer models:
 Brother, Canon, Epson, HP (inkjets, LaserJets, OfficeJets, PageWide), Kyocera and Samsung
-(see `test/fixtures/ipp`). Report a printer that reads wrong with the probe's output
+(14 of them are kept in `test/fixtures/ipp` as tests). Report a printer that reads wrong with the probe's output
 (`--protocol ipp`).
 
 IPP is on by default on Brother printers (**Network → Protocol → IPP**). The default
