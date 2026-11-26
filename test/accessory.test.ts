@@ -902,6 +902,25 @@ function defineTests(hap: Hap): void {
     assert.equal(low(first.acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
   });
 
+  test('renamed while offline: the sensors still get today\'s names once it answers, in a later run', async () => {
+    const first = setup({ name: 'Old', tonerTile: true, lowTonerSensor: true });
+    first.printer.apply(reading(50));
+    // As 0.9 named them
+    first.acc.getServiceById(S.LightSensor, 'tonerTile')!.setCharacteristic(C.ConfiguredName, 'Old Toner');
+    low(first.acc).setCharacteristic(C.ConfiguredName, 'Old Toner Low');
+    // Renamed; the printer doesn't answer in this run
+    const renamed = setup({ name: 'New', tonerTile: true, lowTonerSensor: true }, first.acc);
+    assert.equal(first.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.Name).value, 'New');
+    assert.equal(renamed.printer.main.getCharacteristic(C.ConfiguredName).value, 'New');
+    assert.equal(first.acc.context.previousName, 'Old');
+    // The next run, the printer answers
+    const later = setup({ name: 'New', tonerTile: true, lowTonerSensor: true }, first.acc);
+    later.printer.apply(reading(50));
+    assert.equal(first.acc.getServiceById(S.LightSensor, 'tonerTile')!.getCharacteristic(C.ConfiguredName).value, 'Toner');
+    assert.equal(low(first.acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+    assert.equal(first.acc.context.previousName, undefined, 'not needed any more');
+  });
+
   test('an inkjet\'s Toner Low sensor becomes Ink Low', () => {
     const { acc, printer } = setup({ lowTonerSensor: true });
     printer.apply(reading(50));
