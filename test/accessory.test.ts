@@ -204,6 +204,33 @@ function defineTests(hap: Hap): void {
     assert.ok(battery(first.acc), 'the battery stays');
   });
 
+  test('IPP in auto: right after a restart IPP doesn\'t raise the battery; a finer-reading low stays low', () => {
+    const sup = (b: number, c: number, cFine = c): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: cFine }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    const first = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    first.printer.apply(sup(60, 5));
+    const again = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 }, first.acc);
+    again.printer.apply(viaIpp({ ...reading(60), drums: {}, parts: {} })); // black only, before SNMP answers
+    assert.equal(battery(first.acc)?.getCharacteristic(C.BatteryLevel).value, 5, 'the cached level stays');
+
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    printer.apply(sup(60, 20, 8)); // cyan low by its finer reading
+    assert.equal(state(acc), OPEN);
+    printer.apply(viaIpp({ ...sup(60, 20), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'not cleared by IPP, which has no finer reading');
+    printer.apply(viaIpp({ ...sup(60, 100), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED, 'a new cartridge clears it');
+  });
+
+  test('IPP in auto: a printer without SNMP levels ignores IPP\'s', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
+    printer.apply(viaIpp({ ...reading(5), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED);
+  });
+
   test('IPP in auto: a drum reading only lowers the drum, and warns once', () => {
     const { acc, printer, lines } = setup({ protocol: 'auto', showDrum: true });
     printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });

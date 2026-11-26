@@ -658,21 +658,31 @@ export class PrinterAccessory {
       // removes and stores nothing, and clears a low warning only when it
       // reports every color SNMP did.
       const known = this.last.supplies || {};
+      // Levels SNMP doesn't report (no-levels printers) aren't taken from IPP either
+      const ipp = this.accessory.context.noLevels ? [] : d.supplies;
       const levels: Partial<Record<Color, number>> = Object.fromEntries(
         Object.entries(known).map(([color, v]) => [color, v.level]));
-      for (const s of d.supplies) { levels[s.color] = s.level; }
+      for (const s of ipp) { levels[s.color] = s.level; }
       const values = Object.values(levels) as number[];
-      const covers = Object.keys(known).length > 0 && Object.keys(known).every((c) => d.supplies.some((s) => s.color === c));
-      const low = flagged || values.some((v) => v <= this.lowToner);
-      if (this.toner && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
-      for (const s of d.supplies) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
+      // Without SNMP's levels since the restart, IPP's alone could show too high a level
+      const haveSnmp = Object.keys(known).length > 0;
+      const covers = haveSnmp && Object.keys(known).every((c) => ipp.some((s) => s.color === c));
+      // SNMP also judges low by its finer reading, which IPP doesn't have: a color
+      // SNMP found low stays low unless IPP's level rose (a new cartridge)
+      const stillLow = (Object.entries(known) as [Color, { level: number; low: boolean }][]).some(([c, v]) => {
+        const now = ipp.find((s) => s.color === c);
+        return v.low && !(now && now.level > v.level);
+      });
+      const low = flagged || stillLow || ipp.some((s) => s.level <= this.lowToner);
+      if (this.toner && haveSnmp && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
+      for (const s of ipp) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
       if (low || covers) {
         this.toner?.updateCharacteristic(C.StatusLowBattery, low
           ? C.StatusLowBattery.BATTERY_LEVEL_LOW : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
         this.lowSensor?.updateCharacteristic(C.ContactSensorState, low
           ? C.ContactSensorState.CONTACT_NOT_DETECTED : C.ContactSensorState.CONTACT_DETECTED);
       }
-      if (d.supplies.length && values.length) { this.logHistory(clamp(Math.min(...values))); }
+      if (ipp.length && haveSnmp) { this.logHistory(clamp(Math.min(...values))); }
       return;
     }
     if (!d.supplies.length || !d.lowestSupply) {
