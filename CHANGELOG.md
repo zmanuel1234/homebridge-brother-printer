@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+- **Pages printed and time left**: once a day the plugin notes the page count and levels.
+  Test connection in the settings shows pages printed in the last 7 and 30 days and how
+  long the toner or ink should last (per color, soonest first); the log has a weekly line
+  with the same, and the low toner warning says how long is left.
+- **Paper trays**: Test connection shows each tray (how full, has paper or empty), and the
+  log names a tray that runs out. Optional `paperTraySensors`: one contact sensor per tray
+  that opens when it's empty. Bypass and manual trays get no sensor or warning.
+- The probe command shows the trays too.
+
 ### Fixed
 - **Inkjets of other makes** read as ink by their model (HP OfficeJet, DeskJet, ENVY; Canon
   PIXMA, MAXIFY, MegaTank; Epson EcoTank, WorkForce, Expression; HP DesignJet…) when their

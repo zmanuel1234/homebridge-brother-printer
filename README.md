@@ -32,6 +32,8 @@ Each printer gets these sensors:
 - **Toner / ink tiles** (optional humidity sensors): the level as a number on its own tile,
   one per color on color printers.
 - **Out of Paper** (optional contact sensor): Opens when a tray is empty.
+- **Paper trays** (optional contact sensors, one per tray: "Printer Tray 1", "Printer Tray 2"…):
+  each opens when that tray is empty. Bypass and manual trays get none.
 - **Maintenance** (optional contact sensor): Opens when the drum, belt, fuser, laser unit,
   paper feed kit, waste ink or toner box, developer or maintenance kit is near end of life.
 - **Online** (optional occupancy sensor): Detected while the printer answers. Home can't
@@ -162,6 +164,7 @@ In `config.json`:
 | `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
 | `faultSensor` | `true` | Add the Printer Problem contact sensor. |
 | `paperSensor` | `false` | Add an Out of Paper contact sensor that opens when a tray is empty. The Problem sensor opens for this too; this one gets its own notification. |
+| `paperTraySensors` | `false` | Add one contact sensor per paper tray that opens when that tray is empty (bypass and manual trays, often empty on purpose, get none). The trays are then read on every poll. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Online occupancy sensor: Detected while the printer answers, Not Detected once it shows as offline. |
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`. |
@@ -216,6 +219,30 @@ one, so they match the printer. A supply counts as low when either reading is at
 
 Printers without level reporting (some older models and ink tank printers) get no
 battery; status, problems and the page count still work.
+
+## Usage and time left
+
+Once a day the plugin notes the page count and the levels (kept with the accessory in
+Homebridge's cache). From these:
+
+- **Test connection** in the settings shows pages printed in the last 7 and 30 days, and
+  how long the toner or ink should last ("Toner: about 6 weeks left"; on color printers,
+  each color, soonest first).
+- Once a week the log has a line with the same: `42 pages printed in the last 7 days.
+  Toner: about 6 weeks left.`
+- The low toner warning says how long is left at the rate it's been going down.
+
+The estimate follows the level since the cartridge was last replaced, so it needs a week
+of readings after a change, and a few % of drop. Pages need a week (or 30 days) of history.
+
+## Paper trays
+
+Printers list their paper trays (over SNMP in the Printer MIB, over IPP in
+`printer-input-tray`). When one runs out, the log names it (`Tray 2 is out of paper.`),
+and **Test connection** shows each tray: how full in % when the printer counts sheets,
+"has paper" or "empty" otherwise. With `paperTraySensors` each tray gets its own sensor.
+Bypass, manual and multipurpose trays (HP's "Tray 1" among them) are listed but get no
+sensor or warning, since they're often empty on purpose.
 
 ## Going offline
 

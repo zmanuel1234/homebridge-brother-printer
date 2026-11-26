@@ -3,6 +3,8 @@ import * as snmp from 'net-snmp';
 import * as decode from './decode';
 import { manufacturerOf, mapMarkers } from './markers';
 import type { Marker } from './markers';
+import { traysFromTable } from './trays';
+import type { Tray } from './trays';
 import type { Color, Drum, Part, PartKey, PrinterError, PrinterType, RawValue, StatusSummary, Supply } from './decode';
 
 export const OID = {
@@ -25,6 +27,9 @@ export const OID = {
 export const SUPPLIES_TABLE = '1.3.6.1.2.1.43.11.1.1'; // prtMarkerSuppliesEntry
 export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantValue
 const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
+/** Printer MIB input table (prtInputEntry): paper trays; max capacity 9, current level 10, name 13 */
+export const INPUT_TABLE = '1.3.6.1.2.1.43.8.2.1';
+const TRAY_COLUMNS = [9, 10, 13];
 /** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
 const SUPPLY_TYPES: Record<number, string> = {
   1: 'other', 2: 'unknown', 3: 'toner', 4: 'waste-toner', 5: 'ink', 6: 'ink-cartridge', 7: 'ink-ribbon', 8: 'waste-ink',
@@ -41,6 +46,8 @@ export type RawReadings = Partial<Record<OidName, RawValue>> & {
   markers?: Marker[];
   /** The supplies table has been read before but couldn't be read this time */
   suppliesUnread?: boolean;
+  /** Printer MIB input table rows, when read */
+  trays?: { oid: string; value: unknown }[];
 };
 export type SnmpVersion = '1' | '2c' | '3';
 
@@ -94,6 +101,11 @@ export interface QueryOptions {
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
   state?: { version?: SnmpVersion; suppliesRead?: boolean };
+  /**
+   * Read the paper trays on every poll (for tray sensors and the settings test).
+   * Without it they're read only while the printer reports paper low or out, to say which tray.
+   */
+  trays?: boolean;
 }
 
 export interface PrinterData extends StatusSummary {
@@ -124,6 +136,8 @@ export interface PrinterData extends StatusSummary {
    * time: supplies, drums and parts are missing from this reading, not gone
    */
   suppliesUnread?: boolean;
+  /** Paper trays, when read; undefined when not read this time */
+  trays?: Tray[];
 }
 
 export interface QueryResult extends PrinterData {
@@ -251,6 +265,19 @@ export async function readSupplies(session: snmp.Session, charset: number | null
   }
 }
 
+/** The paper trays' rows (only the columns used); undefined when they can't be read (never fails the poll) */
+async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
+  try {
+    const rows: { oid: string; value: unknown }[] = [];
+    for (const col of TRAY_COLUMNS) {
+      rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32)).map((vb) => ({ oid: vb.oid, value: vb.value })));
+    }
+    return rows;
+  } catch {
+    return undefined;
+  }
+}
+
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     session.get(oids, (err, varbinds) => (err ? reject(err) : resolve(varbinds || [])));
@@ -291,6 +318,9 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
           const markers = await readSupplies(session, charset, options.state ||= {});
           if (markers) { raw.markers = markers; } else { raw.suppliesUnread = true; }
         }
+        // Paper trays: when asked, or to say which tray is empty or low
+        const paper = decode.decodeErrorState(raw.errorState).some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty');
+        if (options.trays || paper) { raw.trays = await readTrays(session); }
         return raw;
       } catch (err) {
         const e = err as Error | null;
@@ -414,5 +444,6 @@ export function parse(raw: RawReadings): PrinterData {
     drumPagesRemaining: black.pagesRemaining ?? null,
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
+    ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
   };
 }
