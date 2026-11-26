@@ -1,17 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-11-26
+
+Reading over IPP (AirPrint), as an option. SNMP stays the default: with your current
+config 0.7.0 behaves like 0.6.0, apart from the Toner Low sensor on printers without
+levels (below).
 
 ### Added
-- **Reading over IPP (AirPrint)**, as an option (`protocol`): `auto` reads over SNMP as
-  before and over IPP when SNMP doesn't answer; `ipp` uses IPP only, for printers with SNMP
-  turned off. IPP gives the printer's state, problems and the supplies it lists, often
-  without a toner % on Brother lasers. Optional `ippUrl` (default
-  `ipp://<host>:631/ipp/print`; `ipps://` for encryption, with `ippAllowSelfSigned` to accept
-  the printer's self-signed certificate). The probe command takes
-  `--protocol ipp|auto` and `--ipp-url`, and Test connection shows which protocol answered.
-
-SNMP stays the default; with your current config nothing changes.
+- **Reading over IPP (AirPrint)** (`protocol`), for printers with SNMP turned off or models
+  that report no levels over SNMP:
+  - `ipp` reads over IPP only.
+  - `auto` reads over SNMP and carries on over IPP when SNMP doesn't answer. Until SNMP
+    has answered once, IPP readings count in full; after that IPP only fills in: it
+    updates the sensors SNMP set up and can raise low or maintenance warnings, but adds,
+    removes and stores nothing, so a missed SNMP answer doesn't change Home.
+  - IPP gives the printer's state, its problems (paper, jam, cover, toner, drum, waste
+    toner) and the supplies it lists. Many Brother lasers report toner over IPP only as
+    "some remaining", with no %.
+- `ippUrl` (default `ipp://<host>:631/ipp/print`) and, for `ipps://`,
+  `ippAllowSelfSigned` to accept the printer's self-signed certificate (off by default;
+  the certificate is otherwise checked).
+- The probe command takes `--protocol ipp|auto`, `--ipp-url` and `--ipp-self-signed`, and
+  Test connection in the settings shows which protocol answered.
 
 ### Changed
 - Printers that report no toner or ink levels keep the Toner Low sensor (`lowTonerSensor`),
