@@ -181,7 +181,7 @@
               "default": 10,
               "minimum": 0,
               "maximum": 100,
-              "description": "Logs a warning when the drum, belt, fuser, laser unit, paper feed kit or ink waste box reaches this."
+              "description": "Logs a warning when the drum, belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer or maintenance kit reaches this."
             },
             "tonerTile": {
               "title": "Show toner / ink % on tiles",
@@ -193,7 +193,7 @@
               "title": "Maintenance sensor",
               "type": "boolean",
               "default": false,
-              "description": "Adds a contact sensor that opens when the drum or another part (belt, fuser, laser unit, paper feed kit, ink waste box) reaches the parts threshold, so Home can notify it."
+              "description": "Adds a contact sensor that opens when the drum or another part (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) reaches the parts threshold, so Home can notify it."
             },
             "paperSensor": {
               "title": "Out of paper sensor",

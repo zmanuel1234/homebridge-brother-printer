@@ -1,10 +1,10 @@
 /*
- * Finding Brother printers on the local network, for the settings screen.
+ * Finding printers on the local network, for the settings screen.
  *
  * One SNMP v1 GetRequest (sysDescr) is broadcast on every IPv4 network the
  * Homebridge machine is on, the way Brother's own tools find printers. Each
  * device that answers is then read with the plugin's normal query, and the ones
- * that turn out to be Brother printers are returned.
+ * that turn out to be printers are returned: any make, Brother ones read in most detail.
  */
 import dgram from 'node:dgram';
 import os from 'node:os';
@@ -132,7 +132,7 @@ function summary(d: QueryResult): string {
   return d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ');
 }
 
-/** Find Brother printers on the network, sorted by address */
+/** Find printers on the network, sorted by address */
 export async function discover(options: DiscoverOptions = {}): Promise<FoundPrinter[]> {
   const read = options.read ?? query;
   const hosts = await findResponders(options);
@@ -149,8 +149,10 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
       const d = await read({
         host, port: options.port ?? 161, community: options.community || 'public', timeout: 2000, retries: 0,
       });
-      const brother = /brother/i.test(d.model || '') || d.supplies.length > 0 || Object.keys(d.drums).length > 0;
-      if (!brother) { return null; }
+      // Printers have a printer status (Host Resources MIB) or supplies; routers and the like don't
+      const printer = d.printerStatus !== null || d.supplies.length > 0 || Object.keys(d.drums).length > 0
+        || /brother/i.test(d.model || '');
+      if (!printer) { return null; }
       const found: FoundPrinter = {
         host, model: cleanModel(d.model || 'Brother printer'), serial: d.serial, type: d.type, levels: summary(d),
       };

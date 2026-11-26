@@ -113,8 +113,11 @@ test('several blacks: pigment black is the black, whatever the order; a pigment 
   const pigmentCyan = markers(['Black', 'Pigment Cyan', 'Magenta', 'Yellow'], ink(4),
     ['#000000', '#00FFFF', '#FF00FF', '#FFFF00'], [40, 50, 50, 50]);
   assert.equal(levels(pigmentCyan), 'black 40, cyan 50, magenta 50, yellow 50');
-  const three = markers(['Black', 'Black', 'Black'], ink(3), ['#000000', '#000000', '#000000'], [10, 20, 30]);
+  const three = markers(['Black A', 'Black B', 'Black C'], ink(3), ['#000000', '#000000', '#000000'], [10, 20, 30]);
   assert.equal(levels(three), 'black 10, photoBlack 20', 'a third black is left out');
+  const numbered = markers(['Black Toner 1', 'Black Toner 2', 'Cyan Toner'], ['toner', 'toner', 'toner'],
+    ['', '', ''], [90, 30, 50]);
+  assert.equal(levels(numbered), 'black 30, cyan 50', 'two numbered black toners: the lower one');
 });
 
 test('a color drum shared by all colors still counts as the drum', () => {

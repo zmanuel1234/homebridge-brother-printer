@@ -121,7 +121,8 @@ test('IPP mapping: a color printer with levels, parts, printing and a low toner'
   assert.equal(d.lowestSupply?.color, 'magenta');
   assert.equal(d.drums.black?.percent, 80);
   assert.equal(d.parts.belt?.percent, 90);
-  assert.equal(d.parts.inkWasteBox?.percent, 30);
+  assert.equal(d.parts.wasteToner?.percent, 30);
+  assert.equal(d.type, 'laser', 'a waste toner box doesn\'t make it an ink printer');
   assert.equal(d.printing, true);
   assert.deepEqual(d.errors, ['lowToner'], 'a -report reason is information only');
   assert.equal(d.statusText, 'Printing');

@@ -1,5 +1,5 @@
 // The settings screen's printer search and connection test: the broadcast
-// request, picking Brother printers out of the answers, and the UI server
+// request, picking printers out of the answers, and the UI server
 // process as the Homebridge UI runs it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -58,18 +58,21 @@ test('search: a printer with another community doesn\'t answer "public"', async 
   assert.deepEqual(await findResponders({ targets: ['127.0.0.1'], port: 16193, wait: 300, community: 'secret' }), []);
 });
 
-test('search: leaves out devices that aren\'t Brother printers or can\'t be read', async (t) => {
+test('search: finds printers of any make; leaves out other devices and ones it can\'t read', async (t) => {
   const printer = await startFakePrinter(16192);
   t.after(() => printer.close());
-  const notBrother = { ...fromModel('hl-l2340dw'), model: 'HP LaserJet', supplies: [], drums: {} };
+  const notPrinter = { ...fromModel('hl-l2340dw'), model: 'Cisco SG350', printerStatus: null, supplies: [], drums: {}, lowestSupply: null };
   const reads: QueryOptions[] = [];
   const found = await discover({
     targets: ['127.0.0.1'], port: 16192, wait: 300,
-    read: (o) => { reads.push(o); return Promise.resolve(notBrother); },
+    read: (o) => { reads.push(o); return Promise.resolve(notPrinter); },
   });
   assert.deepEqual(found, []);
   assert.equal(reads.length, 1, 'the answering device was read');
   assert.equal(reads[0].community, 'public');
+  const hp = { ...fromModel('hl-l2340dw'), model: 'HP LaserJet Pro M404n' };
+  const foundHp = await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.resolve(hp) });
+  assert.equal(foundHp[0]?.model, 'HP LaserJet Pro M404n');
   const failing = await discover({ targets: ['127.0.0.1'], port: 16192, wait: 300, read: () => Promise.reject(new Error('timeout')) });
   assert.deepEqual(failing, []);
 });

@@ -11,7 +11,8 @@
 
 Shows a Brother laser or inkjet printer in HomeKit: whether it's printing, whether it
 needs attention, and how much toner or ink is left. Everything is read locally over SNMP,
-with no cloud or Brother account.
+with no cloud or Brother account. Printers of other makes work too, from the standard
+data every network printer gives ([below](#other-makes-of-printer)).
 
 Generic AirPrint/IPP plugins see less of a Brother printer: some models report toner only
 as "some remaining", and none of the drum, parts life or page count. Brother's own SNMP
@@ -32,7 +33,7 @@ Each printer gets these sensors:
   one per color on color printers.
 - **Out of Paper** (optional contact sensor): Opens when a tray is empty.
 - **Maintenance** (optional contact sensor): Opens when the drum, belt, fuser, laser unit,
-  paper feed kit or ink waste box is near end of life.
+  paper feed kit, waste ink or toner box, developer or maintenance kit is near end of life.
 - **Online** (optional occupancy sensor): Detected while the printer answers. Home can't
   run automations on No Response, but it can on this, for example to turn off the
   printer's smart plug.
@@ -47,7 +48,7 @@ printer, the difference is in what each can read and show:
 
 | | This plugin | AirPrint (IPP) plugins |
 |---|---|---|
-| Printer brands | Brother; other AirPrint printers over IPP (status, problems, ink and toner) | Most AirPrint printers |
+| Printer brands | Brother in most detail; other makes over SNMP or IPP (status, problems, levels, drums and parts they report) | Most AirPrint printers |
 | Toner / ink level | The % from the printer's web page, plus a finer reading for earlier low alerts | A % on some Brother printers (in 10% steps), only "some remaining" on others |
 | Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Usually not on Brother printers (only parts the printer lists as supplies) |
 | Page count | Yes (in Eve and Controller, not Apple Home) | No |
@@ -71,7 +72,7 @@ AirPrint plugin is the one to use for other brands.
   | Mono laser | MFC-L2750DW, HL-L2340DW, DCP-L2540DN, DCP-7070DW, DCP-1618W | Toner, drum |
   | Color laser | DCP-L3550CDW, DCP-9020CDW | Toner per color, drums, belt, fuser, paper feed kit |
   | Inkjet | MFC-J680DW, MFC-J5110DW, DCP-J132W, DCP-T735DW, MFC-5490CN | Ink per color, ink waste box |
-  | Older / ink tank | HL-2270DW, HL-5350DN, MFC-T910DW | Status, problems, page count; these don't report levels |
+  | Older / ink tank | HL-2270DW, HL-5350DN, MFC-T910DW | Status, problems, page count; no levels in their Brother records (any the printer gives in the standard table are read) |
 
   Other Brother models generally use the same records. Reports, with the probe output
   below, are welcome as a
@@ -94,11 +95,30 @@ npm install -g homebridge-brother-printer
 
 Running it as a child bridge is recommended.
 
+## Other makes of printer
+
+Every network printer also gives standard SNMP data (the Printer MIB): its supplies with
+their levels, drums, waste toner box, fuser, transfer belt, developer and maintenance
+kit. For a printer that isn't a Brother, the plugin reads that, so it works with HP,
+Canon, Epson, Kyocera, Xerox, Ricoh, Lexmark, Konica Minolta, Sharp, OKI, Samsung, Dell
+and others, with the same sensors and settings. Brother printers are read from Brother's
+own records instead, which give a finer toner reading and drum pages left.
+
+What's shown depends on what the printer reports. It was checked against SNMP recordings
+of 26 real printers (HP Color LaserJets, Canon, Dell, Epson, Fujifilm, Konica Minolta,
+OKI, Ricoh, Samsung, Sharp, Utax and Xerox): levels given as a % or as pages, supply names
+in other languages (such as German or Chinese), part numbers instead of names, and two
+black toners. A supply reported only as "some remaining" has no %.
+
+If your printer reads wrong, please open a
+[printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml)
+with the probe's output.
+
 ## Configuration
 
 Set it up in the plugin's settings screen, or in `config.json`.
 
-At the top of the settings screen, **Search for printers** finds Brother printers on your
+At the top of the settings screen, **Search for printers** finds printers on your
 network that have SNMP on, and **Add** fills in a printer's name, address and serial
 number. **Test connection** reads a printer with the settings as entered, before you
 save, and shows its model, status and levels. The search sends one SNMP broadcast on the
@@ -146,7 +166,7 @@ In `config.json`:
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`. |
 | `tonerTile` | `false` | Add humidity sensors showing the toner or ink %, one per color on color printers. They also count in Home's climate summary. |
 | `showDrum` | `false` | Add drum life as a second battery. See below. |
-| `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, ink waste box) at or below which a warning is logged, and the drum battery shows low. |
+| `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the drum battery shows low. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
 
@@ -342,6 +362,11 @@ current/max form. The main codes:
 
 Printing and problem state come from the standard Host Resources MIB (`hrPrinterStatus`,
 `hrPrinterDetectedErrorState`), with the display text as a fallback.
+
+When there are no Brother records with levels, the plugin reads the standard Printer MIB
+supplies table (`prtMarkerSuppliesTable`, RFC 3805): each supply's name, type, level and
+maximum, and its colorant. That's how other makes are read, and older Brother models
+whose records have no levels.
 
 The record codes follow the [brother](https://github.com/bieniu/brother) Python library
 by Maciej Bieniek (Apache-2.0), and the tests use SNMP captures from its test suite.

@@ -131,7 +131,7 @@ const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
   paperFeed1: 'Paper feed kit (tray 1)', paperFeedMP: 'Paper feed kit (MP tray)', inkWasteBox: 'Ink waste box',
-  maintenanceKit: 'Maintenance kit',
+  maintenanceKit: 'Maintenance kit', wasteToner: 'Waste toner box', developer: 'Developer unit',
 };
 
 interface LastSeen {

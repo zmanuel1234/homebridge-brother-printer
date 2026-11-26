@@ -27,7 +27,8 @@ export const COLOR_NAMES: Record<Color, string> = {
   photoBlack: 'Photo Black', gray: 'Gray', lightCyan: 'Light Cyan', lightMagenta: 'Light Magenta', tricolor: 'Tri-color',
 };
 
-export type PartKey = 'belt' | 'fuser' | 'laser' | 'paperFeedMP' | 'paperFeed1' | 'inkWasteBox' | 'maintenanceKit';
+export type PartKey = 'belt' | 'fuser' | 'laser' | 'paperFeedMP' | 'paperFeed1' | 'inkWasteBox' | 'maintenanceKit'
+  | 'wasteToner' | 'developer';
 export type PrinterType = 'laser' | 'ink';
 
 /** Raw SNMP value as net-snmp or a capture gives it */

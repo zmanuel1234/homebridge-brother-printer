@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Printers of other makes over SNMP**: without Brother records with levels, the plugin
+  reads the standard Printer MIB supplies table, so HP, Canon, Epson, Kyocera, Xerox,
+  Ricoh, Konica Minolta, Sharp, OKI, Samsung, Dell and others show their toner or ink per
+  color, drums, waste toner box, fuser, transfer belt, developer and maintenance kit.
+  Checked against SNMP recordings of 26 real printers: levels as % or pages, names in
+  other languages (German, Chinese…), part numbers as names, two black toners. Home shows
+  the printer's own maker and model (also from the device's description when the model is
+  generic or missing). Older Brother models whose records have no levels get the drum (and
+  any levels) from it too.
+- Search for printers finds printers of any make, not only Brother.
 - **IPP: more printers and inks**, checked against 49 answers recorded from about 44 real
   printer models (Brother, Canon, Epson, HP, Kyocera, Samsung):
   - Extra inks get their own tiles: Photo Black, Gray (light black), Light Cyan, Light
