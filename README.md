@@ -138,6 +138,7 @@ In `config.json`:
 | `paperSensor` | `false` | Add an Out of Paper contact sensor that opens when a tray is empty. The Problem sensor opens for this too; this one gets its own notification. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Online occupancy sensor: Detected while the printer answers, Not Detected once it shows as offline. |
+| `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`. |
 | `tonerTile` | `false` | Add humidity sensors showing the toner or ink %, one per color on color printers. They also count in Home's climate summary. |
 | `showDrum` | `false` | Add drum life as a second battery. See below. |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, ink waste box) at or below which a warning is logged, and the drum battery shows low. |
@@ -160,6 +161,24 @@ words them its own way:
   in Home instead, turn on `maintenanceSensor`.
 - The page count is a custom characteristic, visible in Eve, Controller and the Homebridge
   UI, not in Apple Home.
+
+## Eve history
+
+With `eveHistory` and `tonerTile` on, the Eve app shows a graph of the toner or ink level
+over about the last 60 days on the toner / ink tiles: an entry every 10 minutes, and
+whenever the level changes. It's kept in Homebridge's storage folder
+(`homebridge-brother-printer-<id>-history.json`), so it survives restarts and renaming
+the printer.
+
+Eve keeps one history per accessory, so on a color printer each color's tile shows the
+lowest color, like the battery. The page count, printing state and problems aren't
+recorded: Eve has no graph for them on these sensors. Apple's Home app doesn't show
+history.
+
+The history uses [fakegato-history](https://github.com/simont77/fakegato-history), which
+is loaded only when `eveHistory` is on. It brings Google's API client with it: about
+250 MB on disk for everyone who installs the plugin, and with `eveHistory` on, a few
+seconds more when Homebridge starts.
 
 ## Levels and low alerts
 

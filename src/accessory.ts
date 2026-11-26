@@ -5,6 +5,8 @@ import { query } from './snmp';
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from './snmp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
+import { entryDue, startHistory } from './history';
+import type { HistoryEntry, HistoryLog } from './history';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -48,6 +50,7 @@ export interface PrinterConfig {
   maintenanceSensor?: unknown;
   paperSensor?: unknown;
   onlineSensor?: unknown;
+  eveHistory?: unknown;
   offlineAfter?: unknown;
   debug?: unknown;
 }
@@ -108,6 +111,9 @@ const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
   serviceRequested: 'service requested', inputTrayMissing: 'tray missing', outputTrayMissing: 'output tray missing',
   markerSupplyMissing: 'cartridge missing', outputFull: 'output tray full',
 };
+/** fakegato-history's service (Eve's history service) */
+const EVE_HISTORY_SERVICE = 'E863F007-079E-48FF-8F27-9C2605A29F52';
+
 /** What the plugin adds after the printer's name when it names a sensor */
 const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
   ' Out of Paper', ' Online', ' Black', ' Cyan', ' Magenta', ' Yellow']);
@@ -174,6 +180,7 @@ export class PrinterAccessory {
   readonly maintenanceSensor: boolean;
   readonly paperSensor: boolean;
   readonly onlineSensor: boolean;
+  readonly eveHistory: boolean;
   readonly offlineAfter: number;
   readonly debug: boolean;
 
@@ -194,12 +201,17 @@ export class PrinterAccessory {
   maintenance: Service | null = null;
   paper: Service | null = null;
   onlineSvc: Service | null = null;
+  history: HistoryLog | null = null;
+  lastEntry: HistoryEntry | undefined;
+  /** Starts the Eve history; tests pass their own */
+  private readonly startHistory: typeof startHistory;
 
   private readonly query: QueryFn;
 
   constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
-    deps: { query?: QueryFn } = {}) {
+    deps: { query?: QueryFn; startHistory?: typeof startHistory } = {}) {
     this.query = deps.query || query;
+    this.startHistory = deps.startHistory || startHistory;
     this.platform = platform;
     this.log = platform.log;
     this.api = platform.api;
@@ -218,6 +230,7 @@ export class PrinterAccessory {
     this.maintenanceSensor = config.maintenanceSensor === true;
     this.paperSensor = config.paperSensor === true;
     this.onlineSensor = config.onlineSensor === true;
+    this.eveHistory = config.eveHistory === true;
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
@@ -327,6 +340,13 @@ export class PrinterAccessory {
       this.onlineSvc = svc;
     } else {
       this.removeSubtype(S.OccupancySensor, 'online');
+    }
+
+    // Eve history (fakegato's service) is added when the history starts; take
+    // it away when the history is turned off
+    if (!this.eveHistory) {
+      const historySvc = acc.services.find((svc) => svc.UUID === EVE_HISTORY_SERVICE);
+      if (historySvc) { acc.removeService(historySvc); }
     }
 
     // The low toner sensor is created once the printer says toner or ink;
@@ -646,6 +666,7 @@ export class PrinterAccessory {
     for (const s of d.supplies) {
       this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level));
     }
+    this.logHistory(level);
 
     const mono = d.supplies.length === 1;
     const label = (s: Supply): string => (mono ? kind : `${cap(s.color)} ${kind.toLowerCase()}`);
@@ -659,6 +680,34 @@ export class PrinterAccessory {
       }
     }
     this.last.supplies = Object.fromEntries(d.supplies.map((s) => [s.color, { level: s.level, low: isLow(s) }]));
+  }
+
+  /**
+   * Eve history of the toner or ink level (the lowest color), shown on the
+   * toner tiles. Started once the tiles exist, since fakegato looks for them
+   * only when it starts.
+   */
+  logHistory(level: number): void {
+    if (!this.eveHistory) { return; }
+    if (!this.tonerTile) {
+      this.warnOnce('history-tiles', true, 'Eve history needs "Show toner / ink % on tiles" (tonerTile) turned on; '
+        + 'Eve draws it on those tiles.');
+      return;
+    }
+    if (!this.history) {
+      try {
+        this.history = this.startHistory(this.api, this.accessory, { debug: (m: string) => this.log.debug(m) });
+      } catch (err) {
+        this.warnOnce('history-start', true, `Couldn't start the Eve history: ${errorText(err)}`);
+        return;
+      }
+    }
+    const now = Math.round(Date.now() / 1000);
+    if (!entryDue(this.lastEntry, now, level)) { return; }
+    // Until fakegato has read the saved history it drops entries; try again next poll
+    if (this.history.isHistoryLoaded && !this.history.isHistoryLoaded()) { return; }
+    this.lastEntry = { time: now, humidity: level };
+    this.history.addEntry(this.lastEntry);
   }
 
   /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
