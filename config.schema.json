@@ -44,7 +44,7 @@
                 { "title": "SNMP, or IPP (AirPrint) when SNMP doesn't answer", "enum": ["auto"] },
                 { "title": "IPP (AirPrint) only", "enum": ["ipp"] }
               ],
-              "description": "IPP works with SNMP turned off, but gives less: no drum, parts or page count, and on some Brother printers toner only as \"some remaining\", without a %."
+              "description": "IPP works with SNMP turned off, but gives less: toner / ink % and paper trays, but no drum, parts, page count, serial number or status text, and on some Brother printers toner only as \"some remaining\", without a %."
             },
             "ippUrl": {
               "title": "IPP address",
@@ -169,12 +169,6 @@
               "default": false,
               "description": "Adds a contact sensor that opens when toner or ink is low, so Home notifies \"Printer Toner Low opened\" instead of \"battery is low\". Turn on notifications for it in the Home app."
             },
-            "showDrum": {
-              "title": "Show drum life as a second battery",
-              "type": "boolean",
-              "default": false,
-              "description": "Apple's Home app shows only one battery per accessory, and may pick the drum over the toner. Leave off unless you use Eve or another app that shows both."
-            },
             "lowDrumThreshold": {
               "title": "Drum and parts low at (%)",
               "type": "integer",
@@ -185,9 +179,29 @@
             },
             "tonerTile": {
               "title": "Show toner / ink % on tiles",
-              "description": "Adds a humidity sensor whose value is the level: one for a mono printer, one per color for a color printer. They also count in Home's climate summary.",
+              "description": "Adds a sensor whose value is the level: one for a mono printer, one per color for a color printer. HomeKit has no plain % sensor, so Home counts them as the room's humidity (or light level): the room and Home's summary then show the toner level as humidity.",
               "type": "boolean",
               "default": false
+            },
+            "tileType": {
+              "title": "Show the tiles as",
+              "type": "string",
+              "default": "humidity",
+              "oneOf": [
+                { "title": "Humidity sensors (% — needed for Eve history)", "enum": ["humidity"] },
+                { "title": "Light sensors (the level in lux; fewer rooms have one)", "enum": ["light"] }
+              ],
+              "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].tonerTile === true;" }
+            },
+            "printingSensor": {
+              "title": "Show printing as",
+              "type": "string",
+              "default": "occupancy",
+              "oneOf": [
+                { "title": "An occupancy sensor (Detected while printing; the room shows as occupied then)", "enum": ["occupancy"] },
+                { "title": "A contact sensor (open while printing)", "enum": ["contact"] }
+              ],
+              "description": "The printer's own tile. Changing it gives the printer a new tile in Home: automations on the old one need setting up again."
             },
             "maintenanceSensor": {
               "title": "Maintenance sensor",
@@ -208,16 +222,16 @@
               "description": "Adds one contact sensor per paper tray (\"Printer Tray 1\", \"Printer Tray 2\"…) that opens when that tray is empty. Bypass and manual trays, often empty on purpose, get none. The trays are then read on every poll."
             },
             "onlineSensor": {
-              "title": "Online sensor",
+              "title": "Offline sensor",
               "type": "boolean",
               "default": false,
-              "description": "Adds an occupancy sensor that's Detected while the printer answers, for automations such as turning off its smart plug. Unlike the other sensors it doesn't show No Response when the printer is offline."
+              "description": "Adds a contact sensor \"Offline\" that opens when the printer stops answering, for notifications and automations such as turning off its smart plug. Unlike the other sensors it doesn't show No Response when the printer is offline."
             },
             "eveHistory": {
               "title": "Eve history of the toner / ink level",
               "type": "boolean",
               "default": false,
-              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too). On a color printer each tile shows the lowest color. The first time, Homebridge takes a few seconds longer to start."
+              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too, as humidity sensors). On a color printer each tile shows the lowest color. The page count and drum level also show only in Eve, not in Apple's Home app. The first time, Homebridge takes a few seconds longer to start."
             },
             "faultSensor": {
               "title": "Problem sensor",
@@ -262,15 +276,16 @@
               "items": [
                 "printers[].lowTonerThreshold",
                 "printers[].lowTonerSensor",
-                "printers[].showDrum",
                 "printers[].lowDrumThreshold",
                 "printers[].tonerTile",
+                "printers[].tileType",
                 "printers[].eveHistory",
                 "printers[].faultSensor",
                 "printers[].paperSensor",
                 "printers[].paperTraySensors",
                 "printers[].maintenanceSensor",
-                "printers[].onlineSensor"
+                "printers[].onlineSensor",
+                "printers[].printingSensor"
               ]
             },
             {
