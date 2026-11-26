@@ -16,10 +16,13 @@
   v3 is picked, with an optional context name; missing or invalid SNMPv3 settings (including an
   unknown protocol) are reported at startup. The probe
   command takes `--v3 <user>` and the matching options.
-- README: how this plugin compares with AirPrint (IPP) plugins such as homebridge-printer.
-- Issue forms for printer reports (with the probe output) and bugs.
 
 The new sensors are off by default; with your current config nothing changes.
+
+### Changed
+- README: how this plugin compares with AirPrint (IPP) plugins such as
+  @homebridge-plugins/homebridge-printer.
+- Issue forms for printer reports (with the probe output) and bugs.
 
 ## 0.5.2 - 2026-11-26
 

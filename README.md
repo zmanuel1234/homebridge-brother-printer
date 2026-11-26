@@ -41,17 +41,17 @@ While the printer can't be reached, all of them except Online show No Response.
 
 ## Brother plugin or an AirPrint plugin?
 
-[homebridge-printer](https://github.com/homebridge-plugins/homebridge-printer) reads printers
-over AirPrint (IPP) and works with most brands. If you have a Brother printer, the
-difference is in what each can read:
+[@homebridge-plugins/homebridge-printer](https://github.com/homebridge-plugins/homebridge-printer)
+reads printers over AirPrint (IPP) and works with most brands. If you have a Brother
+printer, the difference is in what each can read and show:
 
 | | This plugin (SNMP) | AirPrint (IPP) plugins |
 |---|---|---|
 | Printer brands | Brother only | Most AirPrint printers |
 | Toner / ink level | The exact % from the printer's web page | On many Brother printers only "some remaining", not a % |
-| Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Not available |
-| Page count | Yes | Depends on the printer |
-| Out of paper, jam, cover open | Separate problem codes, with an Out of Paper sensor | General printer state |
+| Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Usually not on Brother printers (only parts the printer lists as supplies) |
+| Page count | Yes (in Eve and Controller, not Apple Home) | No |
+| Out of paper, jam, cover open | A Problem sensor, an optional Out of Paper sensor, and the exact problem in the log | One general fault |
 | Printer turned off or unplugged | Online sensor, and No Response on the rest | Online switch |
 | Works with SNMP turned off | No (SNMP v1, v2c or v3 must be on) | Yes |
 
