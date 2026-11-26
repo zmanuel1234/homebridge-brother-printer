@@ -6,6 +6,7 @@ import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from
 import { readPrinter } from './read';
 import { ippEndpoint } from './ipp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
+import { ALL_COLORS, COLOR_NAMES } from './decode';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 import { entryDue, startHistory } from './history';
 import type { HistoryEntry, HistoryLog } from './history';
@@ -25,6 +26,8 @@ export interface PrinterContext {
   noLevels?: boolean;
   /** The name in the config when the accessory was last set up */
   name?: string;
+  /** As the printer gives it over IPP; Brother otherwise */
+  manufacturer?: string;
   /** The printer has answered SNMP (with protocol auto, IPP then only fills in) */
   snmpAnswered?: boolean;
 }
@@ -105,15 +108,14 @@ const setting = (v: unknown, def: number, min: number, max: number): number => {
   const n = typeof v === 'string' && v.trim() === '' ? NaN : Number(v ?? def);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : def;
 };
-const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const errorText = (err: unknown, stack = false): string => {
   const e = err as { message?: string; stack?: string } | null;
   return (stack && e?.stack) || e?.message || String(err);
 };
 
-const TILE_SUBTYPE: Record<Color, string> = {
-  black: 'tonerTile', cyan: 'tile-cyan', magenta: 'tile-magenta', yellow: 'tile-yellow',
-};
+// Black keeps the subtype it had when there was only one tile
+const TILE_SUBTYPE: Record<Color, string> = Object.fromEntries(
+  ALL_COLORS.map((c) => [c, c === 'black' ? 'tonerTile' : `tile-${c}`])) as Record<Color, string>;
 const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
   noPaper: 'out of paper', noToner: 'toner or ink empty', doorOpen: 'cover open', jammed: 'paper jam',
   serviceRequested: 'service requested', inputTrayMissing: 'tray missing', outputTrayMissing: 'output tray missing',
@@ -124,11 +126,12 @@ const EVE_HISTORY_SERVICE = 'E863F007-079E-48FF-8F27-9C2605A29F52';
 
 /** What the plugin adds after the printer's name when it names a sensor */
 const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
-  ' Out of Paper', ' Online', ' Black', ' Cyan', ' Magenta', ' Yellow']);
+  ' Out of Paper', ' Online', ...Object.values(COLOR_NAMES).map((n) => ` ${n}`)]);
 
 const PART_NAMES: Record<PartKey, string> = {
   belt: 'Belt unit', fuser: 'Fuser unit', laser: 'Laser unit',
   paperFeed1: 'Paper feed kit (tray 1)', paperFeedMP: 'Paper feed kit (MP tray)', inkWasteBox: 'Ink waste box',
+  maintenanceKit: 'Maintenance kit',
 };
 
 interface LastSeen {
@@ -301,7 +304,7 @@ export class PrinterAccessory {
     const acc = this.accessory;
 
     acc.getService(S.AccessoryInformation)!
-      .setCharacteristic(C.Manufacturer, 'Brother')
+      .setCharacteristic(C.Manufacturer, acc.context.manufacturer || 'Brother')
       .setCharacteristic(C.Model, acc.context.model || 'Brother printer')
       .setCharacteristic(C.SerialNumber, acc.context.serial || this.options.host)
       .setCharacteristic(C.FirmwareRevision, version);
@@ -426,7 +429,7 @@ export class PrinterAccessory {
         continue;
       }
       if (existing) { continue; }
-      const name = mono ? `${this.name} ${kind}` : `${this.name} ${cap(color)}`;
+      const name = mono ? `${this.name} ${kind}` : `${this.name} ${COLOR_NAMES[color]}`;
       const svc = this.accessory.addService(S.HumiditySensor, name, subtype);
       this.label(svc, name);
       if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
@@ -744,7 +747,7 @@ export class PrinterAccessory {
     this.logHistory(level);
 
     const mono = d.supplies.length === 1;
-    const label = (s: Supply): string => (mono ? kind : `${cap(s.color)} ${kind.toLowerCase()}`);
+    const label = (s: Supply): string => (mono ? kind : `${COLOR_NAMES[s.color]} ${kind.toLowerCase()}`);
     const prev = this.last.supplies || {};
     for (const s of d.supplies) {
       const was = prev[s.color];
@@ -797,7 +800,7 @@ export class PrinterAccessory {
       due = level <= this.lowDrum;
       // A stand-in reading only lowers the drum or marks it low, never clears it
       if (this.drum && (!standIn || due)) { this.setBattery(this.drum, level, this.lowDrum); }
-      const name = drums.length > 1 ? `${cap(color)} drum` : 'Drum';
+      const name = drums.length > 1 ? `${COLOR_NAMES[color]} drum` : 'Drum';
       if (!standIn || due) {
         this.warnOnce('drum', due, `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
       }
@@ -872,8 +875,11 @@ export class PrinterAccessory {
     if (this.standIn(d)) { return; }
     const ctx = this.accessory.context;
     let changed = false;
-    const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;
+    const maker = d.manufacturer || 'Brother';
+    // The model without the maker's name in front ("EPSON XP-6000 Series" → "XP-6000 Series")
+    const model = d.model ? d.model.replace(new RegExp(`^(?:Brother|${maker.replace(/[^\w-]/g, '\\$&')})\\s+`, 'i'), '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
+    if (d.manufacturer && d.manufacturer !== (ctx.manufacturer || 'Brother')) { ctx.manufacturer = d.manufacturer; changed = true; }
     if (this.configSerial && d.serial && d.serial !== this.configSerial) {
       this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
         + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
@@ -889,6 +895,7 @@ export class PrinterAccessory {
     }
     if (!changed) { return; }
     this.accessory.getService(S.AccessoryInformation)!
+      .updateCharacteristic(C.Manufacturer, ctx.manufacturer || 'Brother')
       .updateCharacteristic(C.Model, ctx.model || 'Brother printer')
       .updateCharacteristic(C.SerialNumber, ctx.serial || this.options.host);
     this.api.updatePlatformAccessories([this.accessory]);

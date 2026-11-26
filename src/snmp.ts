@@ -76,6 +76,8 @@ export interface QueryOptions {
 
 export interface PrinterData extends StatusSummary {
   model: string | null;
+  /** "Brother" over SNMP; over IPP whatever the printer says */
+  manufacturer?: string | null;
   serial: string | null;
   type: PrinterType;
   statusText: string;

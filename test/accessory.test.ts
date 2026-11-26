@@ -5,6 +5,9 @@ import { PrinterAccessory } from '../src/accessory';
 import type { PrinterConfig, PrinterContext, QueryFn } from '../src/accessory';
 import * as snmp from '../src/snmp';
 import { startHistory } from '../src/history';
+import { parseResponse, toPrinterData } from '../src/ipp';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { HistoryEntry } from '../src/history';
 import type { QueryResult } from '../src/snmp';
 import type * as HapNodejs from '@homebridge/hap-nodejs';
@@ -271,6 +274,23 @@ function defineTests(hap: Hap): void {
     assert.equal(acc.context.serial, 'E9');
     assert.equal(battery(acc), undefined, 'no level to show');
     assert.ok(lowSensor(acc), 'the low sensor follows the printer\'s flag');
+  });
+
+  test('IPP from a real Epson XP-6000: photo black gets its own tile; the maker and model show in Home', () => {
+    const epson = toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', 'epson-xp-6000.bin'))).printer);
+    const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true });
+    printer.apply(viaIpp({ ...epson, snmpVersion: null }));
+    const photo = acc.getServiceById(S.HumiditySensor, 'tile-photoBlack');
+    assert.equal(photo?.getCharacteristic(C.ConfiguredName).value, 'Printer Photo Black');
+    assert.equal(photo?.getCharacteristic(C.CurrentRelativeHumidity).value, 27);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile')?.getCharacteristic(C.CurrentRelativeHumidity).value, 64);
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 6, 'the lowest: yellow');
+    const info = acc.getService(S.AccessoryInformation)!;
+    assert.equal(info.getCharacteristic(C.Manufacturer).value, 'Epson');
+    assert.equal(info.getCharacteristic(C.Model).value, 'XP-6000 Series');
+    // Renaming the printer renames the extra tiles too
+    const renamed = setup({ protocol: 'ipp', tonerTile: true, name: 'Studio' }, acc);
+    assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Studio Photo Black');
   });
 
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {

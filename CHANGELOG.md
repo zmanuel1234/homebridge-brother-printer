@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+- **IPP: more printers and inks**, checked against answers recorded from 50 real printers
+  (Brother, Canon, Epson, HP, Kyocera, Samsung):
+  - Extra inks get their own tiles: Photo Black, Gray (light black), Light Cyan, Light
+    Magenta, and HP's Tri-color cartridge. Before, a second black replaced the first, and
+    tri-color cartridges were left out.
+  - Printers that name their cartridges `inkCartridge` (many HP inkjets, some Brother)
+    now show their levels; before they showed none.
+  - Printer colors are matched by name first, then by the nearest color, so other shades
+    (Canon's `#00CFFF` cyan) and Canon's two blacks (pigment PGBK and dye BK) read right.
+  - A maintenance kit counts as a part for the Maintenance sensor.
+  - Home shows the printer's own maker (HP, Epson, Canon…) and model, not "Brother".
+
 ### Changed
 - README and settings: what IPP reports, from a real MFC-L2750DW (toner %, but no drum,
   page count or serial number); fewer Brother printers report only "some remaining" than
