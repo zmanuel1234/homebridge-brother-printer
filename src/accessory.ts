@@ -174,6 +174,8 @@ export class PrinterAccessory {
   readonly maintenanceSensor: boolean;
   readonly paperSensor: boolean;
   readonly onlineSensor: boolean;
+  /** The serial number from the settings, if any */
+  readonly configSerial: string;
   readonly offlineAfter: number;
   readonly debug: boolean;
 
@@ -218,6 +220,7 @@ export class PrinterAccessory {
     this.maintenanceSensor = config.maintenanceSensor === true;
     this.paperSensor = config.paperSensor === true;
     this.onlineSensor = config.onlineSensor === true;
+    this.configSerial = String(config.serial ?? '').trim();
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
@@ -733,6 +736,10 @@ export class PrinterAccessory {
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;
     if (model && model !== ctx.model) { ctx.model = model; changed = true; }
+    if (this.configSerial && d.serial && d.serial !== this.configSerial) {
+      this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
+        + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
+    }
     if (d.serial && d.serial !== ctx.serial) {
       if (ctx.serial) {
         this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `

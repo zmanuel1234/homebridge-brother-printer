@@ -211,6 +211,39 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(calls.registered, []);
   });
 
+  test('a printer that moved keeps its accessory when a different printer (by serial) takes its old address', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    ctx(office).serial = 'S1';
+    const platform = start([{ name: 'Office', host: '10.0.0.20' }, { name: 'Den', host: '10.0.0.10', serial: 'S2' }], [office]);
+    assert.equal(platform.printers.find((p) => p.name === 'Office')?.accessory, office);
+    assert.deepEqual(calls.unregistered, []);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Den']);
+  });
+
+  test('a wrong serial number in the settings doesn\'t replace the accessory', () => {
+    const { calls, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    ctx(office).serial = 'REAL1';
+    const platform = start([{ name: 'Office', host: '10.0.0.10', serial: 'TYPO1' }], [office]);
+    assert.equal(platform.printers[0].accessory, office);
+    assert.deepEqual(calls.registered, []);
+    assert.deepEqual(calls.unregistered, []);
+  });
+
+  test('a printer Home already has that can\'t be set up shows No Response, and stays', async () => {
+    const { calls, lines, start, cachedAccessory } = homebridge();
+    const office = cachedAccessory('Office', '10.0.0.10');
+    start([{ name: 'Office', host: '10.0.0.10' }], [office]); // set it up once, so it has sensors
+    const again = homebridge();
+    again.start([{ name: 'Office', host: '10.0.0.10', snmpVersion: '3' }], [office]); // no SNMPv3 user
+    assert.ok(again.lines.some((l) => l.startsWith('error: [Office] Couldn\'t set up this printer: SNMPv3 needs a user name')));
+    assert.deepEqual(again.calls.unregistered, []);
+    const detected = office.getService(hap!.Service.OccupancySensor)!.getCharacteristic(hap!.Characteristic.OccupancyDetected);
+    await assert.rejects(Promise.resolve().then(() => detected.handleGetRequest()));
+    assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
+  });
+
   test('swapping the names of two printers with serial numbers: each keeps its own accessory', () => {
     const { start, cachedAccessory } = homebridge();
     const a = cachedAccessory('Upstairs', '10.0.0.1');

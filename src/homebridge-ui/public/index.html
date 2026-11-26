@@ -76,7 +76,8 @@
         return;
       }
       out.innerHTML = '<ul class="list-group list-group-flush mb-0">' + found.map((p, i) => {
-        const have = configured.find((c) => (p.serial && c.serial === p.serial) || c.host === p.host);
+        const have = configured.find((c) => (p.serial && String(c.serial || '').trim() === p.serial)
+          || String(c.host || '').trim() === p.host);
         const action = have
           ? `<span class="small text-muted">Already added as “${esc(have.name || 'Printer')}”</span>`
           : `<button type="button" class="btn btn-outline-primary btn-sm" data-add="${i}">Add</button>`;

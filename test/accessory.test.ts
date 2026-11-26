@@ -279,6 +279,13 @@ function defineTests(hap: Hap): void {
     assert.equal(printer.options.v3, undefined);
   });
 
+  test('a serial number in the settings that isn\'t the printer\'s is logged once', () => {
+    const { printer, lines } = setup({ serial: 'TYPO1' });
+    printer.apply({ ...reading(50), serial: 'REAL1' });
+    printer.apply({ ...reading(50), serial: 'REAL1' });
+    assert.equal(lines.filter((l) => l.includes('serial number in the settings (TYPO1) isn\'t this printer\'s (REAL1)')).length, 1);
+  });
+
   test('a different serial number at the same address is logged', () => {
     const { acc, printer, lines } = setup({});
     printer.apply({ ...reading(50), serial: 'E111' });
