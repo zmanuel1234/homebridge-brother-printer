@@ -248,6 +248,27 @@ function defineTests(hap: Hap): void {
     const { acc } = setup({ faultSensor: false });
     assert.equal(problem(acc), undefined);
   });
+  /* ------------------------------------------------------------------ SNMPv3 */
+
+  test('SNMPv3: settings reach the query; defaults are SHA and AES', () => {
+    const { printer } = setup({ snmpVersion: '3', v3User: ' hb ', v3AuthPassword: 'auth-pass', v3PrivPassword: 'priv-pass' });
+    assert.equal(printer.options.version, '3');
+    assert.deepEqual(printer.options.v3, {
+      user: 'hb', authProtocol: 'sha', authPassword: 'auth-pass', privProtocol: 'aes', privPassword: 'priv-pass',
+    });
+  });
+
+  test('SNMPv3: a missing user or short password stops setup with the reason', () => {
+    assert.throws(() => setup({ snmpVersion: '3' }), /user name/);
+    assert.throws(() => setup({ snmpVersion: '3', v3User: 'hb', v3AuthPassword: 'short', v3PrivProtocol: 'none' }), /at least 8/);
+  });
+
+  test('SNMPv3: v3 settings are ignored unless the version is 3', () => {
+    const { printer } = setup({ v3User: 'hb' });
+    assert.equal(printer.options.version, 'auto');
+    assert.equal(printer.options.v3, undefined);
+  });
+
   /* ------------------------------------------------------ optional sensors */
 
   test('new sensors: all off by default', () => {

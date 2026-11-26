@@ -2,7 +2,8 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { query } from './snmp';
-import type { PrinterData, QueryOptions, QueryResult } from './snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, v3User } from './snmp';
+import type { AuthProtocol, PrinterData, PrivProtocol, QueryOptions, QueryResult } from './snmp';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 
 // Resolved from dist/ at runtime, like the published package
@@ -27,6 +28,11 @@ export interface PrinterConfig {
   community?: string;
   port?: unknown;
   snmpVersion?: unknown;
+  v3User?: unknown;
+  v3AuthProtocol?: unknown;
+  v3AuthPassword?: unknown;
+  v3PrivProtocol?: unknown;
+  v3PrivPassword?: unknown;
   pollInterval?: unknown;
   lowTonerThreshold?: unknown;
   lowTonerSensor?: unknown;
@@ -169,9 +175,21 @@ export class PrinterAccessory {
       community: config.community || 'public',
       timeout: 5000,
       retries: 1,
-      version: snmpVersion === '1' || snmpVersion === '2c' ? snmpVersion : 'auto',
+      version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
       state: {},
     };
+    if (this.options.version === '3') {
+      const auth = String(config.v3AuthProtocol ?? 'sha');
+      const priv = String(config.v3PrivProtocol ?? 'aes');
+      this.options.v3 = {
+        user: String(config.v3User ?? '').trim(),
+        authProtocol: (AUTH_PROTOCOLS as readonly string[]).includes(auth) ? auth as AuthProtocol : 'sha',
+        authPassword: String(config.v3AuthPassword ?? ''),
+        privProtocol: (PRIV_PROTOCOLS as readonly string[]).includes(priv) ? priv as PrivProtocol : 'aes',
+        privPassword: String(config.v3PrivPassword ?? ''),
+      };
+      v3User(this.options.v3); // a setting that can't work is reported at startup, not as "can't reach"
+    }
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);

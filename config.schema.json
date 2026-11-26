@@ -62,8 +62,55 @@
                   "enum": [
                     "1"
                   ]
+                },
+                {
+                  "title": "v3 (user name and passwords)",
+                  "enum": [
+                    "3"
+                  ]
                 }
               ]
+            },
+            "v3User": {
+              "title": "SNMPv3 user name",
+              "type": "string",
+              "description": "As set in the printer's web page: Network > Protocol > SNMP."
+            },
+            "v3AuthProtocol": {
+              "title": "SNMPv3 authentication",
+              "type": "string",
+              "default": "sha",
+              "oneOf": [
+                { "title": "None", "enum": ["none"] },
+                { "title": "MD5", "enum": ["md5"] },
+                { "title": "SHA-1", "enum": ["sha"] },
+                { "title": "SHA-224", "enum": ["sha224"] },
+                { "title": "SHA-256", "enum": ["sha256"] },
+                { "title": "SHA-384", "enum": ["sha384"] },
+                { "title": "SHA-512", "enum": ["sha512"] }
+              ]
+            },
+            "v3AuthPassword": {
+              "title": "SNMPv3 authentication password",
+              "type": "string",
+              "description": "At least 8 characters."
+            },
+            "v3PrivProtocol": {
+              "title": "SNMPv3 encryption (privacy)",
+              "type": "string",
+              "default": "aes",
+              "oneOf": [
+                { "title": "None", "enum": ["none"] },
+                { "title": "DES", "enum": ["des"] },
+                { "title": "AES-128", "enum": ["aes"] },
+                { "title": "AES-256 (Blumenthal)", "enum": ["aes256b"] },
+                { "title": "AES-256 (Reeder)", "enum": ["aes256r"] }
+              ]
+            },
+            "v3PrivPassword": {
+              "title": "SNMPv3 encryption password",
+              "type": "string",
+              "description": "At least 8 characters."
             },
             "pollInterval": {
               "title": "Poll every (seconds)",
@@ -187,6 +234,11 @@
                   "type": "number"
                 },
                 "printers[].snmpVersion",
+                { "key": "printers[].v3User", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
+                { "key": "printers[].v3AuthProtocol", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
+                { "key": "printers[].v3AuthPassword", "type": "password", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
+                { "key": "printers[].v3PrivProtocol", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
+                { "key": "printers[].v3PrivPassword", "type": "password", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].snmpVersion === '3';" } },
                 {
                   "key": "printers[].pollInterval",
                   "type": "number"

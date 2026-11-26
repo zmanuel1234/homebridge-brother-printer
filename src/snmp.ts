@@ -20,7 +20,21 @@ export const OID = {
 
 export type OidName = keyof typeof OID;
 export type RawReadings = Partial<Record<OidName, RawValue>>;
-export type SnmpVersion = '1' | '2c';
+export type SnmpVersion = '1' | '2c' | '3';
+
+export const AUTH_PROTOCOLS = ['none', 'md5', 'sha', 'sha224', 'sha256', 'sha384', 'sha512'] as const;
+export const PRIV_PROTOCOLS = ['none', 'des', 'aes', 'aes256b', 'aes256r'] as const;
+export type AuthProtocol = typeof AUTH_PROTOCOLS[number];
+export type PrivProtocol = typeof PRIV_PROTOCOLS[number];
+
+/** SNMPv3 user. The security level follows from which protocols are set. */
+export interface V3User {
+  user: string;
+  authProtocol?: AuthProtocol;
+  authPassword?: string;
+  privProtocol?: PrivProtocol;
+  privPassword?: string;
+}
 
 export interface QueryOptions {
   host: string;
@@ -28,8 +42,10 @@ export interface QueryOptions {
   community?: string;
   timeout?: number;
   retries?: number;
-  /** '2c', '1' or 'auto' (default) */
+  /** '2c', '1', '3' or 'auto' (default: v2c, then v1) */
   version?: SnmpVersion | 'auto';
+  /** Needed for version '3' */
+  v3?: V3User;
   /** Remembers which version worked, across polls */
   state?: { version?: SnmpVersion };
 }
@@ -64,6 +80,30 @@ export interface QueryResult extends PrinterData {
 const NAMES = Object.keys(OID) as OidName[];
 const VERSIONS = { '2c': snmp.Version2c, 1: snmp.Version1 } as const;
 
+/** net-snmp's user for a v3 session; throws on settings that can't work */
+export function v3User(v3: V3User | undefined): snmp.User {
+  if (!v3 || !v3.user) { throw new Error('SNMPv3 needs a user name'); }
+  const auth = v3.authProtocol && v3.authProtocol !== 'none' ? v3.authProtocol : null;
+  const priv = v3.privProtocol && v3.privProtocol !== 'none' ? v3.privProtocol : null;
+  if (priv && !auth) { throw new Error('SNMPv3 encryption (privacy) also needs authentication'); }
+  // Keys shorter than 8 characters are refused by SNMPv3 (RFC 3414)
+  if (auth && (v3.authPassword || '').length < 8) { throw new Error('SNMPv3 authentication password must be at least 8 characters'); }
+  if (priv && (v3.privPassword || '').length < 8) { throw new Error('SNMPv3 privacy password must be at least 8 characters'); }
+  const user: snmp.User = {
+    name: v3.user,
+    level: priv ? snmp.SecurityLevel.authPriv : auth ? snmp.SecurityLevel.authNoPriv : snmp.SecurityLevel.noAuthNoPriv,
+  };
+  if (auth) {
+    user.authProtocol = snmp.AuthProtocols[auth];
+    user.authKey = v3.authPassword;
+  }
+  if (priv) {
+    user.privProtocol = snmp.PrivProtocols[priv];
+    user.privKey = v3.privPassword;
+  }
+  return user;
+}
+
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     session.get(oids, (err, varbinds) => (err ? reject(err) : resolve(varbinds || [])));
@@ -75,13 +115,15 @@ function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
  * request (noSuchName), so that OID is dropped and the request repeated.
  */
 async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawReadings> {
-  const session = snmp.createSession(options.host, options.community || 'public', {
+  const common = {
     port: options.port || 161,
-    version: VERSIONS[version],
     timeout: options.timeout ?? 5000,
     retries: options.retries ?? 1,
-    idBitsSize: 32,
-  });
+    idBitsSize: 32 as const,
+  };
+  const session = version === '3'
+    ? snmp.createV3Session(options.host, v3User(options.v3), { ...common, version: snmp.Version3 })
+    : snmp.createSession(options.host, options.community || 'public', { ...common, version: VERSIONS[version] });
   (session as unknown as EventEmitter).on('error', () => { /* surfaced through the request callback */ });
 
   const names = [...NAMES];
