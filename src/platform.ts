@@ -49,10 +49,14 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
    * settings): show No Response rather than its last values as if they were live.
    */
   showNoResponse(accessory: PlatformAccessory): void {
-    const { Service: S, HapStatusError, HAPStatus } = this.api.hap;
+    const { Characteristic: C, HapStatusError, HAPStatus } = this.api.hap;
+    // Only the readings, as while the printer is offline; names stay readable,
+    // or Home could get blank ones when it reloads the bridge's accessories
+    const readings = new Set([C.OccupancyDetected, C.StatusFault, C.BatteryLevel, C.StatusLowBattery,
+      C.ContactSensorState, C.CurrentRelativeHumidity].map((type) => type.UUID));
     for (const svc of accessory.services) {
-      if (svc.UUID === S.AccessoryInformation.UUID) { continue; }
       for (const ch of svc.characteristics) {
+        if (!readings.has(ch.UUID)) { continue; }
         ch.onGet(() => { throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE); });
       }
     }
@@ -112,6 +116,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     pass((e, a) => ctxName(a) === e.name && a.context.host === e.host);
     pass((e, a) => ctxName(a) === e.name && agrees(e, a) && !heldByAddress(e, a));
     pass((e, a) => a.context.host === e.host && agrees(e, a));
+    // Last, a name match that gave way above to a printer that then matched
+    // something else (two printers moved at once)
+    pass((e, a) => ctxName(a) === e.name && agrees(e, a));
 
     const active = new Set<string>();
     for (const e of entries) {
