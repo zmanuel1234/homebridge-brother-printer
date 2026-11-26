@@ -19,12 +19,16 @@ export interface PrinterContext {
   kind?: Kind;
   /** The printer reported no supply levels last time */
   noLevels?: boolean;
+  /** The name in the config when the accessory was last set up */
+  name?: string;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
 export interface PrinterConfig {
   name: string;
   host: string;
+  /** Printer serial number, filled in by the settings screen's search */
+  serial?: unknown;
   community?: string;
   port?: unknown;
   snmpVersion?: unknown;
@@ -117,6 +121,36 @@ interface LastSeen {
   warned?: Record<string, boolean>;
 }
 
+/**
+ * How to reach a printer, from its config entry. Throws on SNMPv3 settings that
+ * can't work, so they're reported at startup rather than as "can't reach".
+ * The settings screen's connection test uses this too.
+ */
+export function queryOptions(config: PrinterConfig): QueryOptions & { host: string } {
+  const snmpVersion = String(config.snmpVersion);
+  const options: QueryOptions & { host: string } = {
+    host: String(config.host).trim(),
+    port: setting(config.port, 161, 1, 65535),
+    community: config.community || 'public',
+    timeout: 5000,
+    retries: 1,
+    version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
+    state: {},
+  };
+  if (options.version === '3') {
+    options.v3 = {
+      user: String(config.v3User ?? '').trim(),
+      authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
+      authPassword: String(config.v3AuthPassword ?? ''),
+      privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
+      privPassword: String(config.v3PrivPassword ?? ''),
+      context: String(config.v3Context ?? '').trim(),
+    };
+    v3User(options.v3);
+  }
+  return options;
+}
+
 export class PrinterAccessory {
   readonly platform: PrinterHost;
   readonly log: Logging;
@@ -169,27 +203,7 @@ export class PrinterAccessory {
     this.accessory = accessory;
     this.name = config.name;
 
-    const snmpVersion = String(config.snmpVersion);
-    this.options = {
-      host: config.host,
-      port: setting(config.port, 161, 1, 65535),
-      community: config.community || 'public',
-      timeout: 5000,
-      retries: 1,
-      version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
-      state: {},
-    };
-    if (this.options.version === '3') {
-      this.options.v3 = {
-        user: String(config.v3User ?? '').trim(),
-        authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
-        authPassword: String(config.v3AuthPassword ?? ''),
-        privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
-        privPassword: String(config.v3PrivPassword ?? ''),
-        context: String(config.v3Context ?? '').trim(),
-      };
-      v3User(this.options.v3); // a setting that can't work is reported at startup, not as "can't reach"
-    }
+    this.options = queryOptions(config);
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
@@ -203,12 +217,37 @@ export class PrinterAccessory {
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
+    this.renameFrom(accessory.context.name ?? accessory.displayName);
     this.buildServices();
     this.guardReads();
     void this.poll();
   }
 
   /* ------------------------------------------------------------ services */
+
+  /**
+   * After the printer is renamed in the config, rename its sensors in Home to
+   * match, except ones the user renamed in the Home app.
+   */
+  renameFrom(old: string | undefined): void {
+    const acc = this.accessory;
+    if (old && old !== this.name) {
+      const C = this.hap.Characteristic;
+      for (const svc of acc.services) {
+        for (const type of [C.Name, C.ConfiguredName]) {
+          if (!svc.testCharacteristic(type)) { continue; }
+          const value = svc.getCharacteristic(type).value;
+          if (typeof value === 'string' && (value === old || value.startsWith(`${old} `))) {
+            svc.updateCharacteristic(type, this.name + value.slice(old.length));
+          }
+        }
+      }
+      const named = acc as unknown as { updateDisplayName?: (name: string) => void };
+      if (typeof named.updateDisplayName === 'function') { named.updateDisplayName(this.name); }
+      this.log.info(`[${this.name}] Renamed from "${old}"; it keeps its room, automations and notifications in Home.`);
+    }
+    acc.context.name = this.name;
+  }
 
   buildServices(): void {
     const { Service: S, Characteristic: C } = this.hap;

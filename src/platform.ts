@@ -49,6 +49,14 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     const printers: unknown = this.config.printers;
     const entries = Array.isArray(printers) ? (printers as (PrinterEntry | null | undefined)[]) : [];
     const active = new Set<string>();
+    const named = new Set<string>();
+    const nameUuid = (name: string): string => this.api.hap.uuid.generate(`${PLUGIN_NAME}:${name}`);
+
+    // Accessories that some printer in the config still has by name aren't
+    // available to a renamed one.
+    const byName = new Set(entries
+      .filter((e) => e && String(e.host || '').trim())
+      .map((e) => nameUuid(String(e!.name || 'Printer').trim())));
 
     entries.forEach((rawEntry, idx) => {
       if (!rawEntry || !String(rawEntry.host || '').trim()) {
@@ -60,18 +68,28 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       }
       const host = String(rawEntry.host).trim();
       const name = String(rawEntry.name || 'Printer').trim();
-      const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${name}`);
-      if (active.has(uuid)) {
+      const serial = String(rawEntry.serial ?? '').trim();
+      const uuid = nameUuid(name);
+      if (named.has(uuid)) {
         this.log.warn(`Two printers are named "${name}". Give each a unique name; skipping the second.`);
         return;
       }
-      active.add(uuid);
+      named.add(uuid);
 
+      // By name; or, after a rename, the accessory of the same printer: the same
+      // serial number, or else the same address (unless both serials are known
+      // and differ). It keeps its room, automations and notifications in Home.
       let accessory = this.cached.get(uuid);
+      if (!accessory) {
+        const free = [...this.cached.values()].filter((a) => !active.has(a.UUID) && !byName.has(a.UUID));
+        accessory = (serial && free.find((a) => a.context.serial === serial))
+          || free.find((a) => a.context.host === host && !(serial && a.context.serial && a.context.serial !== serial));
+      }
       const isNew = !accessory;
       if (!accessory) {
         accessory = new this.api.platformAccessory<PrinterContext>(name, uuid, this.api.hap.Categories.SENSOR);
       }
+      active.add(accessory.UUID);
       accessory.context.host = host;
 
       try {
