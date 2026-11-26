@@ -15,7 +15,7 @@ import type { QueryOptions } from '../snmp';
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
                              [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
-       brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>]
+       brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>] [--ipp-self-signed yes]
 SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
 --auth none needs --priv none too. Passwords given as options are saved in your shell
 history and visible in the process list; to avoid that, set the environment variables
@@ -39,7 +39,7 @@ for (let i = 0; i < args.length; i++) {
   flags[a.slice(2)] = value;
   i++;
 }
-const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass', 'context', 'protocol', 'ipp-url'];
+const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass', 'context', 'protocol', 'ipp-url', 'ipp-self-signed'];
 const unknown = Object.keys(flags).find((k) => !known.includes(k));
 if (unknown) { fail(`Unknown option --${unknown}.\n${USAGE}`); }
 
@@ -67,7 +67,7 @@ if (flags.v3 !== undefined) {
   } catch (err) {
     fail(`${(err as Error).message}.\n${USAGE}`);
   }
-} else if (Object.keys(flags).some((k) => !['protocol', 'ipp-url'].includes(k))) {
+} else if (Object.keys(flags).some((k) => !['protocol', 'ipp-url', 'ipp-self-signed'].includes(k))) {
   fail(`--auth, --priv and their passwords need --v3 <user>.\n${USAGE}`);
 }
 
@@ -84,6 +84,10 @@ if (flags['ipp-url'] !== undefined) {
     fail(`--ipp-url "${flags['ipp-url']}" isn't an IPP address; use the form ipp://<printer>:631/ipp/print.`);
   }
   options.ippUrl = flags['ipp-url'];
+}
+if (flags['ipp-self-signed'] !== undefined) {
+  if (!['yes', 'no'].includes(flags['ipp-self-signed'])) { fail('--ipp-self-signed takes yes or no.'); }
+  options.ippAllowSelfSigned = flags['ipp-self-signed'] === 'yes';
 }
 
 readPrinter(options)

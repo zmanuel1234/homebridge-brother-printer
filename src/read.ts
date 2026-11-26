@@ -13,7 +13,11 @@ export function defaultIppUrl(host: string): string {
 }
 
 export async function readIpp(options: QueryOptions): Promise<QueryResult> {
-  const data = await ippQuery({ url: options.ippUrl || defaultIppUrl(options.host), timeout: options.timeout ?? 5000 });
+  const data = await ippQuery({
+    url: options.ippUrl || defaultIppUrl(options.host),
+    timeout: options.timeout ?? 5000,
+    allowSelfSigned: options.ippAllowSelfSigned === true,
+  });
   return { ...data, snmpVersion: null, via: 'ipp' };
 }
 

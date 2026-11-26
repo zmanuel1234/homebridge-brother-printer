@@ -286,6 +286,12 @@ export interface IppOptions {
   /** ipp://, ipps://, http:// or https:// address of the printer's IPP service */
   url: string;
   timeout?: number;
+  /**
+   * For ipps:// / https://: accept a certificate that can't be verified, such as
+   * the printer's own self-signed one. Off by default: then a device posing as
+   * the printer can't read or answer the request.
+   */
+  allowSelfSigned?: boolean;
 }
 
 /** The HTTP address for an IPP printer URI, and the URI to put in the request */
@@ -318,8 +324,8 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
       method: 'POST',
       headers: { 'Content-Type': 'application/ipp', 'Content-Length': body.length },
       timeout,
-      // Printers use self-signed certificates; on the local network that's normal
-      rejectUnauthorized: false,
+      // Only when the user turns it on (ippAllowSelfSigned): printers' own certificates are self-signed
+      rejectUnauthorized: options.allowSelfSigned !== true,
     }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -342,7 +348,13 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
       res.on('error', reject);
     });
     req.on('timeout', () => req.destroy(new Error('Request timed out')));
-    req.on('error', reject);
+    req.on('error', (err: Error & { code?: string }) => {
+      const certificate = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/.test(err.code || '');
+      reject(certificate && options.allowSelfSigned !== true
+        ? new Error(`The printer's certificate can't be verified (${err.code}); if it's the printer's own self-signed `
+          + 'one, turn on "Accept the printer\'s self-signed certificate" (ippAllowSelfSigned), or use ipp://', { cause: err })
+        : err);
+    });
     req.end(body);
   });
 }

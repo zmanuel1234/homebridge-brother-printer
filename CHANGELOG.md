@@ -7,7 +7,8 @@
   before and over IPP when SNMP doesn't answer; `ipp` uses IPP only, for printers with SNMP
   turned off. IPP gives the printer's state, problems and the supplies it lists, often
   without a toner % on Brother lasers. Optional `ippUrl` (default
-  `ipp://<host>:631/ipp/print`; `ipps://` for encryption). The probe command takes
+  `ipp://<host>:631/ipp/print`; `ipps://` for encryption, with `ippAllowSelfSigned` to accept
+  the printer's self-signed certificate). The probe command takes
   `--protocol ipp|auto` and `--ipp-url`, and Test connection shows which protocol answered.
 
 SNMP stays the default; with your current config nothing changes.

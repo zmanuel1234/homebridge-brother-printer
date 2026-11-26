@@ -52,6 +52,12 @@
               "placeholder": "ipp://10.0.4.150:631/ipp/print",
               "description": "Leave empty for ipp://<address>:631/ipp/print, which Brother printers use. ipps:// for an encrypted connection."
             },
+            "ippAllowSelfSigned": {
+              "title": "Accept the printer's self-signed certificate (ipps://)",
+              "type": "boolean",
+              "default": false,
+              "description": "Brother printers' own certificates are self-signed, so ipps:// fails without this. With it on, the connection is encrypted but not verified: another device on your network could pose as the printer. ipp:// doesn't need it."
+            },
             "community": {
               "title": "SNMP community",
               "type": "string",
@@ -268,6 +274,7 @@
                 "printers[].serial",
                 "printers[].protocol",
                 { "key": "printers[].ippUrl", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].protocol && model.printers[arrayIndices].protocol !== 'snmp';" } },
+                { "key": "printers[].ippAllowSelfSigned", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].protocol && model.printers[arrayIndices].protocol !== 'snmp';" } },
                 "printers[].community",
                 {
                   "key": "printers[].port",

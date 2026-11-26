@@ -3,6 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import https from 'node:https';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { TAG, getPrinterAttributes, ippEndpoint, ippMessage, ippQuery, parseResponse, reasonErrors, toPrinterData } from '../src/ipp';
 import type { IppAttribute, IppAttributes } from '../src/ipp';
@@ -249,6 +254,40 @@ test('IPP: a reply that trickles in still times out', async (t) => {
   const started = Date.now();
   await assert.rejects(ippQuery({ url: `ipp://127.0.0.1:${port}/ipp/print`, timeout: 300 }), /timed out/);
   assert.ok(Date.now() - started < 2000);
+});
+
+/** A self-signed certificate made for the test (nothing secret is committed) */
+function selfSigned(): { key: Buffer; cert: Buffer } | null {
+  const dir = mkdtempSync(join(tmpdir(), 'bp-cert-'));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1',
+      '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem')], { stdio: 'ignore' });
+    return { key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')) };
+  } catch {
+    return null;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const tls = selfSigned();
+
+test('IPP over ipps: a self-signed certificate is refused unless allowed', { skip: tls ? false : 'openssl not available' }, async (t) => {
+  const server = https.createServer(tls!, (req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/ipp' });
+      res.end(response(MONO, 0, Buffer.concat(chunks).readUInt32BE(4)));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = `ipps://127.0.0.1:${(server.address() as AddressInfo).port}/ipp/print`;
+  await assert.rejects(ippQuery({ url }), /certificate can't be verified .*ippAllowSelfSigned/);
+  const d = await ippQuery({ url, allowSelfSigned: true });
+  assert.equal(d.model, 'Brother MFC-L2750DW series');
+  assert.equal(queryOptions({ name: 'P', host: 'h', protocol: 'ipp', ippAllowSelfSigned: true }).ippAllowSelfSigned, true);
+  assert.equal(queryOptions({ name: 'P', host: 'h', ippAllowSelfSigned: true }).ippAllowSelfSigned, undefined, 'unused with SNMP');
 });
 
 test('IPP: a reply for another request is refused', async (t) => {

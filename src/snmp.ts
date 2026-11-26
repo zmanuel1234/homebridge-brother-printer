@@ -60,6 +60,8 @@ export interface QueryOptions {
   protocol?: ReadProtocol;
   /** IPP address; the default is ipp://<host>:631/ipp/print */
   ippUrl?: string;
+  /** Over ipps://, accept a certificate that can't be verified (the printer's self-signed one) */
+  ippAllowSelfSigned?: boolean;
   port?: number;
   community?: string;
   timeout?: number;

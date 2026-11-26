@@ -41,6 +41,7 @@ export interface PrinterConfig {
   /** 'snmp' (default), 'ipp' or 'auto' */
   protocol?: unknown;
   ippUrl?: unknown;
+  ippAllowSelfSigned?: unknown;
   v3User?: unknown;
   v3AuthProtocol?: unknown;
   v3AuthPassword?: unknown;
@@ -165,6 +166,7 @@ export function queryOptions(config: PrinterConfig): QueryOptions & { host: stri
     }
     options.ippUrl = ippUrl;
   }
+  if (options.protocol !== 'snmp' && config.ippAllowSelfSigned === true) { options.ippAllowSelfSigned = true; }
   // SNMPv3 settings only matter when SNMP is used
   if (options.version === '3' && options.protocol !== 'ipp') {
     options.v3 = {

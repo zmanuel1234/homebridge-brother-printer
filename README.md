@@ -128,6 +128,7 @@ In `config.json`:
 | `port` | `161` | SNMP port. |
 | `protocol` | `snmp` | How to read the printer: `snmp`; `auto` (SNMP, and IPP when SNMP doesn't answer); or `ipp` (IPP only). See [Reading over IPP](#reading-over-ipp-airprint). |
 | `ippUrl` | | IPP address, for `auto` and `ipp`. Empty means `ipp://<host>:631/ipp/print`, which Brother printers use; `ipps://` for an encrypted connection. |
+| `ippAllowSelfSigned` | `false` | With an `ipps://` address, accept the printer's self-signed certificate (below). |
 | `snmpVersion` | `auto` | `auto` tries v2c, then v1. Set `1` for older printers that only answer v1, or `3` for SNMPv3 (below). |
 | `v3User` | | SNMPv3 user name. Used only with `snmpVersion` `3`. |
 | `v3AuthProtocol` | `sha` | SNMPv3 authentication: `none`, `md5`, `sha` (SHA-1), `sha224`, `sha256`, `sha384` or `sha512`. `none` needs `v3PrivProtocol` `none` too. |
@@ -235,8 +236,12 @@ the printer's own low-toner flag still opens the Toner Low sensor (`lowTonerSens
 is logged. Drum and parts appear only if the printer lists them
 as supplies, and the page count only if it reports `printer-impressions-completed`.
 
-IPP is on by default on Brother printers (**Network → Protocol → IPP**). With an `ipps://`
-address the connection is encrypted; the printer's self-signed certificate is accepted.
+IPP is on by default on Brother printers (**Network → Protocol → IPP**). The default
+`ipp://` address isn't encrypted, like SNMP v1/v2c. With an `ipps://` address the
+connection is encrypted and the certificate is checked; Brother printers' own
+certificates are self-signed, so that fails unless you install a trusted certificate on
+the printer or turn on `ippAllowSelfSigned`. With that on the connection is still
+encrypted, but not verified: another device on your network could pose as the printer.
 **Search for printers** in the settings still uses SNMP; enter an IPP-only printer by
 hand and check it with **Test connection**.
 
