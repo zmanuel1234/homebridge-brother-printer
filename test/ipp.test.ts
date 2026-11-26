@@ -154,6 +154,41 @@ test('IPP: addresses', () => {
   assert.throws(() => ippEndpoint('ftp://10.0.0.5/'), /Not an IPP address/);
   assert.equal(defaultIppUrl('10.0.0.5'), 'ipp://10.0.0.5:631/ipp/print');
   assert.equal(defaultIppUrl('fe80::1'), 'ipp://[fe80::1]:631/ipp/print');
+  // IPv6: URL keeps the brackets in hostname, so they aren't added twice
+  assert.equal(ippEndpoint(defaultIppUrl('fe80::1')).http.href, 'http://[fe80::1]:631/ipp/print');
+  assert.equal(ippEndpoint('ipp://[fe80::1]:631/ipp/print').uri, 'ipp://[fe80::1]:631/ipp/print');
+  assert.equal(ippEndpoint(defaultIppUrl('[fe80::1]')).http.hostname, '[fe80::1]');
+});
+
+test('IPP mapping: information-only reasons don\'t open the Problem sensor', () => {
+  const d = toPrinterData(attributes([enm('printer-state', 3), kw('printer-state-reasons', 'cover-open-report')]));
+  assert.equal(d.fault, false);
+  assert.equal(d.statusText, '');
+});
+
+test('IPP mapping: drum and waste toner end of life', () => {
+  assert.deepEqual(reasonErrors(['opc-life-over-error', 'marker-waste-almost-full-warning']), ['serviceRequested', 'overduePreventMaint']);
+  assert.equal(toPrinterData(attributes([enm('printer-state', 5), kw('printer-state-reasons', 'opc-life-over')])).fault, true);
+});
+
+test('IPP mapping: device ID fields are matched whole', () => {
+  const d = toPrinterData(attributes([txt('printer-device-id', 'MFG:Brother;ISN:WRONG;XMDL:WRONG;MDL:HL-L2340DW;SN:E1;')]));
+  assert.equal(d.serial, 'E1');
+  assert.equal(d.model, 'HL-L2340DW');
+});
+
+test('IPP mapping: a single toner without a color is black; missing values keep levels in step', () => {
+  const r = toPrinterData(attributes([
+    nam('marker-names', 'Toner'), kw('marker-types', 'toner'), int('marker-levels', 70),
+  ]));
+  assert.deepEqual(r.supplies.map((s) => [s.color, s.level]), [['black', 70]]);
+  // An out-of-band "unknown" (0x12) in marker-levels keeps the next level on the next marker
+  const buf = response([nam('marker-names', 'Cyan Toner', 'Magenta Toner'), kw('marker-types', 'toner', 'toner')]);
+  const levels = Buffer.concat([Buffer.from([0x12, 0, 13]), Buffer.from('marker-levels'), Buffer.from([0, 0]),
+    Buffer.from([TAG.integer, 0, 0, 0, 4]), Buffer.from([0, 0, 0, 33])]);
+  const parsed = parseResponse(Buffer.concat([buf.subarray(0, buf.length - 1), levels, Buffer.from([TAG.end])]));
+  assert.deepEqual(parsed.printer['marker-levels'], [null, 33]);
+  assert.deepEqual(toPrinterData(parsed.printer).supplies.map((s) => [s.color, s.level]), [['magenta', 33]]);
 });
 
 /* ---------------------------------------------------------- over the wire */
@@ -191,12 +226,35 @@ test('IPP: reads a printer over HTTP, sending its URI', async (t) => {
 
 test('IPP: HTTP errors, refused requests and timeouts reject', async (t) => {
   const notFound = await fakeIppPrinter(() => ({ status: 404, body: Buffer.from('nope') }));
-  const refused = await fakeIppPrinter(() => ({ body: response([], 0x0400) }));
+  const refused = await fakeIppPrinter((body) => ({ body: response([], 0x0400, body.readUInt32BE(4)) }));
   const silent = await fakeIppPrinter(() => null);
   t.after(() => { notFound.close(); refused.close(); silent.close(); });
   await assert.rejects(ippQuery({ url: notFound.url }), /HTTP 404/);
   await assert.rejects(ippQuery({ url: refused.url }), /refused \(status 0x0400\)/);
   await assert.rejects(ippQuery({ url: silent.url, timeout: 300 }), /timed out/);
+});
+
+test('IPP: a reply that trickles in still times out', async (t) => {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/ipp' });
+      const timer = setInterval(() => res.write(Buffer.from([0])), 100);
+      res.on('close', () => clearInterval(timer));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { port } = server.address() as AddressInfo;
+  const started = Date.now();
+  await assert.rejects(ippQuery({ url: `ipp://127.0.0.1:${port}/ipp/print`, timeout: 300 }), /timed out/);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('IPP: a reply for another request is refused', async (t) => {
+  const printer = await fakeIppPrinter((body) => ({ body: response(MONO, 0, body.readUInt32BE(4) + 1) }));
+  t.after(() => printer.close());
+  await assert.rejects(ippQuery({ url: printer.url }), /another request/);
 });
 
 test('reading: IPP only, SNMP only, and auto falling back to IPP', async (t) => {
@@ -206,14 +264,9 @@ test('reading: IPP only, SNMP only, and auto falling back to IPP', async (t) => 
   assert.equal(viaIpp.via, 'ipp');
   assert.equal(viaIpp.snmpVersion, null);
 
-  // No SNMP agent on this port: auto falls back to IPP and remembers it
-  const state: { protocol?: 'snmp' | 'ipp' } = {};
-  const auto = await readPrinter({ host: '127.0.0.1', port: 16195, timeout: 300, retries: 0, protocol: 'auto', ippUrl: ipp.url, state });
+  // No SNMP agent on this port: auto falls back to IPP
+  const auto = await readPrinter({ host: '127.0.0.1', port: 16195, timeout: 300, retries: 0, protocol: 'auto', ippUrl: ipp.url, state: {} });
   assert.equal(auto.via, 'ipp');
-  assert.equal(state.protocol, 'ipp');
-  const before = ipp.requests.length;
-  await readPrinter({ host: '127.0.0.1', port: 16195, timeout: 300, retries: 0, protocol: 'auto', ippUrl: ipp.url, state });
-  assert.equal(ipp.requests.length, before + 1, 'IPP is tried first next time');
 
   // With SNMP answering, auto uses SNMP
   const snmpPrinter = await startFakePrinter(16196);

@@ -25,18 +25,15 @@ export async function readPrinter(options: QueryOptions): Promise<QueryResult> {
   if (protocol === 'ipp') { return readIpp(options); }
   if (protocol === 'snmp') { return query(options); }
 
-  // auto: start with whichever worked last time (SNMP at first)
-  const state = (options.state ||= {});
-  const order: ('snmp' | 'ipp')[] = state.protocol === 'ipp' ? ['ipp', 'snmp'] : ['snmp', 'ipp'];
-  const failures: string[] = [];
-  for (const p of order) {
+  // auto: SNMP on every poll, since it has the most detail; IPP only when SNMP
+  // doesn't answer, so one lost packet doesn't change what Home shows for long
+  try {
+    return await query(options);
+  } catch (snmpErr) {
     try {
-      const result = p === 'ipp' ? await readIpp(options) : await query(options);
-      state.protocol = p;
-      return result;
-    } catch (err) {
-      failures.push(`${p === 'ipp' ? 'IPP' : 'SNMP'}: ${message(err)}`);
+      return await readIpp(options);
+    } catch (ippErr) {
+      throw new Error(`SNMP: ${message(snmpErr)}; IPP: ${message(ippErr)}`, { cause: ippErr });
     }
   }
-  throw new Error(failures.join('; '));
 }

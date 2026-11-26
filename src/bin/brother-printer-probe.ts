@@ -9,6 +9,7 @@
 
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from '../snmp';
 import { readPrinter } from '../read';
+import { ippEndpoint } from '../ipp';
 import type { QueryOptions } from '../snmp';
 
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
@@ -49,6 +50,7 @@ if (!host) { fail(USAGE); }
 
 const options: QueryOptions = { host, port: Number(port) || 161, community };
 if (flags.v3 !== undefined) {
+  if (flags.protocol === 'ipp') { fail('--v3 is for SNMP; leave it out with --protocol ipp.'); }
   if (!flags.v3 || flags.v3.startsWith('-')) { fail(`--v3 needs a user name.\n${USAGE}`); }
   if (positional.length > 1) { fail('A community string is for SNMP v1/v2c; leave it out with --v3.'); }
   options.version = '3';
@@ -75,6 +77,11 @@ if (flags.protocol !== undefined) {
 }
 if (flags['ipp-url'] !== undefined) {
   if (!options.protocol || options.protocol === 'snmp') { fail('--ipp-url needs --protocol ipp or auto.'); }
+  try {
+    ippEndpoint(flags['ipp-url']);
+  } catch {
+    fail(`--ipp-url "${flags['ipp-url']}" isn't an IPP address; use the form ipp://<printer>:631/ipp/print.`);
+  }
   options.ippUrl = flags['ipp-url'];
 }
 
@@ -85,7 +92,8 @@ readPrinter(options)
   .catch((err: unknown) => {
     const e = err as { message?: string } | null;
     console.error(`Couldn't read ${host}: ${e?.message || String(err)}`);
-    console.error(`Check the address, and that ${options.protocol === 'ipp' ? 'IPP' : 'SNMP'} is enabled on the printer (Network > Protocol).`);
+    const what = options.protocol === 'ipp' ? 'IPP' : options.protocol === 'auto' ? 'SNMP or IPP' : 'SNMP';
+    console.error(`Check the address, and that ${what} is enabled on the printer (Network > Protocol).`);
     if (options.version === '3') { console.error('For SNMPv3, also check the user name, protocols and passwords.'); }
     process.exit(1);
   });

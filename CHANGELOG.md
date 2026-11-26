@@ -12,6 +12,10 @@
 
 SNMP stays the default; with your current config nothing changes.
 
+### Changed
+- Printers that report no toner or ink levels keep the Toner Low sensor (`lowTonerSensor`),
+  which now follows the printer's own low flag; before, it was removed.
+
 ## 0.6.0 - 2026-11-26
 
 New optional sensors, SNMPv3, a printer search in the settings screen, and Eve history.

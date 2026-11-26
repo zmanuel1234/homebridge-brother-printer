@@ -22,7 +22,7 @@ export const TAG = {
   text: 0x41, name: 0x42, keyword: 0x44, uri: 0x45, charset: 0x47, language: 0x48, memberName: 0x4a,
 } as const;
 
-export type IppValue = string | number | boolean;
+export type IppValue = string | number | boolean | null;
 export type IppAttributes = Record<string, IppValue[]>;
 
 /** One attribute for an IPP message: a value tag, a name and its values */
@@ -97,6 +97,7 @@ export interface IppResponse {
 /** Decode an IPP response. Throws on a message that's cut short or malformed. */
 export function parseResponse(buf: Buffer): IppResponse {
   if (buf.length < 9) { throw new Error('IPP response too short'); }
+  if (buf[0] < 1 || buf[0] > 2) { throw new Error(`Not an IPP response (version ${buf[0]}.${buf[1]})`); }
   const status = buf.readUInt16BE(2);
   const requestId = buf.readUInt32BE(4);
   const printer: IppAttributes = {};
@@ -138,7 +139,9 @@ export function parseResponse(buf: Buffer): IppResponse {
     } else if (tag >= 0x40) {
       value = data.toString('utf8');
     } else {
-      continue; // dates, resolutions, ranges: not used
+      // unknown / no-value, dates, resolutions, ranges: kept as a gap, so that
+      // marker-levels stays in step with marker-names
+      value = null;
     }
     (printer[last] ||= []).push(value);
   }
@@ -153,12 +156,18 @@ const REASONS: Record<string, PrinterError> = {
   'toner-low': 'lowToner', 'marker-supply-low': 'lowToner', 'ink-low': 'lowToner',
   'toner-empty': 'noToner', 'marker-supply-empty': 'noToner', 'ink-empty': 'noToner',
   'door-open': 'doorOpen', 'cover-open': 'doorOpen', 'interlock-open': 'doorOpen',
-  'media-jam': 'jammed', 'jam': 'jammed',
+  'media-jam': 'jammed',
   'input-tray-missing': 'inputTrayMissing', 'output-tray-missing': 'outputTrayMissing',
   'output-area-full': 'outputFull', 'output-area-almost-full': 'outputNearFull',
   'marker-supply-missing': 'markerSupplyMissing', 'toner-missing': 'markerSupplyMissing',
   'ink-missing': 'markerSupplyMissing', 'offline': 'offline', 'shutdown': 'offline',
   'service-needed': 'serviceRequested',
+  // Drum, developer, fuser and waste toner (PWG 5100.9): end of life stops the
+  // printer; near it is a warning
+  'opc-life-over': 'serviceRequested', 'developer-empty': 'serviceRequested', 'fuser-over-temp': 'serviceRequested',
+  'fuser-under-temp': 'serviceRequested', 'marker-waste-full': 'serviceRequested',
+  'opc-near-eol': 'overduePreventMaint', 'marker-waste-almost-full': 'overduePreventMaint',
+  'developer-low': 'overduePreventMaint',
 };
 
 /** A reason keyword without its severity suffix; "-report" ones are information only */
@@ -195,33 +204,40 @@ function partKey(name: string, type: string): PartKey | null {
 
 /** The printer's IPP attributes as the plugin's readings */
 export function toPrinterData(a: IppAttributes): PrinterData {
-  const str = (k: string): string => (a[k]?.[0] !== undefined ? String(a[k][0]) : '');
+  const str = (k: string): string => (a[k]?.[0] !== undefined && a[k][0] !== null ? String(a[k][0]) : '');
   const num = (k: string, i: number): number | null => (typeof a[k]?.[i] === 'number' ? a[k][i] as number : null);
 
   const deviceId = str('printer-device-id');
-  const model = str('printer-make-and-model') || (/(?:MDL|MODEL):([^;]+)/i.exec(deviceId)?.[1] ?? '').trim();
-  const serial = str('printer-serial-number') || (/(?:SN|SERN):([^;]+)/i.exec(deviceId)?.[1] ?? '').trim() || null;
+  const field = (re: RegExp): string => (re.exec(deviceId)?.[1] ?? '').trim();
+  const model = str('printer-make-and-model') || field(/(?:^|;)\s*(?:MDL|MODEL):([^;]+)/i);
+  const serial = str('printer-serial-number') || field(/(?:^|;)\s*(?:SN|SERN):([^;]+)/i) || null;
   const errors = reasonErrors(a['printer-state-reasons'] || []);
   const state = num('printer-state', 0); // 3 idle, 4 processing, 5 stopped
   // As hrPrinterStatus, which the status logic understands: 3 idle, 4 printing, 1 other
   const printerStatus = state === 3 ? 3 : state === 4 ? 4 : state === 5 ? 1 : null;
-  const reasons = (a['printer-state-reasons'] || []).map(String).filter((r) => r !== 'none');
+  // Information-only reasons ("-report") stay out of the text the status logic also reads
+  const reasons = (a['printer-state-reasons'] || []).map(String).filter((r) => r !== 'none' && !r.endsWith('-report'));
   const statusText = str('printer-state-message') || reasons.join(', ');
 
   const supplies: Supply[] = [];
   const drums: Partial<Record<Color, Drum>> = {};
   const parts: Partial<Record<PartKey, Part>> = {};
   const names = (a['marker-names'] || []).map(String);
+  const types = names.map((_, i) => String(a['marker-types']?.[i] ?? '').toLowerCase());
+  const isSupply = (type: string, name: string): boolean =>
+    /^(toner|ink|ink-cartridge|toner-cartridge|solid-wax|ribbon-wax)$/.test(type) || (type === '' && /toner|ink/i.test(name));
+  // A printer with one toner and no color for it is a mono printer: black
+  const onlyOne = names.filter((n, i) => isSupply(types[i], n)).length === 1;
   let ink = false;
   names.forEach((name, i) => {
-    const type = String(a['marker-types']?.[i] ?? '').toLowerCase();
+    const type = types[i];
     const level = num('marker-levels', i);
     const high = num('marker-high-levels', i) ?? 100;
     // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
     const percent = level !== null && level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(level * 100 / high))) : null;
     if (/ink/.test(type)) { ink = true; }
-    const color = markerColor(name, String(a['marker-colors']?.[i] ?? ''));
-    if (/^(toner|ink|ink-cartridge|toner-cartridge|solid-wax|ribbon-wax)$/.test(type) || (type === '' && /toner|ink/i.test(name))) {
+    const color = markerColor(name, String(a['marker-colors']?.[i] ?? '')) ?? (onlyOne && isSupply(type, name) ? 'black' : null);
+    if (isSupply(type, name)) {
       if (percent !== null && color && !supplies.some((s) => s.color === color)) { supplies.push({ color, level: percent, fine: null }); }
       return;
     }
@@ -276,7 +292,8 @@ export function ippEndpoint(url: string): { http: URL; uri: string } {
   const secure = u.protocol === 'ipps:' || u.protocol === 'https:';
   if (!['ipp:', 'ipps:', 'http:', 'https:'].includes(u.protocol)) { throw new Error(`Not an IPP address: ${url}`); }
   const port = u.port || (u.protocol === 'ipp:' || u.protocol === 'ipps:' ? '631' : '');
-  const target = new URL(`${secure ? 'https' : 'http'}://${u.hostname.includes(':') ? `[${u.hostname}]` : u.hostname}${port ? `:${port}` : ''}${u.pathname}${u.search}`);
+  // hostname keeps an IPv6 address's brackets
+  const target = new URL(`${secure ? 'https' : 'http'}://${u.hostname}${port ? `:${port}` : ''}${u.pathname}${u.search}`);
   const uri = `${secure ? 'ipps' : 'ipp'}://${target.host}${target.pathname}`;
   return { http: target, uri };
 }
@@ -290,6 +307,11 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
   const lib = target.protocol === 'https:' ? https : http;
 
   return new Promise((resolve, reject) => {
+    // An overall deadline: the socket timeout alone doesn't end a reply that trickles in
+    const deadline = setTimeout(() => req.destroy(new Error('Request timed out')), timeout * 2);
+    const settle = <T>(fn: (v: T) => void) => (v: T): void => { clearTimeout(deadline); fn(v); };
+    resolve = settle(resolve);
+    reject = settle(reject);
     const req = lib.request(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/ipp', 'Content-Length': body.length },
@@ -308,6 +330,7 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
         if (res.statusCode !== 200) { reject(new Error(`IPP request failed: HTTP ${res.statusCode}`)); return; }
         try {
           const r = parseResponse(Buffer.concat(chunks));
+          if (r.requestId !== requestId) { reject(new Error('IPP response is for another request')); return; }
           if (r.status > 0x00ff) { reject(new Error(`IPP request refused (status 0x${r.status.toString(16).padStart(4, '0')})`)); return; }
           resolve(toPrinterData(r.printer));
         } catch (err) {

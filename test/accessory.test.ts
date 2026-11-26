@@ -127,12 +127,48 @@ function defineTests(hap: Hap): void {
     assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Printer Ink Low');
   });
 
-  test('low toner sensor: left out on printers that report no levels', () => {
+  test('low toner sensor: without levels it follows the printer\'s own low flag', () => {
     const { acc, printer } = setup({ lowTonerSensor: true });
-    printer.apply(reading(50));
-    assert.ok(lowSensor(acc));
     printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
-    assert.equal(lowSensor(acc), undefined);
+    assert.equal(state(acc), CLOSED);
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null, errors: ['lowToner'] });
+    assert.equal(state(acc), OPEN);
+  });
+
+  /* ------------------------------------------------------------------- IPP */
+
+  const viaIpp = (d: QueryResult): QueryResult => ({ ...d, via: 'ipp', snmpVersion: null });
+  const noLevels = (extra: Partial<QueryResult> = {}): QueryResult =>
+    viaIpp({ ...reading(50), supplies: [], lowestSupply: null, drums: {}, parts: {}, serial: 'IPP-FORMAT', ...extra });
+
+  test('IPP in auto: standing in for SNMP keeps its battery, drum, maintenance and serial', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, maintenanceSensor: true, showDrum: true });
+    printer.apply({ ...reading(40), serial: 'E111', drums: { black: { percent: 5 } } });
+    const maintenance = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+
+    printer.apply(noLevels());
+    assert.ok(battery(acc), 'the toner battery stays');
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 40, 'with SNMP\'s level');
+    assert.equal(acc.context.noLevels, false);
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN, 'not reset');
+    assert.equal(acc.context.serial, 'E111', 'SNMP\'s serial number stays');
+    assert.equal(state(acc), CLOSED);
+
+    printer.apply(noLevels({ errors: ['lowToner'] }));
+    assert.equal(state(acc), OPEN, 'the printer\'s low flag still shows');
+    assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+  });
+
+  test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
+    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
+    printer.apply(viaIpp(reading(50)));
+    assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
+    printer.apply(noLevels());
+    assert.equal(battery(acc), undefined);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'no stale tile');
+    printer.apply(noLevels({ errors: ['lowToner'] }));
+    assert.equal(state(acc), OPEN);
   });
 
   test('low toner sensor: kept across restarts, removed when turned off', () => {

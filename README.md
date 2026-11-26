@@ -207,6 +207,10 @@ If the printer hasn't answered since Homebridge started and `snmpVersion` is `au
 poll tries v2c and then v1, so the timeout counts twice (about 20 s per poll). Once it has
 answered, the version that worked is used.
 
+Over IPP the timeout is 5 s, so with `protocol: ipp` it's `pollInterval` + 5 s per failed
+poll. With `protocol: auto` a poll tries SNMP and then IPP, so a failed one takes the SNMP
+time plus 5 s.
+
 Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 
 ## Reading over IPP (AirPrint)
@@ -215,14 +219,16 @@ SNMP gives the most: Brother's own records with the exact toner or ink %, drum a
 life, and the page count. For a printer with SNMP turned off, or a model that reports no
 levels over SNMP, set `protocol`:
 
-- `auto`: SNMP as usual, and IPP when SNMP doesn't answer. It then tries IPP first until
-  IPP stops answering.
-- `ipp`: IPP only (the SNMP settings aren't used).
+- `auto`: SNMP on every poll, and IPP when SNMP doesn't answer. A reading over IPP then
+  only adds to what SNMP showed: it doesn't remove the battery, reset the drum or parts,
+  or change the serial number, so a missed SNMP answer doesn't change Home.
+- `ipp`: IPP only (the SNMP settings, including SNMPv3, aren't used).
 
 Over IPP the plugin reads the printer's state, its problems (paper, jam, cover, toner)
 and the supplies it lists. What that includes depends on the printer: many Brother lasers
-report toner only as "some remaining", with no %, and then there's no battery or tile,
-though low toner is still flagged. Drum and parts appear only if the printer lists them
+report toner only as "some remaining", with no %, and then there's no battery or tile;
+the printer's own low-toner flag still opens the Toner Low sensor (`lowTonerSensor`) and
+is logged. Drum and parts appear only if the printer lists them
 as supplies, and the page count only if it reports `printer-impressions-completed`.
 
 IPP is on by default on Brother printers (**Network → Protocol → IPP**). With an `ipps://`
@@ -235,6 +241,8 @@ Check what your printer reports over IPP with:
 ```bash
 npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --protocol ipp
 ```
+
+(A `:port` after the address is the SNMP port; for another IPP port use `--ipp-url`.)
 
 ## SNMPv3
 

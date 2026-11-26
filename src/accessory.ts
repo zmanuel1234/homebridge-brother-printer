@@ -639,7 +639,17 @@ export class PrinterAccessory {
   applySupplies(d: PrinterData): void {
     const C = this.hap.Characteristic;
     const kind: Kind = d.type === 'ink' ? 'Ink' : 'Toner';
+    const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
 
+    if ((!d.supplies.length || !d.lowestSupply) && this.standIn(d)) {
+      // IPP standing in for SNMP gave no levels: keep what SNMP showed, and
+      // only raise a low flag the printer reports
+      if (flagged) {
+        this.toner?.updateCharacteristic(C.StatusLowBattery, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+        this.lowSensor?.updateCharacteristic(C.ContactSensorState, C.ContactSensorState.CONTACT_NOT_DETECTED);
+      }
+      return;
+    }
     if (!d.supplies.length || !d.lowestSupply) {
       // Some models (e.g. ink tank printers) report no levels at all
       this.remember({ noLevels: true });
@@ -651,7 +661,13 @@ export class PrinterAccessory {
         this.guarded = this.guarded.filter((ch) => !toner.characteristics.includes(ch));
         this.toner = null;
       }
-      this.removeLowSensor();
+      this.ensureTiles(d); // tiles for levels no longer reported go too
+      // The printer's own low flag still works without levels
+      this.ensureLowSensor(kind);
+      this.lowSensor?.updateCharacteristic(C.ContactSensorState, flagged
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
+      this.warnOnce('flagged-no-levels', flagged, `The printer reports ${kind.toLowerCase()} low.`);
       return;
     }
     let toner = this.toner;
@@ -665,7 +681,6 @@ export class PrinterAccessory {
     this.renameBattery(toner, kind);
     this.remember({ noLevels: false, kind });
 
-    const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
     const isLow = (s: Supply): boolean => s.level <= this.lowToner || (s.fine !== null && s.fine <= this.lowToner);
     const low = d.supplies.filter(isLow);
     const level = clamp(d.lowestSupply.level);
@@ -732,6 +747,8 @@ export class PrinterAccessory {
 
   /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
   applyDrumAndParts(d: PrinterData): void {
+    // IPP standing in for SNMP without drum or parts readings: keep what SNMP showed
+    if (this.standIn(d) && !Object.keys(d.drums).length && !Object.keys(d.parts).length) { return; }
     let due = false;
     const drums = (Object.entries(d.drums) as [Color, { percent?: number; pagesRemaining?: number }][])
       .filter((e): e is [Color, { percent: number; pagesRemaining?: number }] => typeof e[1].percent === 'number');
@@ -796,8 +813,19 @@ export class PrinterAccessory {
       : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
   }
 
+  /**
+   * A reading over IPP while the plugin is set to auto: IPP stands in for SNMP
+   * until SNMP answers again, so it only adds to what SNMP showed and doesn't
+   * remove sensors, reset readings or change the serial number.
+   */
+  standIn(d: PrinterData): boolean {
+    return this.options.protocol === 'auto' && (d as QueryResult).via === 'ipp';
+  }
+
   updateInfo(d: PrinterData): void {
     const { Service: S, Characteristic: C } = this.hap;
+    // IPP may format the model and serial number differently; SNMP's stay
+    if (this.standIn(d)) { return; }
     const ctx = this.accessory.context;
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;

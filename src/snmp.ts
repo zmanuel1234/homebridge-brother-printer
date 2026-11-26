@@ -68,8 +68,8 @@ export interface QueryOptions {
   version?: SnmpVersion | 'auto';
   /** Needed for version '3' */
   v3?: V3User;
-  /** Remembers which version (and, with protocol auto, which protocol) worked, across polls */
-  state?: { version?: SnmpVersion; protocol?: 'snmp' | 'ipp' };
+  /** Remembers which SNMP version worked, across polls */
+  state?: { version?: SnmpVersion };
 }
 
 export interface PrinterData extends StatusSummary {
