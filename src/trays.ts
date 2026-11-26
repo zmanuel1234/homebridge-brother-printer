@@ -54,11 +54,9 @@ const keyOf = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g
 export interface TrayInfo {
   /** prtInputType: 5 sheetFeedManual; over IPP type=sheetFeedManual */
   manual?: boolean;
-  /** prtInputType 3 / IPP sheetFeedAutoRemovableTray: a cassette, never a bypass tray */
-  removable?: boolean;
   /**
    * prtInputStatus / IPP status= (a SubUnitStatus): the low three bits say whether the
-   * tray is available; 1 "on request" is a manual feed, 5 unknown
+   * tray is available; 5 is unknown
    */
   status?: number | null;
 }
@@ -83,8 +81,9 @@ export function toTray(rawName: string, level: number | null, max: number | null
     state = percent !== null && percent <= LOW_TRAY_PERCENT ? 'low' : 'ok';
   }
   const capacity = max !== null && max > 0 ? max : null;
-  // "On request" is how HP marks its bypass tray; a removable cassette is never one
-  const secondary = SECONDARY.test(name) || capacity === 1 || info.manual === true || (availability === 1 && info.removable !== true);
+  // Only what doesn't change with the paper in it: name, size, a manual-feed type. (Not the
+  // status: HP marks its bypass tray "on request", and a printer may mark an empty cassette so too.)
+  const secondary = SECONDARY.test(name) || capacity === 1 || info.manual === true;
   return { name, key: keyOf(name), percent, state, capacity, secondary };
 }
 
@@ -120,7 +119,7 @@ export function traysFromTable(rows: { oid: string; value: unknown }[], table: s
     // Names may end in NULs or other control characters
     // eslint-disable-next-line no-control-regex
     .map(([, row], i) => toTray((row.name ?? '').replace(/[\u0000-\u001f]+/g, ' '), row.level ?? null, row.max ?? null, i + 1,
-      { manual: row.type === 5, removable: row.type === 3, status: row.status ?? null }))
+      { manual: row.type === 5, status: row.status ?? null }))
     .filter((t): t is Tray => t !== null));
 }
 
@@ -137,7 +136,7 @@ export function traysFromIpp(values: unknown[]): Tray[] {
     }));
     const num = (k: string): number | null => (fields[k] !== undefined && fields[k] !== '' && Number.isFinite(Number(fields[k])) ? Number(fields[k]) : null);
     return toTray(fields.name ?? '', num('level'), num('maxcapacity'), i + 1,
-      { manual: /^sheetfeedmanual$/i.test(fields.type ?? ''), removable: /^sheetfeedautoremovabletray$/i.test(fields.type ?? ''), status: num('status') });
+      { manual: /^sheetfeedmanual$/i.test(fields.type ?? ''), status: num('status') });
   }).filter((t): t is Tray => t !== null));
 }
 

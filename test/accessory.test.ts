@@ -413,9 +413,12 @@ function defineTests(hap: Hap): void {
     const { acc, printer } = setup({ paperTraySensors: true });
     await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'ok')] });
     const svc = acc.getServiceById(S.ContactSensor, 'tray-tray-2');
+    const lines: string[] = [];
+    (printer.log as unknown as { warn: (m: string) => void }).warn = (m) => lines.push(m);
     await pollWith(printer, { ...reading(50), trays: [tray('Tray 2', 'empty', true)] });
     assert.equal(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), svc, 'the same sensor');
     assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    assert.ok(lines.some((l) => /Tray 2 is out of paper/.test(l)), 'and the warning');
   });
 
   test('paper trays: with tray sensors, a failed tray read doesn\'t repeat the warning', async () => {
