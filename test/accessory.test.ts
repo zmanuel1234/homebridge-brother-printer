@@ -303,6 +303,23 @@ function defineTests(hap: Hap): void {
     assert.equal(fresh.printer.options.state?.suppliesRead, false);
   });
 
+  test('supplies that couldn\'t be read this time: online, last levels, drum and sensors kept', async () => {
+    const { acc, printer } = setup({ lowTonerSensor: true, maintenanceSensor: true, tonerTile: true });
+    await pollWith(printer, { ...reading(8), drums: { black: { percent: 5 } }, drumPercent: 5 });
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 8);
+    assert.equal(state(acc), OPEN);
+    const maint = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(maint?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    // The printer answers, but its supplies table doesn't
+    await pollWith(printer, { ...reading(8), supplies: [], lowestSupply: null, drums: {}, drumPercent: null, suppliesUnread: true });
+    assert.equal(printer.online, true);
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 8, 'the battery stays, with its level');
+    assert.equal(state(acc), OPEN, 'still low');
+    assert.equal(maint?.getCharacteristic(C.ContactSensorState).value, OPEN, 'the drum is still due');
+    assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'), 'the tile stays');
+    assert.equal(acc.context.noLevels, false, 'not taken for a printer without levels');
+  });
+
   test('a printer whose maker can\'t be named shows as "Printer", never Brother', () => {
     const { acc, printer } = setup({});
     printer.apply({ ...reading(50), model: null, manufacturer: null });

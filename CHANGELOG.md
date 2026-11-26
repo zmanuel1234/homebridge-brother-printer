@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Inkjets of other makes** read as ink by their model (HP OfficeJet, DeskJet, ENVY; Canon
+  PIXMA, MAXIFY, MegaTank; Epson EcoTank, WorkForce, Expression…) when their supplies
+  don't say so, so the battery and low sensor are named Ink, not Toner.
+- **Kyocera, Utax and Triumph-Adler** toners named only by part number (TK-5240K, CK-5512M,
+  PK-5015Y) get their color from the last letter; before, only a mono printer's showed.
+- **Drums and waste toner boxes in % with an unknown maximum** (Sharp) show their level when
+  the printer's other supplies count to 100; before, they showed nothing.
+- A printer whose supplies table stops answering, while everything else does, **stays
+  online** and keeps its last levels, drum and sensors; before, every poll failed and it
+  showed as offline.
+
 ## 0.8.1 - 2026-11-26
 
 The settings screen follows the Homebridge UI's theme. No change to how printers are read.

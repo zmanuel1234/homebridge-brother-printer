@@ -147,21 +147,85 @@ function fakeSession(answer: (oid: string) => snmpLib.Varbind[] | Error): snmpLi
   } as unknown as snmpLib.Session;
 }
 
-test('Printer MIB: a walk that fails partway is a failed poll once the table has been read before', async () => {
+test('Printer MIB: a walk that fails once the table has been read before gives unknown supplies, not none', async () => {
   const ok = (oid: string): snmpLib.Varbind[] => (oid.endsWith('.6') ? [{ oid: `${oid}.1.1`, type: 4, value: Buffer.from('Black Toner') }]
     : oid.endsWith('.9') ? [{ oid: `${oid}.1.1`, type: 2, value: 50 }] : oid.endsWith('.8') ? [{ oid: `${oid}.1.1`, type: 2, value: 100 }] : []);
   const state: { suppliesRead?: boolean } = {};
   // Never read before: a failure means no table
   assert.deepEqual(await readSupplies(fakeSession(() => new Error('Request timed out')), null, state), []);
-  assert.equal((await readSupplies(fakeSession(ok), null, state))[0].level, 50);
+  assert.equal((await readSupplies(fakeSession(ok), null, state))?.[0].level, 50);
   assert.equal(state.suppliesRead, true);
   // Read before: a lost packet mid-walk must not look like "no supplies"
-  await assert.rejects(readSupplies(fakeSession((oid) => (oid.endsWith('.9') ? new Error('Request timed out') : ok(oid))), null, state),
-    /timed out/);
+  assert.equal(await readSupplies(fakeSession((oid) => (oid.endsWith('.9') ? new Error('Request timed out') : ok(oid))), null, state), null);
   // The colorant walk too, when supplies take their colors from it
   const withColorant = (oid: string): snmpLib.Varbind[] | Error => (oid.endsWith('.3') ? [{ oid: `${oid}.1.1`, type: 2, value: 1 }]
     : oid.startsWith(COLORANT_VALUES) ? new Error('Request timed out') : ok(oid));
-  await assert.rejects(readSupplies(fakeSession(withColorant), null, state), /timed out/);
+  assert.equal(await readSupplies(fakeSession(withColorant), null, state), null);
+  // Such a reading says so, and carries no supplies, drums or parts
+  const d = parse({ model: Buffer.from('HP Color LaserJet M452nw'), printerStatus: 3, suppliesUnread: true });
+  assert.equal(d.suppliesUnread, true);
+  assert.deepEqual([d.supplies, d.drums, d.parts], [[], {}, {}]);
+  assert.equal(parse({ model: Buffer.from('HP Color LaserJet M452nw') }).suppliesUnread, undefined);
+});
+
+test('Printer MIB: levels in % with an unknown maximum (Sharp drums and waste toner)', () => {
+  // SHARP MX-M266NV: the toner counts to 100, the drum and developer give % but no maximum
+  const d = reading([
+    { name: 'Black Toner', type: 'toner', colors: '', level: 75, high: 100 },
+    { name: 'Waste Toner', type: 'waste-toner', colors: '', level: 100, high: -2 },
+    { name: 'Black Photoconductive Drum', type: 'opc', colors: '', level: 9, high: -2 },
+    { name: 'Black Developer', type: 'developer', colors: '', level: 9, high: -2 },
+    { name: 'Fusing Unit', type: 'fuser', colors: '', level: -2, high: -2 },
+  ], { model: Buffer.from('SHARP MX-M266NV') });
+  assert.equal(levels(d), 'black 75');
+  assert.deepEqual(d.drums, { black: { percent: 9 } });
+  assert.deepEqual(d.parts, { wasteToner: { percent: 100 }, developer: { percent: 9 } }, 'the fuser reports no level');
+  // A printer that counts in pages: an unknown maximum stays unknown
+  const pages = reading([
+    { name: 'Black Toner', type: 'toner', colors: '', level: 5300, high: 6000 },
+    { name: 'Drum', type: 'opc', colors: '', level: 40, high: -2 },
+  ]);
+  assert.deepEqual(pages.drums, {});
+});
+
+test('Printer MIB: Kyocera, Utax and Triumph-Adler toners named by part number get their color', () => {
+  const d = reading([
+    { name: 'TK-5240K', type: 'toner', colors: '', level: 4000, high: 4000 },
+    { name: 'TK-5240C', type: 'toner', colors: '', level: 1500, high: 3000 },
+    { name: 'TK-5240M', type: 'toner', colors: '', level: 2700, high: 3000 },
+    { name: 'TK-5240Y', type: 'toner', colors: '', level: 300, high: 3000 },
+    { name: 'Waste Toner Box', type: 'waste-toner', colors: '', level: -3, high: -2 },
+  ], { model: Buffer.from('ECOSYS M5526cdw') });
+  assert.equal(levels(d), 'black 100, cyan 50, magenta 90, yellow 10');
+  assert.equal(d.manufacturer, 'Kyocera');
+  const utax = reading([
+    { name: 'CK-5512K', type: 'toner', colors: '', level: 50, high: 100 },
+    { name: 'PK-5015Y', type: 'toner', colors: '', level: 20, high: 100 },
+  ]);
+  assert.equal(levels(utax), 'black 50, yellow 20');
+  // Other part numbers aren't read as colors: HP's CF410A, a Kyocera kit MK-5140
+  const hp = reading([
+    { name: 'CF413A', type: 'toner', colors: '', level: 50, high: 100 },
+    { name: 'CF412A', type: 'toner', colors: '', level: 60, high: 100 },
+    { name: 'MK-5140', type: 'other', colors: '', level: 90, high: 100 },
+  ]);
+  assert.equal(levels(hp), '');
+});
+
+test('Printer MIB: inkjets of other makes read as ink, by their model, when their supplies don\'t say', () => {
+  // Supplies typed "other" and named without "ink" (HP inkjets over SNMP)
+  const markers = [{ name: 'Black Cartridge HP 63', type: 'other', colors: '', level: 40, high: 100 }];
+  for (const model of ['HP OfficeJet Pro 9015e', 'HP DeskJet 2700 series', 'HP ENVY 6000 series', 'Canon PIXMA TS5350',
+    'Canon TS8350 series', 'Canon G3270 series', 'EPSON ET-2850 Series', 'EPSON XP-6000 Series', 'EPSON L3250 Series',
+    'EPSON WF-C5790 Series', 'Canon MAXIFY GX7050']) {
+    assert.equal(reading(markers, { model: Buffer.from(model) }).type, 'ink', model);
+  }
+  for (const model of ['HP Color LaserJet M452nw', 'Brother HL-L2350DW series', 'Canon MF743C', 'Canon LBP6670',
+    'EPSON AL-M320DN', 'KONICA MINOLTA bizhub C3110', 'Lexmark T640']) {
+    assert.equal(reading(markers, { model: Buffer.from(model) }).type, 'laser', model);
+  }
+  // No supplies table at all: still ink, so the Ink Low sensor is named for ink
+  assert.equal(parse({ model: Buffer.from('HP OfficeJet 8020 series') }).type, 'ink');
 });
 
 test('Printer MIB: names follow the printer\'s character set', () => {

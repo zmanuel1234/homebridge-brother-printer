@@ -632,13 +632,19 @@ export class PrinterAccessory {
       this.log.info(`[${this.name}] Status: ${d.statusText}`);
     }
 
-    this.applySupplies(d);
-    this.applyDrumAndParts(d);
+    // The supplies table didn't read this time (it did before): keep the last levels,
+    // drums and parts rather than take them away
+    if (d.suppliesUnread) {
+      log(`[${this.name}] Supplies couldn't be read this time; keeping the last levels.`);
+    } else {
+      this.applySupplies(d);
+      this.applyDrumAndParts(d);
+    }
 
     if (d.totalPages !== null) { this.pages.updateValue(d.totalPages); }
     this.last.statusText = d.statusText;
 
-    if (this.last.summary === undefined) {
+    if (this.last.summary === undefined && !d.suppliesUnread) {
       const kind = d.type === 'ink' ? 'ink' : 'toner';
       const levels = d.supplies.length
         ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')

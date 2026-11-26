@@ -58,6 +58,10 @@ export function markerColor(name: string, colors: string, supply = true): Color 
   if (/light\s*cyan|photo\s*cyan|\blc\b/.test(n)) { return 'lightCyan'; }
   if (/light\s*magenta|photo\s*magenta|\blm\b/.test(n)) { return 'lightMagenta'; }
   for (const [re, color] of WORDS) { if (re.test(n)) { return color; } }
+  // Kyocera, Utax and Triumph-Adler name toners by part number, the color as the last
+  // letter: TK-5240K black, TK-5240C cyan, CK-5512M, PK-5015Y
+  const part = /\b(?:tk|ck|pk)-?\d{3,5}([kcmy])\b/.exec(n)?.[1];
+  if (part) { return ({ k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[part]; }
   const code = /\b(pgbk|bk|k|c|m|y)\b(?![-\d])/.exec(n)?.[1];
   if (code) { return ({ pgbk: 'black', bk: 'black', k: 'black', c: 'cyan', m: 'magenta', y: 'yellow' } as Record<string, Color>)[code]; }
   // Several colors for one marker: a tri-color cartridge (for a drum: shared, no color)
@@ -115,8 +119,11 @@ export function mapMarkers(markers: Marker[]): MarkerReadings {
   const supplies: Supply[] = [];
   const drums: Partial<Record<Color, Drum>> = {};
   const parts: Partial<Record<PartKey, Part>> = {};
+  // Some printers (Sharp) give a drum's or waste box's level in % but its maximum as
+  // unknown (-2) or unavailable (-1); when their other markers count to 100, so does this one
+  const inPercent = markers.some((m) => m.high === 100);
   const percentOf = (m: Marker): number | null => {
-    const high = m.high ?? 100;
+    const high = m.high !== null && m.high < 0 && inPercent && m.level !== null && m.level <= 100 ? 100 : m.high ?? 100;
     // -1 unavailable, -2 unknown, -3 "some remaining": no number to show
     return m.level !== null && m.level >= 0 && high > 0 ? Math.max(0, Math.min(100, Math.round(m.level * 100 / high))) : null;
   };
