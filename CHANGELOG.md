@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- README and settings: what IPP reports, from a real MFC-L2750DW (toner %, but no drum,
+  page count or serial number); fewer Brother printers report only "some remaining" than
+  the text suggested.
+
 ## 0.7.0 - 2026-11-26
 
 Reading over IPP (AirPrint), as an option. SNMP stays the default: with your current
