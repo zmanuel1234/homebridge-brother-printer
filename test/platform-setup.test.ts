@@ -130,10 +130,19 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(again.calls.unregistered, [], 'the old one is not removed');
     assert.equal(platform.printers[0].accessory, cached);
     assert.equal(ctx(cached).name, 'Study');
-    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Study Problem');
+    // One printer: sensors are named for what they are, so a rename leaves them as they are
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Problem');
     assert.equal(toner.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'My cartridge', 'a name set in Home is kept');
     assert.ok(again.lines.some((l) => l.includes('Renamed from "Office"')), again.lines.join('\n'));
     assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
+  });
+
+  test('several printers: each sensor\'s name starts with its printer\'s; one printer: not', () => {
+    const two = homebridge().start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Study', host: '10.0.0.10' }], []);
+    const name = (p: (typeof two.printers)[number]) => p.problem!.getCharacteristic(hap!.Characteristic.ConfiguredName).value;
+    assert.deepEqual(two.printers.map(name), ['Office Problem', 'Study Problem']);
+    const one = homebridge().start([{ name: 'Office', host: '10.0.0.9' }], []);
+    assert.equal(name(one.printers[0]), 'Problem');
   });
 
   test('renamed and moved to a new address: kept by serial number', () => {

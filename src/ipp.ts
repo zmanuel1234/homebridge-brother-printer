@@ -74,7 +74,7 @@ export const REQUESTED = [
   'printer-state', 'printer-state-reasons', 'printer-state-message', 'printer-make-and-model',
   'printer-device-id', 'printer-serial-number', 'printer-info', 'marker-names', 'marker-levels',
   'marker-high-levels', 'marker-low-levels', 'marker-types', 'marker-colors', 'printer-impressions-completed',
-  'printer-input-tray',
+  'printer-input-tray', 'printer-firmware-string-version',
 ];
 
 export function getPrinterAttributes(uri: string, requestId: number): Buffer {
@@ -242,6 +242,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     drumPagesRemaining: null,
     unknown: {},
     ...(a['printer-input-tray'] ? { trays: traysFromIpp(a['printer-input-tray']) } : {}),
+    firmware: str('printer-firmware-string-version') || null,
   };
 }
 

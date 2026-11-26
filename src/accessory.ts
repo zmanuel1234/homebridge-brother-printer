@@ -37,6 +37,8 @@ export interface PrinterContext {
   usage?: UsageSample[];
   /** When the weekly usage line was last logged (Unix seconds) */
   usageLogged?: number;
+  /** The printer's firmware version, when it gives one in a form Home shows (1.14) */
+  firmware?: string;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -64,6 +66,10 @@ export interface PrinterConfig {
   lowDrumThreshold?: unknown;
   showDrum?: unknown;
   tonerTile?: unknown;
+  /** 'light' (default) or 'humidity': the kind of sensor the toner / ink tiles are */
+  tileType?: unknown;
+  /** 'occupancy' (default) or 'contact': how the printer's own tile shows printing */
+  printingSensor?: unknown;
   faultSensor?: unknown;
   maintenanceSensor?: unknown;
   paperSensor?: unknown;
@@ -132,9 +138,6 @@ const FAULT_NAMES: Partial<Record<PrinterError, string>> = {
 /** fakegato-history's service (Eve's history service) */
 const EVE_HISTORY_SERVICE = 'E863F007-079E-48FF-8F27-9C2605A29F52';
 
-/** What the plugin adds after the printer's name when it names a sensor */
-const OWN_SUFFIXES = new Set(['', ' Problem', ' Toner', ' Ink', ' Drum', ' Toner Low', ' Ink Low', ' Maintenance',
-  ' Out of Paper', ' Online', ...Object.values(COLOR_NAMES).map((n) => ` ${n}`)]);
 /** Paper tray sensors' subtypes: "tray-" and the tray's key */
 const TRAY_PREFIX = 'tray-';
 
@@ -207,8 +210,11 @@ export class PrinterAccessory {
   readonly interval: number;
   readonly lowToner: number;
   readonly lowDrum: number;
-  readonly showDrum: boolean;
   readonly tonerTile: boolean;
+  readonly tileType: 'humidity' | 'light';
+  readonly printingSensor: 'occupancy' | 'contact';
+  /** Sensor names start with the printer's name (several printers), or are just what they are */
+  readonly prefixNames: boolean;
   readonly faultSensor: boolean;
   readonly lowTonerSensor: boolean;
   readonly maintenanceSensor: boolean;
@@ -224,6 +230,10 @@ export class PrinterAccessory {
   failures = 0;
   /** Polls in a row whose supplies couldn't be read */
   unreadPolls = 0;
+  /** The printer's name before a rename in the config, so sensors named after it follow */
+  previousName: string | undefined;
+  /** Trays whose sensor has been labelled since the start (restored ones get today's names once) */
+  labelledTrays = new Set<string>();
   online = true;
   last: LastSeen = {};
   timer: NodeJS.Timeout | null = null;
@@ -231,10 +241,10 @@ export class PrinterAccessory {
   tiles: Partial<Record<Color, Service>> = {};
   guarded: Characteristic[] = [];
 
-  occupancy!: Service;
+  /** The printer's own tile: printing state, page count, and the other services linked to it */
+  main!: Service;
   pages!: Characteristic;
   toner: Service | null = null;
-  drum: Service | null = null;
   problem: Service | null = null;
   lowSensor: Service | null = null;
   maintenance: Service | null = null;
@@ -252,7 +262,7 @@ export class PrinterAccessory {
   private readonly query: QueryFn;
 
   constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
-    deps: { query?: QueryFn; startHistory?: typeof startHistory } = {}) {
+    deps: { query?: QueryFn; startHistory?: typeof startHistory; prefixNames?: boolean } = {}) {
     this.query = deps.query || readPrinter;
     this.startHistory = deps.startHistory || startHistory;
     this.platform = platform;
@@ -269,8 +279,17 @@ export class PrinterAccessory {
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
-    this.showDrum = config.showDrum === true;
+    if (config.showDrum === true) {
+      platform.log.info(`[${config.name}] "Drum as a battery" (showDrum) is no longer used: Home shows only one battery `
+        + 'per accessory, so the drum battery never showed. The drum is in the Maintenance sensor, the log and Test connection.');
+    }
     this.tonerTile = config.tonerTile === true;
+    // Light by default: Home counts humidity tiles as the room's humidity. Eve history needs
+    // humidity, so with it on and no tileType set, the tiles stay humidity sensors.
+    const tileType = String(config.tileType ?? '').trim().toLowerCase();
+    this.tileType = tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
+    this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
+    this.prefixNames = deps.prefixNames === true;
     this.faultSensor = config.faultSensor !== false;
     this.lowTonerSensor = config.lowTonerSensor === true;
     this.maintenanceSensor = config.maintenanceSensor === true;
@@ -302,17 +321,15 @@ export class PrinterAccessory {
   renameFrom(old: string | undefined): void {
     const acc = this.accessory;
     if (old && old !== this.name) {
-      const C = this.hap.Characteristic;
+      const { Service: S, Characteristic: C } = this.hap;
+      // The printer's own tile here; its sensors when they're labelled (label() knows
+      // the old name). Only names the plugin gave: a name set in the Home app stays.
+      this.previousName = old;
       for (const svc of acc.services) {
+        const own = (svc.UUID === S.OccupancySensor.UUID && !svc.subtype) || (svc.UUID === S.ContactSensor.UUID && svc.subtype === 'printing');
+        if (!own) { continue; }
         for (const type of [C.Name, C.ConfiguredName]) {
-          if (!svc.testCharacteristic(type)) { continue; }
-          const value = svc.getCharacteristic(type).value;
-          // Only names the plugin gave; a name set in the Home app stays
-          const own = OWN_SUFFIXES.has(value?.toString().slice(old.length) ?? '')
-            || (svc.subtype?.startsWith(TRAY_PREFIX) === true && value?.toString().startsWith(`${old} `) === true);
-          if (typeof value === 'string' && value.startsWith(old) && own) {
-            svc.updateCharacteristic(type, this.name + value.slice(old.length));
-          }
+          if (svc.testCharacteristic(type) && svc.getCharacteristic(type).value === old) { svc.updateCharacteristic(type, this.name); }
         }
       }
       const named = acc as unknown as { updateDisplayName?: (name: string) => void };
@@ -330,23 +347,29 @@ export class PrinterAccessory {
       .setCharacteristic(C.Manufacturer, acc.context.manufacturer || 'Brother')
       .setCharacteristic(C.Model, acc.context.model || (acc.context.manufacturer ? 'Printer' : 'Brother printer'))
       .setCharacteristic(C.SerialNumber, acc.context.serial || this.options.host)
-      .setCharacteristic(C.FirmwareRevision, version);
+      .setCharacteristic(C.FirmwareRevision, acc.context.firmware || version);
 
-    // Printing state: the tile people see in the Home app
-    this.occupancy = acc.services.find((svc) => svc.UUID === S.OccupancySensor.UUID && !svc.subtype)
-      || acc.addService(S.OccupancySensor, this.name);
-    this.label(this.occupancy, this.name);
-    this.occupancy.setPrimaryService(true);
+    // The printer's own tile, showing printing: an occupancy sensor (Detected while a job
+    // prints) or a contact sensor (open while a job prints). The other one goes.
+    const contact = this.printingSensor === 'contact';
+    const occupancy = acc.services.find((svc) => svc.UUID === S.OccupancySensor.UUID && !svc.subtype);
+    const printing = acc.getServiceById(S.ContactSensor, 'printing');
+    const old = contact ? occupancy : printing;
+    if (old) { acc.removeService(old); }
+    this.main = (contact ? printing : occupancy)
+      || (contact ? acc.addService(S.ContactSensor, this.name, 'printing') : acc.addService(S.OccupancySensor, this.name));
+    this.label(this.main, '');
+    this.main.setPrimaryService(true);
     for (const ch of [C.StatusActive, C.StatusFault]) {
-      if (!this.occupancy.testCharacteristic(ch)) { this.occupancy.addOptionalCharacteristic(ch); }
-      this.occupancy.getCharacteristic(ch);
+      if (!this.main.testCharacteristic(ch)) { this.main.addOptionalCharacteristic(ch); }
+      this.main.getCharacteristic(ch);
     }
-    this.occupancy.getCharacteristic(C.StatusActive).updateValue(true);
+    this.main.getCharacteristic(C.StatusActive).updateValue(true);
     const Pages = pagesCharacteristic(this.hap);
     // testCharacteristic/addCharacteristic are typed for HAP's base class; a subclass works the same
     const PagesClass = Pages as unknown as WithUUID<typeof Characteristic>;
-    if (!this.occupancy.testCharacteristic(PagesClass)) { this.occupancy.addCharacteristic(PagesClass); }
-    this.pages = this.occupancy.getCharacteristic(Pages);
+    if (!this.main.testCharacteristic(PagesClass)) { this.main.addCharacteristic(PagesClass); }
+    this.pages = this.main.getCharacteristic(Pages);
 
     // Toner and drum as batteries so Home raises native "low" alerts. A printer
     // that reported no levels last time gets none until it reports some.
@@ -354,26 +377,23 @@ export class PrinterAccessory {
       this.removeSubtype(S.Battery, 'toner');
       this.toner = null;
     } else {
-      this.toner = this.battery('toner', `${this.name} ${acc.context.kind || 'Toner'}`);
-      this.occupancy.addLinkedService(this.toner);
+      this.toner = this.battery('toner', acc.context.kind || 'Toner');
+      this.main.addLinkedService(this.toner);
     }
 
-    if (this.showDrum) {
-      this.drum = this.battery('drum', `${this.name} Drum`);
-      this.occupancy.addLinkedService(this.drum);
-    } else {
-      this.removeSubtype(S.Battery, 'drum');
-    }
+    // Home shows one battery per accessory, so a drum battery never showed: the drum is in
+    // the Maintenance sensor, the log and Test connection instead (and showDrum is retired)
+    this.removeSubtype(S.Battery, 'drum');
 
     // Home doesn't surface StatusFault on occupancy sensors, so problems
     // (jam, cover open, no paper...) also open a contact sensor.
     if (this.faultSensor) {
       const problem = acc.getServiceById(S.ContactSensor, 'problem')
-        || acc.addService(S.ContactSensor, `${this.name} Problem`, 'problem');
-      this.label(problem, `${this.name} Problem`);
+        || acc.addService(S.ContactSensor, this.sensorName('Problem'), 'problem');
+      this.label(problem, 'Problem');
       if (!problem.testCharacteristic(C.StatusActive)) { problem.addOptionalCharacteristic(C.StatusActive); }
       problem.getCharacteristic(C.StatusActive).updateValue(true);
-      this.occupancy.addLinkedService(problem);
+      this.main.addLinkedService(problem);
       this.problem = problem;
     } else {
       this.removeSubtype(S.ContactSensor, 'problem');
@@ -381,31 +401,31 @@ export class PrinterAccessory {
 
     // Drum and parts (belt, fuser, ...) as one contact sensor, since Home shows
     // only one battery per accessory
-    this.maintenance = this.optionalContact(this.maintenanceSensor, 'maintenance', `${this.name} Maintenance`);
+    this.maintenance = this.optionalContact(this.maintenanceSensor, 'maintenance', 'Maintenance');
     // Out of paper on its own, the problem people most often fix themselves
-    this.paper = this.optionalContact(this.paperSensor, 'noPaper', `${this.name} Out of Paper`);
+    this.paper = this.optionalContact(this.paperSensor, 'noPaper', 'Out of Paper');
 
     // One sensor per paper tray, made once the printer lists its trays; here only the
     // ones restored from the cache are picked up
     for (const svc of acc.services.filter((s) => s.UUID === S.ContactSensor.UUID && s.subtype?.startsWith(TRAY_PREFIX))) {
-      if (this.paperTraySensors) { this.trays[svc.subtype!.slice(TRAY_PREFIX.length)] = svc; } else { acc.removeService(svc); }
+      if (this.paperTraySensors) {
+        this.trays[svc.subtype!.slice(TRAY_PREFIX.length)] = svc;
+        this.main.addLinkedService(svc);
+      } else { acc.removeService(svc); }
     }
 
-    // Reachable or not, as a sensor automations can use. Home can't trigger on
-    // No Response, so this one stays readable while the printer is offline.
-    if (this.onlineSensor) {
-      const svc = acc.getServiceById(S.OccupancySensor, 'online')
-        || acc.addService(S.OccupancySensor, `${this.name} Online`, 'online');
-      this.label(svc, `${this.name} Online`);
-      this.occupancy.addLinkedService(svc);
-      this.onlineSvc = svc;
-    } else {
-      this.removeSubtype(S.OccupancySensor, 'online');
-    }
+    // Reachable or not, as a sensor automations can use: a contact sensor "Offline" that
+    // opens when the printer stops answering. Home can't trigger on No Response, so this one
+    // stays readable while the printer is offline. (Until 0.10 it was an occupancy sensor,
+    // "Online", which made the room look occupied.)
+    this.removeSubtype(S.OccupancySensor, 'online');
+    this.onlineSvc = this.onlineSensor ? this.optionalContact(true, 'offline', 'Offline') : null;
+    if (!this.onlineSensor) { this.removeSubtype(S.ContactSensor, 'offline'); }
 
-    // Eve history (fakegato's service) is added when the history starts; take
-    // it away when the history is turned off
-    if (!this.eveHistory) {
+    // Eve history (fakegato's service) is added when the history starts; take it away when
+    // no history will run (turned off, or no humidity tiles for Eve to draw it on), so Eve
+    // doesn't keep showing a history nothing adds to
+    if (!this.eveHistory || !this.tonerTile || this.tileType !== 'humidity') {
       const historySvc = acc.services.find((svc) => svc.UUID === EVE_HISTORY_SERVICE);
       if (historySvc) { acc.removeService(historySvc); }
     }
@@ -413,37 +433,43 @@ export class PrinterAccessory {
     // The low toner sensor is created once the printer says toner or ink;
     // here only one restored from the cache is picked up.
     const lowSvc = acc.getServiceById(S.ContactSensor, 'lowToner');
-    if (lowSvc && this.lowTonerSensor) { this.lowSensor = lowSvc; } else if (lowSvc) { acc.removeService(lowSvc); }
+    if (lowSvc && this.lowTonerSensor) {
+      this.lowSensor = lowSvc;
+      this.label(lowSvc, `${acc.context.kind || 'Toner'} Low`);
+      this.main.addLinkedService(lowSvc);
+    } else if (lowSvc) { acc.removeService(lowSvc); }
 
     // Supply tiles are created once the printer says which colors it has;
     // here only the ones restored from the cache are picked up.
     for (const [color, subtype] of Object.entries(TILE_SUBTYPE) as [Color, string][]) {
-      const svc = acc.getServiceById(S.HumiditySensor, subtype);
-      if (!svc) { continue; }
-      if (this.tonerTile) { this.tiles[color] = svc; } else { acc.removeService(svc); }
+      for (const type of [S.HumiditySensor, S.LightSensor]) {
+        const svc = acc.getServiceById(type, subtype);
+        if (!svc) { continue; }
+        if (this.tonerTile && type === this.tileService()) { this.tiles[color] = svc; } else { acc.removeService(svc); }
+      }
     }
   }
 
   /** A contact sensor that's on or off by a setting, kept or removed from the cache */
-  optionalContact(enabled: boolean, subtype: string, name: string): Service | null {
+  optionalContact(enabled: boolean, subtype: string, what: string): Service | null {
     const { Service: S, Characteristic: C } = this.hap;
     if (!enabled) {
       this.removeSubtype(S.ContactSensor, subtype);
       return null;
     }
     const svc = this.accessory.getServiceById(S.ContactSensor, subtype)
-      || this.accessory.addService(S.ContactSensor, name, subtype);
-    this.label(svc, name);
+      || this.accessory.addService(S.ContactSensor, this.sensorName(what), subtype);
+    this.label(svc, what);
     if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
     svc.getCharacteristic(C.StatusActive).updateValue(true);
-    this.occupancy.addLinkedService(svc);
+    this.main.addLinkedService(svc);
     return svc;
   }
 
   /** Make one tile per reported supply; remove tiles for colors not reported */
   ensureTiles(d: PrinterData): void {
     if (!this.tonerTile) { return; }
-    const { Service: S, Characteristic: C } = this.hap;
+    const C = this.hap.Characteristic;
     const colors = new Set(d.supplies.map((s) => s.color));
     const mono = d.supplies.length === 1;
     const kind = d.type === 'ink' ? 'Ink' : 'Toner';
@@ -457,13 +483,16 @@ export class PrinterAccessory {
         }
         continue;
       }
-      if (existing) { continue; }
-      const name = mono ? `${this.name} ${kind}` : `${this.name} ${COLOR_NAMES[color]}`;
-      const svc = this.accessory.addService(S.HumiditySensor, name, subtype);
-      this.label(svc, name);
+      // "Toner" on a mono printer; "Cyan Toner", "Photo Black Ink" on a color one
+      const what = mono ? kind : `${COLOR_NAMES[color]} ${kind}`;
+      // Names the plugin gave before 0.10: the printer's name and the color
+      const before = [this.name, this.previousName].filter(Boolean).map((n) => `${n} ${mono ? kind : COLOR_NAMES[color]}`);
+      if (existing) { this.label(existing, what, before); continue; }
+      const svc = this.accessory.addService(this.tileService(), this.sensorName(what), subtype);
+      this.label(svc, what, before);
       if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
       svc.getCharacteristic(C.StatusActive).updateValue(true);
-      this.guard(svc.getCharacteristic(C.CurrentRelativeHumidity));
+      this.guard(svc.getCharacteristic(this.tileCharacteristic()));
       this.tiles[color] = svc;
     }
   }
@@ -476,12 +505,11 @@ export class PrinterAccessory {
   ensureLowSensor(kind: Kind): void {
     if (!this.lowTonerSensor || this.lowSensor) { return; }
     const { Service: S, Characteristic: C } = this.hap;
-    const name = `${this.name} ${kind} Low`;
-    const svc = this.accessory.addService(S.ContactSensor, name, 'lowToner');
-    this.label(svc, name);
+    const svc = this.accessory.addService(S.ContactSensor, this.sensorName(`${kind} Low`), 'lowToner');
+    this.label(svc, `${kind} Low`);
     if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
     svc.getCharacteristic(C.StatusActive).updateValue(true);
-    this.occupancy.addLinkedService(svc);
+    this.main.addLinkedService(svc);
     this.guard(svc.getCharacteristic(C.ContactSensorState));
     this.lowSensor = svc;
   }
@@ -501,17 +529,15 @@ export class PrinterAccessory {
   guardReads(): void {
     const C = this.hap.Characteristic;
     const pairs: [Service | null | undefined, CharacteristicType][] = [
-      [this.occupancy, C.OccupancyDetected],
-      [this.occupancy, C.StatusFault],
+      [this.main, this.printingSensor === 'contact' ? C.ContactSensorState : C.OccupancyDetected],
+      [this.main, C.StatusFault],
       [this.toner, C.BatteryLevel],
       [this.toner, C.StatusLowBattery],
-      [this.drum, C.BatteryLevel],
-      [this.drum, C.StatusLowBattery],
       [this.problem, C.ContactSensorState],
       [this.lowSensor, C.ContactSensorState],
       [this.maintenance, C.ContactSensorState],
       [this.paper, C.ContactSensorState],
-      ...Object.values(this.tiles).map((svc): [Service, CharacteristicType] => [svc, C.CurrentRelativeHumidity]),
+      ...Object.values(this.tiles).map((svc): [Service, CharacteristicType] => [svc, this.tileCharacteristic()]),
       ...Object.values(this.trays).map((svc): [Service, CharacteristicType] => [svc, C.ContactSensorState]),
     ];
     for (const [svc, type] of pairs) {
@@ -533,22 +559,53 @@ export class PrinterAccessory {
     return new StatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
   }
 
-  battery(subtype: string, name: string): Service {
+  battery(subtype: string, what: string): Service {
     const { Service: S, Characteristic: C } = this.hap;
     const svc = this.accessory.getServiceById(S.Battery, subtype)
-      || this.accessory.addService(S.Battery, name, subtype);
-    this.label(svc, name);
+      || this.accessory.addService(S.Battery, this.sensorName(what), subtype);
+    this.label(svc, what);
     svc.setCharacteristic(C.ChargingState, C.ChargingState.NOT_CHARGEABLE);
     return svc;
   }
 
-  label(svc: Service, name: string): void {
+  /**
+   * A sensor's name: what it is ("Toner Low", "Tray 1"), with the printer's name in front
+   * when there are several printers, so they can be told apart in Home's lists.
+   */
+  sensorName(what: string): string {
+    return !what ? this.name : this.prefixNames ? `${this.name} ${what}` : what;
+  }
+
+  /**
+   * Name a service. The name is only seeded, or changed from one the plugin gave before
+   * (with or without the printer's name in front, or one of `before`): a name the user
+   * set in the Home app stays.
+   */
+  label(svc: Service, what: string, before: string[] = []): void {
     const C = this.hap.Characteristic;
+    const name = this.sensorName(what);
     svc.setCharacteristic(C.Name, name);
     if (!svc.testCharacteristic(C.ConfiguredName)) { svc.addOptionalCharacteristic(C.ConfiguredName); }
-    // Only seed the name; don't overwrite a name the user set in the Home app
     const current = svc.getCharacteristic(C.ConfiguredName).value;
-    if (!current) { svc.setCharacteristic(C.ConfiguredName, name); }
+    const own = what ? [`${this.name} ${what}`, what, ...(this.previousName ? [`${this.previousName} ${what}`] : []), ...before] : [];
+    if (!current || (current !== name && own.includes(String(current)))) { svc.setCharacteristic(C.ConfiguredName, name); }
+  }
+
+  /** The toner / ink tiles' sensor type, and the characteristic that shows the level */
+  tileService(): ServiceType {
+    return this.tileType === 'light' ? this.hap.Service.LightSensor : this.hap.Service.HumiditySensor;
+  }
+
+  tileCharacteristic(): CharacteristicType {
+    const C = this.hap.Characteristic;
+    return this.tileType === 'light' ? C.CurrentAmbientLightLevel : C.CurrentRelativeHumidity;
+  }
+
+  /** Show a level on a tile: as % humidity, or as lux (whose lowest value is 0.0001) */
+  setTile(svc: Service | undefined, level: number): void {
+    if (!svc) { return; }
+    const v = clamp(level);
+    svc.updateCharacteristic(this.tileCharacteristic(), this.tileType === 'light' ? Math.max(v, 0.0001) : v);
   }
 
   removeSubtype(type: ServiceType, subtype: string): void {
@@ -597,19 +654,20 @@ export class PrinterAccessory {
     if (online && !wasOnline) {
       for (const ch of this.guarded) { ch.updateValue(ch.value); }
     }
-    this.occupancy.updateCharacteristic(C.StatusActive, online);
+    this.main.updateCharacteristic(C.StatusActive, online);
     for (const svc of Object.values(this.tiles)) { svc.updateCharacteristic(C.StatusActive, online); }
     if (this.problem) { this.problem.updateCharacteristic(C.StatusActive, online); }
     for (const svc of [this.lowSensor, this.maintenance, this.paper, ...Object.values(this.trays)]) {
       if (svc) { svc.updateCharacteristic(C.StatusActive, online); }
     }
     if (this.onlineSvc) {
-      this.onlineSvc.updateCharacteristic(C.OccupancyDetected, online
-        ? C.OccupancyDetected.OCCUPANCY_DETECTED
-        : C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
+      // Offline: open while the printer doesn't answer
+      this.onlineSvc.updateCharacteristic(C.ContactSensorState, online
+        ? C.ContactSensorState.CONTACT_DETECTED
+        : C.ContactSensorState.CONTACT_NOT_DETECTED);
     }
     if (!online) {
-      this.occupancy.updateCharacteristic(C.OccupancyDetected, 0);
+      this.setPrinting(false);
       // Push the failure so Home shows "No Response" without waiting for a read
       for (const ch of this.guarded) { ch.updateValue(this.noResponse()); }
     }
@@ -628,10 +686,8 @@ export class PrinterAccessory {
     this.updateInfo(d);
 
     // Printing / fault
-    this.occupancy.updateCharacteristic(C.OccupancyDetected, d.printing
-      ? C.OccupancyDetected.OCCUPANCY_DETECTED
-      : C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
-    this.occupancy.updateCharacteristic(C.StatusFault, d.fault
+    this.setPrinting(d.printing);
+    this.main.updateCharacteristic(C.StatusFault, d.fault
       ? C.StatusFault.GENERAL_FAULT
       : C.StatusFault.NO_FAULT);
 
@@ -745,7 +801,7 @@ export class PrinterAccessory {
       });
       const low = flagged || stillLow || ipp.some((s) => s.level <= this.lowToner);
       if (this.toner && haveSnmp && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
-      for (const s of ipp) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
+      for (const s of ipp) { this.setTile(this.tiles[s.color], s.level); }
       if (low || covers) {
         this.toner?.updateCharacteristic(C.StatusLowBattery, low
           ? C.StatusLowBattery.BATTERY_LEVEL_LOW : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
@@ -777,8 +833,8 @@ export class PrinterAccessory {
     }
     let toner = this.toner;
     if (!toner) {
-      toner = this.battery('toner', `${this.name} ${kind}`);
-      this.occupancy.addLinkedService(toner);
+      toner = this.battery('toner', kind);
+      this.main.addLinkedService(toner);
       this.guard(toner.getCharacteristic(C.BatteryLevel));
       this.guard(toner.getCharacteristic(C.StatusLowBattery));
       this.toner = toner;
@@ -804,7 +860,7 @@ export class PrinterAccessory {
 
     this.ensureTiles(d);
     for (const s of d.supplies) {
-      this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level));
+      this.setTile(this.tiles[s.color], s.level);
     }
     this.logHistory(level);
 
@@ -831,6 +887,11 @@ export class PrinterAccessory {
    */
   logHistory(level: number): void {
     if (!this.eveHistory) { return; }
+    if (this.tonerTile && this.tileType === 'light') {
+      this.warnOnce('history-tiles', true, 'Eve history needs the toner / ink tiles shown as humidity (tileType); '
+        + 'Eve draws it on those tiles.');
+      return;
+    }
     if (!this.tonerTile) {
       this.warnOnce('history-tiles', true, 'Eve history needs "Show toner / ink % on tiles" (tonerTile) turned on; '
         + 'Eve draws it on those tiles.');
@@ -863,7 +924,6 @@ export class PrinterAccessory {
       const level = clamp(lowest.percent);
       due = level <= this.lowDrum;
       // A stand-in reading only lowers the drum or marks it low, never clears it
-      if (this.drum && (!standIn || due)) { this.setBattery(this.drum, level, this.lowDrum); }
       const name = drums.length > 1 ? `${COLOR_NAMES[color]} drum` : 'Drum';
       if (!standIn || due) {
         this.warnOnce('drum', due, `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
@@ -935,15 +995,15 @@ export class PrinterAccessory {
     for (const t of trays) {
       let svc = this.trays[t.key];
       if (!svc && (standIn || t.secondary || t.state === 'unknown')) { continue; }
+      if (svc && !standIn && !this.labelledTrays.has(t.key)) { this.label(svc, t.name); this.labelledTrays.add(t.key); }
       if (standIn && t.state === 'unknown') { continue; }
       if (!svc) {
-        const name = `${this.name} ${t.name}`;
         svc = this.accessory.getServiceById(S.ContactSensor, TRAY_PREFIX + t.key)
-          || this.accessory.addService(S.ContactSensor, name, TRAY_PREFIX + t.key);
-        this.label(svc, name);
+          || this.accessory.addService(S.ContactSensor, this.sensorName(t.name), TRAY_PREFIX + t.key);
+        this.label(svc, t.name);
         if (!svc.testCharacteristic(C.StatusActive)) { svc.addOptionalCharacteristic(C.StatusActive); }
         svc.getCharacteristic(C.StatusActive).updateValue(true);
-        this.occupancy.addLinkedService(svc);
+        this.main.addLinkedService(svc);
         this.guard(svc.getCharacteristic(C.ContactSensorState));
         this.trays[t.key] = svc;
       }
@@ -975,13 +1035,22 @@ export class PrinterAccessory {
    * inkjet it starts as "Toner". Rename it, unless the user renamed it in Home.
    */
   renameBattery(toner: Service, kind: Kind): void {
-    const C = this.hap.Characteristic;
     const was = this.accessory.context.kind || 'Toner';
     if (was === kind) { return; }
-    const name = `${this.name} ${kind}`;
-    toner.setCharacteristic(C.Name, name);
-    const current = toner.getCharacteristic(C.ConfiguredName).value;
-    if (!current || current === `${this.name} ${was}`) { toner.setCharacteristic(C.ConfiguredName, name); }
+    this.label(toner, kind, [`${this.name} ${was}`, was]);
+    if (this.lowSensor) { this.label(this.lowSensor, `${kind} Low`, [`${this.name} ${was} Low`, `${was} Low`]); }
+  }
+
+  /** The printer's own tile: Detected (occupancy) or open (contact) while a job prints */
+  setPrinting(printing: boolean): void {
+    const C = this.hap.Characteristic;
+    if (this.printingSensor === 'contact') {
+      this.main.updateCharacteristic(C.ContactSensorState, printing
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED : C.ContactSensorState.CONTACT_DETECTED);
+    } else {
+      this.main.updateCharacteristic(C.OccupancyDetected, printing
+        ? C.OccupancyDetected.OCCUPANCY_DETECTED : C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
+    }
   }
 
   /** Store values in the accessory cache, saving only when something changed */
@@ -991,14 +1060,6 @@ export class PrinterAccessory {
     if (!changed.length) { return; }
     for (const [k, v] of changed) { ctx[k] = v; }
     this.api.updatePlatformAccessories([this.accessory]);
-  }
-
-  setBattery(svc: Service, level: number, threshold: number): void {
-    const C = this.hap.Characteristic;
-    svc.updateCharacteristic(C.BatteryLevel, level);
-    svc.updateCharacteristic(C.StatusLowBattery, level <= threshold
-      ? C.StatusLowBattery.BATTERY_LEVEL_LOW
-      : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
   }
 
   /**
@@ -1026,6 +1087,16 @@ export class PrinterAccessory {
       this.warnOnce('config-serial', true, `The serial number in the settings (${this.configSerial}) isn't this `
         + `printer's (${d.serial}). Correct it, or use Test connection in the settings to fill it in.`);
     }
+    // The printer's firmware where it's a version Home shows (1.14, 01.35; HomeKit wants
+    // up to three numbers); otherwise the plugin's version, as before
+    const fw = d.firmware?.trim() ?? '';
+    if (/^\d+(\.\d+){0,2}$/.test(fw)) {
+      if (fw !== ctx.firmware) { ctx.firmware = fw; changed = true; }
+    } else if (fw && ctx.firmware) {
+      // A version Home can't show (or another printer): the plugin's again
+      delete ctx.firmware;
+      changed = true;
+    }
     if (d.serial && d.serial !== ctx.serial) {
       if (ctx.serial) {
         this.log.warn(`[${this.name}] The printer at ${this.options.host} has serial number ${d.serial}, not ${ctx.serial} `
@@ -1039,7 +1110,8 @@ export class PrinterAccessory {
     this.accessory.getService(S.AccessoryInformation)!
       .updateCharacteristic(C.Manufacturer, ctx.manufacturer || 'Brother')
       .updateCharacteristic(C.Model, ctx.model || (ctx.manufacturer && ctx.manufacturer !== 'Brother' ? 'Printer' : 'Brother printer'))
-      .updateCharacteristic(C.SerialNumber, ctx.serial || this.options.host);
+      .updateCharacteristic(C.SerialNumber, ctx.serial || this.options.host)
+      .updateCharacteristic(C.FirmwareRevision, ctx.firmware || version);
     this.api.updatePlatformAccessories([this.accessory]);
   }
 }

@@ -8,7 +8,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { trayName, traysFromIpp, traysFromTable } from '../src/trays';
-import { INPUT_TABLE, query } from '../src/snmp';
+import { INPUT_TABLE, query, readTrays } from '../src/snmp';
+import type * as snmpLib from 'net-snmp';
 import { parseResponse, toPrinterData } from '../src/ipp';
 import { readFileSync } from 'node:fs';
 import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from '../src/usage';
@@ -84,6 +85,12 @@ test('trays: from real IPP answers (HP LaserJet M605, Epson XP-6000)', () => {
   assert.ok(read('epson-xp-6000.bin').every((t) => t.state === 'unknown'));
 });
 
+test('firmware: from IPP printer-firmware-string-version, as the printer gives it', () => {
+  const firmware = (f: string) => toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', f))).printer).firmware;
+  assert.equal(firmware('canon-ts6000.bin'), '2.0');
+  assert.equal(firmware('hp-laserjet-m605.bin'), '2307781_551188');
+});
+
 test('trays: from IPP printer-input-tray', () => {
   const trays = traysFromIpp([
     'type=other;mediafeed=0;mediaxfeed=0;maxcapacity=-2;level=-2;status=0;name=auto;',
@@ -93,6 +100,41 @@ test('trays: from IPP printer-input-tray', () => {
   ]);
   assert.equal(show(trays), 'Manual* unknown, Tray 1 empty 0');
   assert.deepEqual(trays.map((t) => t.key), ['manual', 'tray-1']);
+});
+
+test('trays: a column the printer doesn\'t answer (type, status) loses only itself', async () => {
+  // A session whose walks of the type (2) and status (11) columns fail, as on a printer without them
+  const session = {
+    subtree(oid: string, _max: number, feed: (vbs: snmpLib.Varbind[]) => boolean, done: (err?: Error) => void) {
+      const col = Number(oid.split('.').pop());
+      if (col === 2 || col === 11) { done(new Error('Request failed: GenErr')); return; }
+      const value = col === 9 ? 250 : col === 10 ? -3 : Buffer.from('TRAY1');
+      feed([{ oid: `${oid}.1.1`, type: 2, value } as snmpLib.Varbind]);
+      done();
+    },
+  } as unknown as snmpLib.Session;
+  const trays = traysFromTable((await readTrays(session))!, INPUT_TABLE);
+  assert.equal(show(trays), 'Tray 1 ok');
+  // Without names or levels there's nothing reliable: not read
+  const failing = (cols: number[], message = 'GenErr') => ({
+    subtree(oid: string, _max: number, feed: (vbs: snmpLib.Varbind[]) => boolean, done: (err?: Error) => void) {
+      const col = Number(oid.split('.').pop());
+      if (cols.includes(col)) { done(new Error(message)); return; }
+      feed([{ oid: `${oid}.1.1`, type: 2, value: col === 13 ? Buffer.from('TRAY1') : 0 } as snmpLib.Varbind]);
+      done();
+    },
+  } as unknown as snmpLib.Session);
+  assert.equal(await readTrays(failing([13])), undefined);
+  assert.equal(await readTrays(failing([10])), undefined);
+  // A timeout stops the read at once rather than waiting on every column
+  let walks = 0;
+  const slow = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => { walks++; done(new Error('Request timed out')); } } as unknown as snmpLib.Session;
+  assert.equal(await readTrays(slow), undefined);
+  assert.equal(walks, 1);
+  assert.equal(await readTrays(failing([2], 'Request timed out')), undefined);
+  // Nothing answers: undefined, never an error
+  const none = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(new Error('timeout')) } as unknown as snmpLib.Session;
+  assert.equal(await readTrays(none), undefined);
 });
 
 test('trays: read over SNMP on request, or when the printer reports paper low or out', async (t) => {

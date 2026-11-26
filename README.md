@@ -21,26 +21,32 @@ reads those (and can also read IPP, as an option).
 
 Each printer gets these sensors:
 
-- **Printer** (occupancy sensor): Detected while a job prints. Use it in automations.
-- **Printer Problem** (contact sensor): Open on a jam, open cover, empty tray or other
+- **Printer** (occupancy sensor, or a contact sensor with `printingSensor`): Detected
+  (open) while a job prints. Use it in automations.
+- **Problem** (contact sensor): Open on a jam, open cover, empty tray or other
   error. Turn on notifications for it in the Home app.
 - **Toner / Ink** (battery level on the Printer accessory): the toner or ink %, with Home's
   native low-battery alert at or below your threshold. On color printers it shows the
   lowest color, so the alert fires when any color runs low.
 - **Toner Low** (optional contact sensor): Opens when the toner or ink is low, so Home
   notifies it by name instead of "battery is low".
-- **Toner / ink tiles** (optional humidity sensors): the level as a number on its own tile,
-  one per color on color printers.
+- **Toner / ink tiles** (optional light sensors, or humidity sensors for Eve history): the
+  level as a number on its own tile, one per color on color printers. Home counts them as
+  the room's light level (or humidity); see below.
 - **Out of Paper** (optional contact sensor): Opens when a tray is empty.
-- **Paper trays** (optional contact sensors, one per tray: "Printer Tray 1", "Printer Tray 2"…):
+- **Paper trays** (optional contact sensors, one per tray: "Tray 1", "Tray 2"…):
   each opens when that tray is empty. Bypass and manual trays get none.
 - **Maintenance** (optional contact sensor): Opens when the drum, belt, fuser, laser unit,
   paper feed kit, waste ink or toner box, developer or maintenance kit is near end of life.
-- **Online** (optional occupancy sensor): Detected while the printer answers. Home can't
+- **Offline** (optional contact sensor): opens when the printer stops answering. Home can't
   run automations on No Response, but it can on this, for example to turn off the
   printer's smart plug.
 
-While the printer can't be reached, all of them except Online show No Response.
+Sensors are named for what they are ("Toner Low", "Tray 1"). With several printers, each
+sensor's name starts with its printer's name ("Office Toner Low"), so they can be told
+apart in Home's lists.
+
+While the printer can't be reached, all of them except Offline show No Response.
 
 ## Brother plugin or an AirPrint plugin?
 
@@ -55,7 +61,7 @@ printer, the difference is in what each can read and show:
 | Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Usually not on Brother printers (only parts the printer lists as supplies) |
 | Page count | Yes (in Eve and Controller, not Apple Home) | No |
 | Out of paper, jam, cover open | A Problem sensor, an optional Out of Paper sensor, and the exact problem in the log | One general fault |
-| Printer turned off or unplugged | Online sensor, and No Response on the rest | Online switch |
+| Printer turned off or unplugged | Offline sensor, and No Response on the rest | Online switch |
 | Find printers from the settings screen | Yes, with a connection test | Yes |
 | Works with SNMP turned off | Yes, over IPP (`protocol`, below), with IPP's detail | Yes |
 
@@ -162,15 +168,16 @@ In `config.json`:
 | `pollInterval` | `60` | Seconds between polls (10–3600). |
 | `lowTonerThreshold` | `10` | Toner or ink % at or below which Home shows it as low (any color, on color printers). |
 | `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
-| `faultSensor` | `true` | Add the Printer Problem contact sensor. |
+| `faultSensor` | `true` | Add the Problem contact sensor. |
 | `paperSensor` | `false` | Add an Out of Paper contact sensor that opens when a tray is empty. The Problem sensor opens for this too; this one gets its own notification. |
 | `paperTraySensors` | `false` | Add one contact sensor per paper tray that opens when that tray is empty (bypass and manual trays, often empty on purpose, get none). The trays are then read on every poll. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
-| `onlineSensor` | `false` | Add an Online occupancy sensor: Detected while the printer answers, Not Detected once it shows as offline. |
-| `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`. |
-| `tonerTile` | `false` | Add humidity sensors showing the toner or ink %, one per color on color printers. They also count in Home's climate summary. |
-| `showDrum` | `false` | Add drum life as a second battery. See below. |
-| `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the drum battery shows low. |
+| `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
+| `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
+| `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`, with `tileType` set to `humidity`. |
+| `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's light level (or humidity, with `tileType` set to `humidity`). |
+| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity). |
+| `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
 
@@ -179,21 +186,29 @@ In `config.json`:
 HomeKit has no printer accessory type, so the plugin uses the closest sensors and Home
 words them its own way:
 
-- The printing sensor reads **Detected** / **Not Detected**.
+- The printing sensor reads **Detected** / **Not Detected**, and while a job prints the room
+  shows as occupied. With `printingSensor` set to `contact` it reads **Open** / **Closed**
+  instead.
+- HomeKit has no plain % sensor, so the toner / ink tiles are light sensors, showing the
+  level in lux (70% shows as 70 lux). Home counts them as the room's light level, which
+  few rooms have another sensor for. For Eve history they must be humidity sensors
+  (`tileType`), which Home counts as the room's humidity: a room with a printer whose
+  toner is at 70% then shows "Humidity 70%".
+- The plugin's version shows as the firmware, unless the printer gives its own over IPP as a
+  version number Home can show (as some Canon printers do).
 - Low toner or ink is announced as **"battery is low"**. For a clearer message, turn on
   `lowTonerSensor`: its contact sensor opens at the same point and Home notifies it by
   name, as it does for any contact sensor that opens. Turn on its notifications in the
   Home app.
-- Home shows only one battery per accessory. With `showDrum` on, it may show the drum
-  instead of the toner, which is why the drum is off by default. It's still read, and the
-  plugin logs a warning when it nears end of life. Apps like Eve show both. To be notified
-  in Home instead, turn on `maintenanceSensor`.
+- Home shows only one battery per accessory: the toner or ink. The drum is read too: its
+  level is in the log and in **Test connection** in the settings, the plugin logs a warning
+  when it nears end of life, and `maintenanceSensor` opens for it.
 - The page count is a custom characteristic, visible in Eve, Controller and the Homebridge
   UI, not in Apple Home.
 
 ## Eve history
 
-With `eveHistory` and `tonerTile` on, the Eve app shows a graph of the toner or ink level
+With `eveHistory` and `tonerTile` on (and `tileType` set to `humidity`), the Eve app shows a graph of the toner or ink level
 over about the last 60 days on the toner / ink tiles: an entry every 10 minutes, and
 whenever the level changes. It's kept in Homebridge's storage folder
 (`homebridge-brother-printer-<id>-history.json`), so it survives restarts and renaming

@@ -52,9 +52,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     const { Characteristic: C, HapStatusError, HAPStatus } = this.api.hap;
     // Only the readings; names stay readable, or Home could get blank ones when
     // it reloads the bridge's accessories. Unlike while the printer is offline,
-    // the Online sensor throws too: it isn't polled, so its value would be stale.
+    // the Offline sensor throws too: it isn't polled, so its value would be stale.
     const readings = new Set([C.OccupancyDetected, C.StatusFault, C.BatteryLevel, C.StatusLowBattery,
-      C.ContactSensorState, C.CurrentRelativeHumidity].map((type) => type.UUID));
+      C.ContactSensorState, C.CurrentRelativeHumidity, C.CurrentAmbientLightLevel].map((type) => type.UUID));
     for (const svc of accessory.services) {
       for (const ch of svc.characteristics) {
         if (!readings.has(ch.UUID)) { continue; }
@@ -137,7 +137,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       accessory.context.host = e.host;
 
       try {
-        this.printers.push(new PrinterAccessory(this, accessory, { ...e.raw, host: e.host, name: e.name }));
+        // With several printers, their sensors' names start with the printer's name
+        this.printers.push(new PrinterAccessory(this, accessory, { ...e.raw, host: e.host, name: e.name },
+          { prefixNames: entries.length > 1 }));
       } catch (err) {
         const msg = (err as { message?: string } | null)?.message || String(err);
         this.log.error(`[${e.name}] Couldn't set up this printer: ${msg}`);

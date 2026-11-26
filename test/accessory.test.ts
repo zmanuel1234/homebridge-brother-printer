@@ -95,6 +95,7 @@ function defineTests(hap: Hap): void {
   const service = (acc: Acc, type: typeof S.Battery | typeof S.ContactSensor, subtype: string): Service | undefined =>
     acc.getServiceById(type, subtype);
   const lowSensor = (acc: Acc) => service(acc, S.ContactSensor, 'lowToner');
+  const low = (acc: Acc) => lowSensor(acc)!;
   const state = (acc: Acc) => lowSensor(acc)?.getCharacteristic(C.ContactSensorState).value;
 
   /* ------------------------------------------------------- low toner sensor */
@@ -108,7 +109,7 @@ function defineTests(hap: Hap): void {
   test('low toner sensor: closed while toner is fine, opens at the threshold', () => {
     const { acc, printer } = setup({ lowTonerSensor: true, lowTonerThreshold: 10 });
     printer.apply(reading(80));
-    assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Printer Toner Low');
+    assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Toner Low');
     assert.equal(state(acc), CLOSED);
     printer.apply(reading(10));
     assert.equal(state(acc), OPEN);
@@ -127,7 +128,7 @@ function defineTests(hap: Hap): void {
   test('low toner sensor: says Ink on inkjets', () => {
     const { acc, printer } = setup({ lowTonerSensor: true });
     printer.apply(reading(50, 50, { type: 'ink' }));
-    assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Printer Ink Low');
+    assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Ink Low');
   });
 
   test('low toner sensor: without levels it follows the printer\'s own low flag', () => {
@@ -164,7 +165,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP in auto with levels: updates SNMP\'s tiles but removes none, and stores nothing', () => {
-    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' });
     const two = (b: number, c: number): QueryResult => {
       const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
       return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
@@ -198,10 +199,10 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP in auto: after a restart, SNMP having answered before still counts', () => {
-    const first = setup({ protocol: 'auto', tonerTile: true });
+    const first = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' });
     first.printer.apply({ ...reading(60), serial: 'E1' });
     assert.equal(first.acc.context.snmpAnswered, true);
-    const again = setup({ protocol: 'auto', tonerTile: true }, first.acc);
+    const again = setup({ protocol: 'auto', tonerTile: true, tileType: 'humidity' }, first.acc);
     again.printer.apply(viaIpp({ ...reading(60), supplies: [], lowestSupply: null, serial: 'e1' }));
     assert.equal(first.acc.context.serial, 'E1', 'not changed by IPP');
     assert.ok(battery(first.acc), 'the battery stays');
@@ -236,15 +237,21 @@ function defineTests(hap: Hap): void {
     assert.equal(state(acc), CLOSED);
   });
 
-  test('IPP in auto: a drum reading only lowers the drum, and warns once', () => {
-    const { acc, printer, lines } = setup({ protocol: 'auto', showDrum: true });
+  test('IPP in auto: a higher drum reading doesn\'t clear the drum warning', () => {
+    const { printer, lines } = setup({ protocol: 'auto' });
     printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
-    const drum = acc.getServiceById(S.Battery, 'drum');
     printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 40 } }, parts: {} }));
-    assert.equal(drum?.getCharacteristic(C.BatteryLevel).value, 5);
-    assert.equal(drum?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
     printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
     assert.equal(lines.filter((l) => l.includes('Drum is near end of life')).length, 1);
+  });
+
+  test('showDrum is retired: no drum battery (Home shows one battery), one note in the log', () => {
+    const first = setup({});
+    first.acc.addService(S.Battery, 'Printer Drum', 'drum'); // from an older version
+    const lines: string[] = [];
+    setup({ showDrum: true }, first.acc, lines);
+    assert.equal(first.acc.getServiceById(S.Battery, 'drum'), undefined);
+    assert.equal(lines.filter((l) => /showDrum\) is no longer used/.test(l)).length, 1);
   });
 
   test('IPP in auto: an ink tank printer without levels over SNMP doesn\'t get a battery from IPP', () => {
@@ -278,10 +285,10 @@ function defineTests(hap: Hap): void {
 
   test('IPP from a real Epson XP-6000: photo black gets its own tile; the maker and model show in Home', () => {
     const epson = toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', 'epson-xp-6000.bin'))).printer);
-    const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true, tileType: 'humidity' });
     printer.apply(viaIpp({ ...epson, snmpVersion: null }));
     const photo = acc.getServiceById(S.HumiditySensor, 'tile-photoBlack');
-    assert.equal(photo?.getCharacteristic(C.ConfiguredName).value, 'Printer Photo Black');
+    assert.equal(photo?.getCharacteristic(C.ConfiguredName).value, 'Photo Black Ink');
     assert.equal(photo?.getCharacteristic(C.CurrentRelativeHumidity).value, 27);
     assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile')?.getCharacteristic(C.CurrentRelativeHumidity).value, 64);
     assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 6, 'the lowest: yellow');
@@ -289,8 +296,8 @@ function defineTests(hap: Hap): void {
     assert.equal(info.getCharacteristic(C.Manufacturer).value, 'Epson');
     assert.equal(info.getCharacteristic(C.Model).value, 'XP-6000 Series');
     // Renaming the printer renames the extra tiles too
-    const renamed = setup({ protocol: 'ipp', tonerTile: true, name: 'Studio' }, acc);
-    assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Studio Photo Black');
+    const renamed = setup({ protocol: 'ipp', tonerTile: true, tileType: 'humidity', name: 'Studio' }, acc);
+    assert.equal(renamed.acc.getServiceById(S.HumiditySensor, 'tile-photoBlack')?.getCharacteristic(C.ConfiguredName).value, 'Photo Black Ink');
   });
 
   test('supplies shown before a restart: a failed supplies walk on the first poll is a failed poll', () => {
@@ -304,7 +311,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('supplies that couldn\'t be read this time: online, last levels, drum and sensors kept', async () => {
-    const { acc, printer } = setup({ lowTonerSensor: true, maintenanceSensor: true, tonerTile: true });
+    const { acc, printer } = setup({ lowTonerSensor: true, maintenanceSensor: true, tonerTile: true, tileType: 'humidity' });
     await pollWith(printer, { ...reading(8), drums: { black: { percent: 5 } }, drumPercent: 5 });
     assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 8);
     assert.equal(state(acc), OPEN);
@@ -362,7 +369,7 @@ function defineTests(hap: Hap): void {
     const t1 = acc.getServiceById(S.ContactSensor, 'tray-tray-1');
     const t2 = acc.getServiceById(S.ContactSensor, 'tray-tray-2');
     assert.equal(acc.getServiceById(S.ContactSensor, 'tray-mp-tray'), undefined);
-    assert.equal(t1?.getCharacteristic(C.ConfiguredName).value, 'Printer Tray 1');
+    assert.equal(t1?.getCharacteristic(C.ConfiguredName).value, 'Tray 1');
     assert.equal(t1?.getCharacteristic(C.ContactSensorState).value, CLOSED);
     assert.equal(t2?.getCharacteristic(C.ContactSensorState).value, OPEN);
     assert.equal(lines.filter((l) => l.startsWith('warn') && /Tray 2 is out of paper/.test(l)).length, 1);
@@ -389,7 +396,7 @@ function defineTests(hap: Hap): void {
     const renamed = setup({ paperTraySensors: true, name: 'Office' }, first.acc);
     const svc = first.acc.getServiceById(S.ContactSensor, 'tray-tray-1');
     assert.equal(renamed.printer.trays['tray-1'], svc);
-    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Office Tray 1');
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Tray 1');
     setup({ name: 'Office' }, first.acc);
     assert.equal(first.acc.getServiceById(S.ContactSensor, 'tray-tray-1'), undefined);
   });
@@ -486,7 +493,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
-    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
+    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(viaIpp(reading(50)));
     assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
     printer.apply(noLevels());
@@ -523,10 +530,10 @@ function defineTests(hap: Hap): void {
   test('battery: named Ink on inkjets, Toner on lasers', () => {
     const ink = setup({});
     ink.printer.apply(fromModel('mfc-j680dw'));
-    assert.equal(batteryName(ink.acc), 'Printer Ink');
+    assert.equal(batteryName(ink.acc), 'Ink');
     const laser = setup({});
     laser.printer.apply(reading(50));
-    assert.equal(batteryName(laser.acc), 'Printer Toner');
+    assert.equal(batteryName(laser.acc), 'Toner');
   });
 
   test('battery: keeps a name the user set in Home', () => {
@@ -540,7 +547,7 @@ function defineTests(hap: Hap): void {
     const first = setup({});
     first.printer.apply(fromModel('mfc-j680dw'));
     setup({}, first.acc);
-    assert.equal(batteryName(first.acc), 'Printer Ink');
+    assert.equal(batteryName(first.acc), 'Ink');
   });
 
   test('battery: printers without levels get none, and it stays gone after a restart', () => {
@@ -672,7 +679,7 @@ function defineTests(hap: Hap): void {
 
   test('Eve history: off by default, and needs the toner tiles', () => {
     entries = []; started = 0;
-    setup({ tonerTile: true }).printer.apply(reading(50));
+    setup({ tonerTile: true, tileType: 'humidity' }).printer.apply(reading(50));
     assert.equal(started, 0);
     const { printer, lines } = setup({ eveHistory: true });
     printer.apply(reading(50));
@@ -684,7 +691,7 @@ function defineTests(hap: Hap): void {
   test('Eve history: the lowest level, on a change or every 10 minutes', (t) => {
     entries = []; started = 0;
     t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
-    const { printer } = setup({ eveHistory: true, tonerTile: true });
+    const { printer } = setup({ eveHistory: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(reading(70));
     assert.equal(started, 1, 'started once the tiles exist');
     printer.apply(reading(70));
@@ -705,13 +712,24 @@ function defineTests(hap: Hap): void {
     assert.equal(acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52'), undefined);
   });
 
+  test('Eve history: users who had it keep humidity tiles when tileType isn\'t set; no history service without them', () => {
+    const { acc, printer } = setup({ eveHistory: true, tonerTile: true });
+    assert.equal(printer.tileType, 'humidity');
+    printer.apply(reading(55));
+    assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
+    acc.addService(new S('History', 'E863F007-079E-48FF-8F27-9C2605A29F52'));
+    // Light tiles chosen: Eve can't draw on them, so the history service goes
+    setup({ eveHistory: true, tonerTile: true, tileType: 'light' }, acc);
+    assert.equal(acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52'), undefined);
+  });
+
   test('Eve history: works with the real fakegato-history', async (t) => {
     const { mkdtempSync, readdirSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     storageDir = mkdtempSync(`${tmpdir()}/bp-history-`);
     t.after(() => { rmSync(storageDir, { recursive: true, force: true }); historyStarter = recordHistory; });
     historyStarter = startHistory;
-    const { acc, printer } = setup({ eveHistory: true, tonerTile: true });
+    const { acc, printer } = setup({ eveHistory: true, tonerTile: true, tileType: 'humidity' });
     printer.apply(reading(55));
     const history = acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52');
     assert.ok(history, 'fakegato added Eve\'s history service');
@@ -742,7 +760,7 @@ function defineTests(hap: Hap): void {
   test('maintenance sensor: opens when the drum or another part is low', () => {
     const { acc, printer } = setup({ maintenanceSensor: true, lowDrumThreshold: 10 });
     const svc = service(acc, S.ContactSensor, 'maintenance');
-    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Printer Maintenance');
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Maintenance');
     const ok = { drums: { black: { percent: 60 } }, parts: { fuser: { percent: 70 } } };
     printer.apply(reading(50, 50, ok));
     assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
@@ -758,7 +776,7 @@ function defineTests(hap: Hap): void {
   test('out of paper sensor: opens on an empty tray only', () => {
     const { acc, printer } = setup({ paperSensor: true });
     const svc = service(acc, S.ContactSensor, 'noPaper');
-    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Printer Out of Paper');
+    assert.equal(svc?.getCharacteristic(C.ConfiguredName).value, 'Out of Paper');
     printer.apply(reading(50));
     assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
     printer.apply(reading(50, 50, { fault: true, faults: ['jammed'], errors: ['jammed'] }));
@@ -769,18 +787,22 @@ function defineTests(hap: Hap): void {
     assert.equal(svc?.getCharacteristic(C.ContactSensorState).value, CLOSED);
   });
 
-  test('online sensor: follows reachability and stays readable while offline', async () => {
-    const { acc, printer } = setup({ onlineSensor: true, offlineAfter: 1 });
-    const svc = acc.getServiceById(S.OccupancySensor, 'online');
+  test('offline sensor (onlineSensor): a contact sensor that opens while the printer doesn\'t answer, readable then', async () => {
+    const first = setup({});
+    first.acc.addService(S.OccupancySensor, 'Printer Online', 'online'); // the occupancy sensor before 0.10
+    const { acc, printer } = setup({ onlineSensor: true, offlineAfter: 1 }, first.acc);
+    assert.equal(acc.getServiceById(S.OccupancySensor, 'online'), undefined, 'the old Online occupancy sensor goes');
+    const svc = acc.getServiceById(S.ContactSensor, 'offline');
     assert.ok(svc);
-    assert.notEqual(printer.occupancy, svc, 'the printing sensor is still the main one');
-    const detected = svc.getCharacteristic(C.OccupancyDetected);
+    assert.equal(svc.getCharacteristic(C.ConfiguredName).value, 'Offline');
+    assert.notEqual(printer.main, svc, 'the printing sensor is still the main one');
+    const state = svc.getCharacteristic(C.ContactSensorState);
     await pollWith(printer, reading(50));
-    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_DETECTED);
+    assert.equal(await read(state), CLOSED);
     await pollWith(printer, new Error('Request timed out'));
-    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_NOT_DETECTED);
+    assert.equal(await read(state), OPEN, 'readable while offline');
     await pollWith(printer, reading(50));
-    assert.equal(await read(detected), C.OccupancyDetected.OCCUPANCY_DETECTED);
+    assert.equal(await read(state), CLOSED);
   });
 
   test('new sensors: kept across restarts, removed when turned off', () => {
@@ -789,20 +811,140 @@ function defineTests(hap: Hap): void {
     const again = setup(on, first.acc);
     assert.equal(again.printer.maintenance, service(first.acc, S.ContactSensor, 'maintenance'));
     assert.equal(again.printer.paper, service(first.acc, S.ContactSensor, 'noPaper'));
-    assert.equal(again.printer.onlineSvc, first.acc.getServiceById(S.OccupancySensor, 'online'));
-    assert.equal(again.printer.occupancy, first.printer.occupancy, 'the cached printing sensor is reused');
+    assert.equal(again.printer.onlineSvc, first.acc.getServiceById(S.ContactSensor, 'offline'));
+    assert.equal(again.printer.main, first.printer.main, 'the cached printing sensor is reused');
     setup({}, first.acc);
     assert.equal(service(first.acc, S.ContactSensor, 'maintenance'), undefined);
     assert.equal(service(first.acc, S.ContactSensor, 'noPaper'), undefined);
-    assert.equal(first.acc.getServiceById(S.OccupancySensor, 'online'), undefined);
+    assert.equal(first.acc.getServiceById(S.ContactSensor, 'offline'), undefined);
+  });
+
+  test('printing as a contact sensor (printingSensor): the main tile opens while a job prints', async () => {
+    const first = setup({});
+    const occupancy = first.printer.main;
+    const { acc, printer } = setup({ printingSensor: 'contact' }, first.acc);
+    assert.equal(acc.services.includes(occupancy), false, 'the occupancy sensor goes');
+    assert.equal(printer.main, acc.getServiceById(S.ContactSensor, 'printing'));
+    assert.equal(printer.main.isPrimaryService, true);
+    assert.equal(printer.main.getCharacteristic(C.ConfiguredName).value, 'Printer');
+    await pollWith(printer, { ...reading(50), printing: true });
+    assert.equal(printer.main.getCharacteristic(C.ContactSensorState).value, OPEN);
+    await pollWith(printer, reading(50));
+    assert.equal(printer.main.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    // Back to occupancy (the default)
+    const back = setup({}, acc);
+    assert.equal(acc.getServiceById(S.ContactSensor, 'printing'), undefined);
+    assert.equal(back.printer.main.UUID, S.OccupancySensor.UUID);
+  });
+
+  test('toner tiles: light sensors by default', () => {
+    const { acc, printer } = setup({ tonerTile: true });
+    printer.apply(reading(70));
+    assert.equal(acc.getServiceById(S.LightSensor, 'tonerTile')?.getCharacteristic(C.CurrentAmbientLightLevel).value, 70);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined);
+  });
+
+  test('toner tiles as light sensors (tileType light): the level in lux, not in the room\'s humidity', () => {
+    const first = setup({ tonerTile: true, tileType: 'humidity' });
+    first.printer.apply(reading(40));
+    const { acc, printer, lines } = setup({ tonerTile: true, tileType: 'light', eveHistory: true }, first.acc);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'the humidity tile goes');
+    printer.apply(reading(0));
+    const tile = acc.getServiceById(S.LightSensor, 'tonerTile');
+    assert.equal(tile?.getCharacteristic(C.CurrentAmbientLightLevel).value, 0.0001, 'lux can\'t be 0');
+    printer.apply(reading(60));
+    assert.equal(tile?.getCharacteristic(C.CurrentAmbientLightLevel).value, 60);
+    assert.ok(lines.some((l) => /Eve history needs the toner \/ ink tiles shown as humidity/.test(l)));
+  });
+
+  test('sensor names: what they are; names from before 0.10 move over, names set in Home stay', () => {
+    const first = setup({ lowTonerSensor: true, tonerTile: true, tileType: 'humidity' });
+    first.printer.apply(reading(50));
+    const low = service(first.acc, S.ContactSensor, 'lowToner')!;
+    const problem = service(first.acc, S.ContactSensor, 'problem')!;
+    // As 0.9 named them, one renamed in Home
+    low.setCharacteristic(C.ConfiguredName, 'Printer Toner Low');
+    problem.setCharacteristic(C.ConfiguredName, 'Printer jams');
+    first.acc.getServiceById(S.HumiditySensor, 'tonerTile')!.setCharacteristic(C.ConfiguredName, 'Printer Toner');
+    const again = setup({ lowTonerSensor: true, tonerTile: true, tileType: 'humidity' }, first.acc);
+    again.printer.apply(reading(50));
+    assert.equal(low.getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+    assert.equal(problem.getCharacteristic(C.ConfiguredName).value, 'Printer jams');
+    assert.equal(first.acc.getServiceById(S.HumiditySensor, 'tonerTile')!.getCharacteristic(C.ConfiguredName).value, 'Toner');
+    // Color tiles: "Cyan Toner"
+    const color = setup({ tonerTile: true, tileType: 'humidity' });
+    color.printer.apply(fromModel('dcp-l3550cdw'));
+    assert.equal(color.acc.getServiceById(S.HumiditySensor, 'tile-cyan')!.getCharacteristic(C.ConfiguredName).value, 'Cyan Toner');
+  });
+
+  test('switching printingSensor keeps every sensor linked to the printer\'s tile', async () => {
+    const first = setup({ lowTonerSensor: true, paperTraySensors: true });
+    await pollWith(first.printer, { ...reading(5), trays: [tray('Tray 1', 'ok')] });
+    const linked = (p: PrinterAccessory) => (p.main as unknown as { linkedServices: Service[] }).linkedServices.map((s) => s.subtype).sort();
+    const contact = setup({ lowTonerSensor: true, paperTraySensors: true, printingSensor: 'contact' }, first.acc);
+    assert.deepEqual(linked(contact.printer), ['lowToner', 'problem', 'toner', 'tray-tray-1']);
+    const back = setup({ lowTonerSensor: true, paperTraySensors: true }, first.acc);
+    assert.deepEqual(linked(back.printer), ['lowToner', 'problem', 'toner', 'tray-tray-1']);
+  });
+
+  test('renamed printer: its tile and sensors follow, even when its name is a sensor\'s', () => {
+    // A printer named "Toner" (its battery is "Toner" too), renamed "Laser"
+    const first = setup({ name: 'Toner', lowTonerSensor: true });
+    first.printer.apply(reading(50));
+    const again = setup({ name: 'Laser', lowTonerSensor: true }, first.acc);
+    again.printer.apply(reading(50));
+    assert.equal(again.printer.main.getCharacteristic(C.ConfiguredName).value, 'Laser');
+    assert.equal(battery(first.acc)!.getCharacteristic(C.ConfiguredName).value, 'Toner', 'the battery isn\'t renamed after the printer');
+    // 0.9's names after the old printer name move to today's
+    low(first.acc).setCharacteristic(C.ConfiguredName, 'Laser Toner Low');
+    const third = setup({ name: 'Office', lowTonerSensor: true }, first.acc);
+    third.printer.apply(reading(50));
+    assert.equal(low(first.acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+  });
+
+  test('an inkjet\'s Toner Low sensor becomes Ink Low', () => {
+    const { acc, printer } = setup({ lowTonerSensor: true });
+    printer.apply(reading(50));
+    assert.equal(low(acc).getCharacteristic(C.ConfiguredName).value, 'Toner Low');
+    printer.apply({ ...reading(50), type: 'ink' });
+    assert.equal(low(acc).getCharacteristic(C.ConfiguredName).value, 'Ink Low');
+  });
+
+  test('sensor names with several printers: the printer\'s name in front', () => {
+    const lines: string[] = [];
+    const acc = Object.assign(new hap.Accessory('Office', hap.uuid.generate('office')), { context: {} }) as unknown as Acc;
+    const log = Object.fromEntries(['info', 'warn', 'error', 'debug'].map((l) => [l, (m: string) => lines.push(m)])) as unknown as Logging;
+    const api = { hap, updatePlatformAccessories: () => {}, user: { storagePath: () => storageDir } } as unknown as API;
+    const p = new PrinterAccessory({ log, api }, acc, { name: 'Office', host: '10.0.0.1', lowTonerSensor: true },
+      { query: () => new Promise(() => {}), prefixNames: true });
+    p.stop();
+    p.apply(reading(50));
+    assert.equal(service(acc, S.ContactSensor, 'lowToner')!.getCharacteristic(C.ConfiguredName).value, 'Office Toner Low');
+    assert.equal(service(acc, S.ContactSensor, 'problem')!.getCharacteristic(C.ConfiguredName).value, 'Office Problem');
+  });
+
+  test('firmware: the printer\'s when it\'s a version Home shows, else the plugin\'s', () => {
+    const { acc, printer } = setup({});
+    const info = () => acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value;
+    printer.apply({ ...reading(50), firmware: 'SWP1FN1514BR' });
+    assert.match(String(info()), /^\d+\.\d+\.\d+/, 'the plugin\'s version');
+    printer.apply({ ...reading(50), firmware: '1.14' });
+    assert.equal(info(), '1.14');
+    assert.equal(acc.context.firmware, '1.14');
+    const again = setup({}, acc);
+    assert.equal(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value, '1.14', 'kept after a restart');
+    // A firmware Home can't show (say, another printer at the address): the plugin's again
+    again.printer.apply({ ...reading(50), firmware: 'SWP1FN1514BR' });
+    assert.equal(acc.context.firmware, undefined);
+    assert.match(String(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value), /^\d+\.\d+\.\d+/);
   });
 
   test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {
-    const first = setup({ tonerTile: true });
+    const first = setup({ tonerTile: true, tileType: 'humidity' });
     first.printer.apply(reading(40));
     const tile = first.acc.getServiceById(S.HumiditySensor, 'tonerTile');
     assert.ok(tile, 'a tile for the black toner');
-    const again = setup({ tonerTile: true }, first.acc);
+    const again = setup({ tonerTile: true, tileType: 'humidity' }, first.acc);
     assert.equal(again.printer.tiles.black, tile, 'the cached tile is reused');
     setup({ tonerTile: false }, first.acc);
     assert.equal(first.acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'removed when turned off');

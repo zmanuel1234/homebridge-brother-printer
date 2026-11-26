@@ -29,7 +29,9 @@ export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantVa
 const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
 /** Printer MIB input table (prtInputEntry): paper trays; type 2, max capacity 9, current level 10, status 11, name 13 */
 export const INPUT_TABLE = '1.3.6.1.2.1.43.8.2.1';
-const TRAY_COLUMNS = [2, 9, 10, 11, 13];
+// Name and level first: without them there's nothing to show
+const TRAY_COLUMNS = [13, 10, 9, 2, 11];
+const REQUIRED_TRAY_COLUMNS = [10, 13];
 /** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
 const SUPPLY_TYPES: Record<number, string> = {
   1: 'other', 2: 'unknown', 3: 'toner', 4: 'waste-toner', 5: 'ink', 6: 'ink-cartridge', 7: 'ink-ribbon', 8: 'waste-ink',
@@ -138,6 +140,8 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
+  /** The printer's firmware version as it gives it over IPP ("01.35", "SWP1FN1514BR"), when it does */
+  firmware?: string | null;
 }
 
 export interface QueryResult extends PrinterData {
@@ -265,17 +269,22 @@ export async function readSupplies(session: snmp.Session, charset: number | null
   }
 }
 
-/** The paper trays' rows (only the columns used); undefined when they can't be read (never fails the poll) */
-async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
-  try {
-    const rows: { oid: string; value: unknown }[] = [];
-    for (const col of TRAY_COLUMNS) {
+/**
+ * The paper trays' rows (only the columns used), each column on its own: a printer that
+ * refuses the type, capacity or status column still gives its trays. Without the names
+ * or the levels there's nothing reliable to show, and a timeout stops the read (rather
+ * than waiting on every column): both give undefined. Never fails the poll.
+ */
+export async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
+  const rows: { oid: string; value: unknown }[] = [];
+  for (const col of TRAY_COLUMNS) {
+    try {
       rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32)).map((vb) => ({ oid: vb.oid, value: vb.value })));
+    } catch (err) {
+      if (REQUIRED_TRAY_COLUMNS.includes(col) || /time(d)? ?out/i.test((err as Error)?.message ?? '')) { return undefined; }
     }
-    return rows;
-  } catch {
-    return undefined;
   }
+  return rows;
 }
 
 function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
