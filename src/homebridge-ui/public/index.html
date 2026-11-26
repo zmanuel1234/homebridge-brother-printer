@@ -1,30 +1,54 @@
 <!--
   Brother Printer settings: a search for printers and a connection test above the
   usual settings form. Runs inside the Homebridge UI, which provides `homebridge`
-  and Bootstrap's styles.
+  and its own stylesheet (Bootstrap 5 with the UI's themes, light and dark, in its
+  colors). This page uses the classes those themes style (card, btn-primary,
+  btn-elegant, custom-input / custom-select, list-group, table) and the UI's font.
+  The few rules below only dim text, draw neutral lines, and fix readability on dark.
 -->
+<style>
+  /* Secondary text and table lines: the theme's own text color, dimmed, so they read
+     in light and dark themes alike (Bootstrap's grey is unreadable on dark) */
+  #bp-tools .bp-muted { color: inherit; opacity: 0.7; }
+  #bp-tools .table { --bs-table-bg: transparent; --bs-table-color: inherit; color: inherit; }
+  #bp-tools .table th, #bp-tools .table td { border-color: rgba(128, 128, 128, 0.35); }
+  /* The UI greys every table cell (#999), too faint on white; values use the text color */
+  #bp-tools .table td { color: inherit !important; }
+  /* Dark themes: Bootstrap's green and red are too dark on the dark card */
+  body.dark-mode #bp-tools .text-success { color: #75b798 !important; }
+  body.dark-mode #bp-tools .text-danger { color: #ea868f !important; }
+  /* Dark themes set the select's background shorthand, which drops its arrow; put a light one back */
+  body.dark-mode #bp-tools .custom-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23dddddd' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important; background-position: right .75rem center !important;
+    background-size: 16px 12px !important;
+  }
+  /* The UI's custom-select padding would let a long name run under the arrow */
+  #bp-tools .custom-select { padding-right: 2.25rem; }
+  #bp-tools .list-group-item { border-color: rgba(128, 128, 128, 0.35); }
+</style>
 <div class="card card-body mb-3" id="bp-tools">
   <h5 class="card-title mb-2">Find and test printers</h5>
-  <p class="small text-muted mb-2">
+  <p class="small bp-muted mb-2">
     Searches this network for printers with SNMP turned on (Brother and other makes), and fills in a new printer's address and serial
     number. The serial number lets the plugin keep a printer in Home when you rename it or its address changes.
   </p>
   <div class="d-flex flex-wrap align-items-end mb-2" style="gap: .5rem">
     <div>
-      <label class="small mb-0" for="bp-community">SNMP community</label>
-      <input class="form-control form-control-sm" id="bp-community" value="public" style="width: 10rem" autocomplete="off">
+      <label class="form-label mb-1" for="bp-community">SNMP community</label>
+      <input class="form-control custom-input" id="bp-community" value="public" style="width: 10rem" autocomplete="off">
     </div>
-    <button type="button" class="btn btn-primary btn-sm" id="bp-search">Search for printers</button>
+    <button type="button" class="btn btn-primary" id="bp-search">Search for printers</button>
   </div>
   <div id="bp-found"></div>
 
   <hr class="my-2">
   <div class="d-flex flex-wrap align-items-end" style="gap: .5rem">
     <div>
-      <label class="small mb-0" for="bp-which">Test the settings below for</label>
-      <select class="form-control form-control-sm" id="bp-which" style="min-width: 12rem"></select>
+      <label class="form-label mb-1" for="bp-which">Test the settings below for</label>
+      <select class="form-select custom-select" id="bp-which" style="min-width: 12rem"></select>
     </div>
-    <button type="button" class="btn btn-secondary btn-sm" id="bp-test">Test connection</button>
+    <button type="button" class="btn btn-elegant" id="bp-test">Test connection</button>
   </div>
   <div id="bp-result" class="small mt-2"></div>
 </div>
@@ -64,7 +88,7 @@
 
   $('bp-search').addEventListener('click', async () => {
     const out = $('bp-found');
-    out.innerHTML = '<span class="small text-muted">Searching (a few seconds)…</span>';
+    out.innerHTML = '<span class="small bp-muted">Searching (a few seconds)…</span>';
     $('bp-search').disabled = true;
     try {
       found = await homebridge.request('/discover', { community: $('bp-community').value.trim() || 'public' });
@@ -79,11 +103,11 @@
         const have = configured.find((c) => (p.serial && String(c.serial || '').trim() === p.serial)
           || String(c.host || '').trim() === p.host);
         const action = have
-          ? `<span class="small text-muted">Already added as “${esc(have.name || 'Printer')}”</span>`
-          : `<button type="button" class="btn btn-outline-primary btn-sm" data-add="${i}">Add</button>`;
+          ? `<span class="small bp-muted">Already added as “${esc(have.name || 'Printer')}”</span>`
+          : `<button type="button" class="btn btn-primary btn-sm" data-add="${i}">Add</button>`;
         return `<li class="list-group-item d-flex justify-content-between align-items-center px-0">
           <span><strong>${esc(p.model)}</strong> · ${esc(p.host)}<br>
-          <span class="small text-muted">${esc(p.levels)}${p.serial ? ` · serial ${esc(p.serial)}` : ''}</span></span>
+          <span class="small bp-muted">${esc(p.levels)}${p.serial ? ` · serial ${esc(p.serial)}` : ''}</span></span>
           ${action}</li>`;
       }).join('') + '</ul>';
     } catch (err) {
@@ -123,7 +147,7 @@
     // Show the new printer in the form
     homebridge.hideSchemaForm();
     homebridge.showSchemaForm();
-    button.outerHTML = `<span class="small text-muted">Added as “${esc(name)}”. Save to keep it.</span>`;
+    button.outerHTML = `<span class="small bp-muted">Added as “${esc(name)}”. Save to keep it.</span>`;
     homebridge.toast.success(`Added ${name}. Click Save to keep it.`, 'Brother Printer');
     await refreshPrinterList();
   }
@@ -133,9 +157,9 @@
   $('bp-test').addEventListener('click', async () => {
     const out = $('bp-result');
     const index = $('bp-which').value;
-    if (index === '') { out.innerHTML = '<span class="text-muted">Add a printer first.</span>'; return; }
+    if (index === '') { out.innerHTML = '<span class="bp-muted">Add a printer first.</span>'; return; }
     const printer = (await platformConfig())[0].printers[Number(index)];
-    out.innerHTML = '<span class="text-muted">Reading the printer…</span>';
+    out.innerHTML = '<span class="bp-muted">Reading the printer…</span>';
     $('bp-test').disabled = true;
     try {
       const r = await homebridge.request('/test', printer);
@@ -149,10 +173,10 @@
         ['Read over', r.via],
       ];
       out.innerHTML = '<span class="text-success">Connected.</span><table class="table table-sm mb-0 mt-1"><tbody>'
-        + rows.map(([k, v]) => `<tr><th class="font-weight-normal text-muted" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
+        + rows.map(([k, v]) => `<tr><th class="fw-normal bp-muted" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
         + '</tbody></table>';
       if (r.serial && printer.serial !== r.serial) {
-        out.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="bp-keep-serial">
+        out.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-elegant btn-sm mt-1" id="bp-keep-serial">
           Save serial number ${esc(r.serial)} with this printer</button>`);
         $('bp-keep-serial').addEventListener('click', async () => {
           try {
@@ -164,7 +188,7 @@
             await homebridge.updatePluginConfig(blocks);
             homebridge.hideSchemaForm();
             homebridge.showSchemaForm();
-            $('bp-keep-serial').outerHTML = '<span class="text-muted">Serial number added. Save to keep it.</span>';
+            $('bp-keep-serial').outerHTML = '<span class="bp-muted">Serial number added. Save to keep it.</span>';
           } catch (err) {
             homebridge.toast.error(errorText(err), 'Brother Printer');
           }
