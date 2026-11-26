@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-11-26
+
+New optional sensors, SNMPv3, a printer search in the settings screen, and Eve history.
+Every new option is off by default; with your current config 0.6.0 behaves like 0.5.2,
+except that renaming a printer now keeps it in Home (below).
 
 ### Added
 - Optional **Out of Paper** contact sensor (`paperSensor`): opens when a tray is empty, so
@@ -13,9 +17,9 @@
   can run on it (for example, turning off the printer's smart plug).
 - **SNMPv3** (`snmpVersion` `3`), for printers with v1/v2c turned off: user name, MD5 or
   SHA authentication and DES or AES encryption. The settings screen shows these fields once
-  v3 is picked, with an optional context name; missing or invalid SNMPv3 settings (including an
-  unknown protocol) are reported at startup. The probe
-  command takes `--v3 <user>` and the matching options.
+  v3 is picked, with an optional context name; missing or invalid SNMPv3 settings
+  (including an unknown protocol) are reported at startup. The probe command takes
+  `--v3 <user>` and the matching options.
 - **Search for printers** and **Test connection** at the top of the settings screen: find
   Brother printers on the network (one SNMP broadcast, no extra setup) and add them with
   their address and serial number, or read a printer with the settings as entered before
@@ -25,8 +29,6 @@
   graph over about 60 days on the toner / ink tiles in the Eve app. Uses fakegato-history,
   which adds about 250 MB to the install (Google's API client) and is only loaded when
   this is on.
-
-The new sensors are off by default; with your current config nothing changes.
 
 ### Changed
 - **Renaming a printer keeps it in Home**: its room, automations and notifications stay,
@@ -41,6 +43,9 @@ The new sensors are off by default; with your current config nothing changes.
 - README: how this plugin compares with AirPrint (IPP) plugins such as
   @homebridge-plugins/homebridge-printer.
 - Issue forms for printer reports (with the probe output) and bugs.
+- New dependencies: @homebridge/plugin-ui-utils (the settings screen) and fakegato-history
+  (Eve history; it brings Google's API client, about 250 MB).
+- Development only: oxlint also checks ESLint's no-dupe-args and no-octal again.
 
 ## 0.5.2 - 2026-11-26
 
