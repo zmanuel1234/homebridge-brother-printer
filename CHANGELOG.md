@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 - 2026-11-26
+
+Printers of other makes over SNMP, and IPP for more printers and inks. Brother printers
+read as before; with your current config 0.8.0 behaves like 0.7.0.
 
 ### Added
 - **Printers of other makes over SNMP**: without Brother records with levels, the plugin
@@ -26,6 +29,7 @@
     (Canon's `#00CFFF` cyan) and Canon's two blacks (pigment PGBK and dye BK) read right.
   - A maintenance kit counts as a part for the Maintenance sensor.
   - Home shows the printer's own maker (HP, Epson, Canon…) and model, not "Brother".
+- Supply names and display text in Japanese (Shift_JIS) and Traditional Chinese (Big5).
 
 ### Changed
 - README and settings: what IPP reports, from a real MFC-L2750DW (toner %, but no drum,
