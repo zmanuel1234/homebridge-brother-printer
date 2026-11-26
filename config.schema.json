@@ -167,7 +167,7 @@
               "title": "Low toner sensor",
               "type": "boolean",
               "default": false,
-              "description": "Adds a contact sensor that opens when toner or ink is low, so Home notifies \"Printer Toner Low opened\" instead of \"battery is low\". Turn on notifications for it in the Home app."
+              "description": "Adds a contact sensor that opens when toner or ink is low, so Home notifies \"Toner Low opened\" instead of \"battery is low\". Turn on notifications for it in the Home app."
             },
             "lowDrumThreshold": {
               "title": "Drum and parts low at (%)",
@@ -218,7 +218,7 @@
               "title": "A sensor for each paper tray",
               "type": "boolean",
               "default": false,
-              "description": "Adds one contact sensor per paper tray (\"Printer Tray 1\", \"Printer Tray 2\"…) that opens when that tray is empty. Bypass and manual trays, often empty on purpose, get none. The trays are then read on every poll."
+              "description": "Adds one contact sensor per paper tray (\"Tray 1\", \"Tray 2\"…) that opens when that tray is empty. Bypass and manual trays, often empty on purpose, get none. The trays are then read on every poll."
             },
             "onlineSensor": {
               "title": "Offline sensor",
