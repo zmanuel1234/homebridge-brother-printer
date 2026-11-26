@@ -8,13 +8,15 @@ import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-ut
 import { discover } from '../discover';
 import { queryOptions } from '../accessory';
 import type { PrinterConfig } from '../accessory';
-import { query } from '../snmp';
+import { readVia } from '../snmp';
+import { readPrinter } from '../read';
 import type { QueryResult } from '../snmp';
 
 export interface TestResult {
   model: string | null;
   serial: string | null;
-  snmpVersion: string;
+  /** "SNMP v2c" or "IPP" */
+  via: string;
   status: string;
   levels: string;
   drum: string | null;
@@ -31,7 +33,7 @@ export function testSummary(d: QueryResult): TestResult {
   return {
     model: d.model,
     serial: d.serial,
-    snmpVersion: d.snmpVersion,
+    via: readVia(d),
     status: d.statusText || (d.printing ? 'printing' : d.fault ? 'problem' : 'unknown'),
     levels,
     drum: d.drumPercent !== null ? `${d.drumPercent}%` : null,
@@ -40,15 +42,16 @@ export function testSummary(d: QueryResult): TestResult {
 }
 
 /** Read one printer with the settings as entered (not yet saved) */
-export async function testPrinter(entry: unknown, read = query): Promise<TestResult> {
+export async function testPrinter(entry: unknown, read = readPrinter): Promise<TestResult> {
   const config = (entry && typeof entry === 'object' ? entry : {}) as Partial<PrinterConfig> & Record<string, unknown>;
   if (!String(config.host ?? '').trim()) { throw new Error('Enter the printer\'s IP address or hostname first.'); }
   const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
   try {
     return testSummary(await read({ ...options, timeout: 3000, retries: 0 }));
   } catch (err) {
-    throw new Error(`Couldn't read ${options.host}: ${errorText(err)}. Check the address, that SNMP is on in the `
-      + 'printer\'s web page (Network > Protocol), and the SNMP settings.', { cause: err });
+    const what = options.protocol === 'ipp' ? 'IPP' : options.protocol === 'auto' ? 'SNMP or IPP' : 'SNMP';
+    throw new Error(`Couldn't read ${options.host}: ${errorText(err)}. Check the address, that ${what} is on in the `
+      + `printer's web page (Network > Protocol), and the ${what} settings.`, { cause: err });
   }
 }
 

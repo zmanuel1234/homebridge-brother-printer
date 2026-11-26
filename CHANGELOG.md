@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Reading over IPP (AirPrint)**, as an option (`protocol`): `auto` reads over SNMP as
+  before and over IPP when SNMP doesn't answer; `ipp` uses IPP only, for printers with SNMP
+  turned off. IPP gives the printer's state, problems and the supplies it lists, often
+  without a toner % on Brother lasers. Optional `ippUrl` (default
+  `ipp://<host>:631/ipp/print`; `ipps://` for encryption). The probe command takes
+  `--protocol ipp|auto` and `--ipp-url`, and Test connection shows which protocol answered.
+
+SNMP stays the default; with your current config nothing changes.
+
 ## 0.6.0 - 2026-11-26
 
 New optional sensors, SNMPv3, a printer search in the settings screen, and Eve history.

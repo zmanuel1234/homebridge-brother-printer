@@ -7,12 +7,14 @@
  * Prints what the plugin would read from the printer.
  */
 
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from '../snmp';
+import { readPrinter } from '../read';
 import type { QueryOptions } from '../snmp';
 
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
                              [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
+       brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>]
 SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
 --auth none needs --priv none too. Passwords given as options are saved in your shell
 history and visible in the process list; to avoid that, set the environment variables
@@ -36,7 +38,7 @@ for (let i = 0; i < args.length; i++) {
   flags[a.slice(2)] = value;
   i++;
 }
-const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass', 'context'];
+const known = ['v3', 'auth', 'auth-pass', 'priv', 'priv-pass', 'context', 'protocol', 'ipp-url'];
 const unknown = Object.keys(flags).find((k) => !known.includes(k));
 if (unknown) { fail(`Unknown option --${unknown}.\n${USAGE}`); }
 
@@ -63,18 +65,27 @@ if (flags.v3 !== undefined) {
   } catch (err) {
     fail(`${(err as Error).message}.\n${USAGE}`);
   }
-} else if (Object.keys(flags).length) {
+} else if (Object.keys(flags).some((k) => !['protocol', 'ipp-url'].includes(k))) {
   fail(`--auth, --priv and their passwords need --v3 <user>.\n${USAGE}`);
 }
 
-query(options)
+if (flags.protocol !== undefined) {
+  if (!['snmp', 'ipp', 'auto'].includes(flags.protocol)) { fail(`--protocol must be snmp, ipp or auto.\n${USAGE}`); }
+  options.protocol = flags.protocol as QueryOptions['protocol'];
+}
+if (flags['ipp-url'] !== undefined) {
+  if (!options.protocol || options.protocol === 'snmp') { fail('--ipp-url needs --protocol ipp or auto.'); }
+  options.ippUrl = flags['ipp-url'];
+}
+
+readPrinter(options)
   .then((d) => {
     console.log(JSON.stringify(d, null, 2));
   })
   .catch((err: unknown) => {
     const e = err as { message?: string } | null;
     console.error(`Couldn't read ${host}: ${e?.message || String(err)}`);
-    console.error('Check the address, and that SNMP is enabled on the printer (Network > Protocol).');
+    console.error(`Check the address, and that ${options.protocol === 'ipp' ? 'IPP' : 'SNMP'} is enabled on the printer (Network > Protocol).`);
     if (options.version === '3') { console.error('For SNMPv3, also check the user name, protocols and passwords.'); }
     process.exit(1);
   });

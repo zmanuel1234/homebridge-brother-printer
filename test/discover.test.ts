@@ -83,7 +83,7 @@ test('test connection: reads with the settings as entered', async () => {
   assert.equal(used?.host, '10.0.0.5');
   assert.equal(used?.community, 'secret');
   assert.equal(used?.version, '1');
-  assert.equal(r.snmpVersion, '1');
+  assert.equal(r.via, 'SNMP v1');
   assert.match(r.levels, /^black \d+%, cyan \d+%, magenta \d+%, yellow \d+%$/);
 });
 

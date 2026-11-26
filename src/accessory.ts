@@ -2,8 +2,9 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { format } from 'node:util';
-import { query } from './snmp';
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from './snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp';
+import { readPrinter } from './read';
+import { ippEndpoint } from './ipp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 import { entryDue, startHistory } from './history';
@@ -35,6 +36,9 @@ export interface PrinterConfig {
   community?: string;
   port?: unknown;
   snmpVersion?: unknown;
+  /** 'snmp' (default), 'ipp' or 'auto' */
+  protocol?: unknown;
+  ippUrl?: unknown;
   v3User?: unknown;
   v3AuthProtocol?: unknown;
   v3AuthPassword?: unknown;
@@ -148,7 +152,19 @@ export function queryOptions(config: PrinterConfig): QueryOptions & { host: stri
     version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
     state: {},
   };
-  if (options.version === '3') {
+  const protocol = String(config.protocol ?? '').trim().toLowerCase();
+  options.protocol = protocol === 'ipp' || protocol === 'auto' ? protocol : 'snmp';
+  const ippUrl = String(config.ippUrl ?? '').trim();
+  if (ippUrl && options.protocol !== 'snmp') {
+    try {
+      ippEndpoint(ippUrl);
+    } catch {
+      throw new Error(`IPP address "${ippUrl}" isn't valid; use the form ipp://<printer>:631/ipp/print`);
+    }
+    options.ippUrl = ippUrl;
+  }
+  // SNMPv3 settings only matter when SNMP is used
+  if (options.version === '3' && options.protocol !== 'ipp') {
     options.v3 = {
       user: String(config.v3User ?? '').trim(),
       authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
@@ -213,7 +229,7 @@ export class PrinterAccessory {
 
   constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
     deps: { query?: QueryFn; startHistory?: typeof startHistory } = {}) {
-    this.query = deps.query || query;
+    this.query = deps.query || readPrinter;
     this.startHistory = deps.startHistory || startHistory;
     this.platform = platform;
     this.log = platform.log;
@@ -609,7 +625,7 @@ export class PrinterAccessory {
         ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
         : `no ${kind} levels reported`;
       const drum = d.drumPercent !== null ? `, drum ${d.drumPercent}%` : '';
-      this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (SNMP v${d.snmpVersion}): ${levels}${drum}, `
+      this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (${readVia(d)}): ${levels}${drum}, `
         + `${d.totalPages ?? '?'} pages, status "${d.statusText || 'unknown'}".`);
       this.last.summary = true;
     }

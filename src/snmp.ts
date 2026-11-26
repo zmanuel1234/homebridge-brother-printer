@@ -52,8 +52,14 @@ export function protocolSetting<T extends string>(value: unknown, allowed: reado
   throw new Error(`SNMPv3 ${what} "${String(value)}" isn't supported; use one of ${allowed.join(', ')}`);
 }
 
+/** How the plugin reads the printer: SNMP (the default), IPP, or SNMP with IPP when SNMP doesn't answer */
+export type ReadProtocol = 'snmp' | 'ipp' | 'auto';
+
 export interface QueryOptions {
   host: string;
+  protocol?: ReadProtocol;
+  /** IPP address; the default is ipp://<host>:631/ipp/print */
+  ippUrl?: string;
   port?: number;
   community?: string;
   timeout?: number;
@@ -62,8 +68,8 @@ export interface QueryOptions {
   version?: SnmpVersion | 'auto';
   /** Needed for version '3' */
   v3?: V3User;
-  /** Remembers which version worked, across polls */
-  state?: { version?: SnmpVersion };
+  /** Remembers which version (and, with protocol auto, which protocol) worked, across polls */
+  state?: { version?: SnmpVersion; protocol?: 'snmp' | 'ipp' };
 }
 
 export interface PrinterData extends StatusSummary {
@@ -90,7 +96,15 @@ export interface PrinterData extends StatusSummary {
 }
 
 export interface QueryResult extends PrinterData {
-  snmpVersion: SnmpVersion;
+  /** The SNMP version that answered; null when read over IPP */
+  snmpVersion: SnmpVersion | null;
+  /** Set when the reading came over IPP */
+  via?: 'ipp';
+}
+
+/** "SNMP v2c" or "IPP", for the log and the settings screen */
+export function readVia(d: QueryResult): string {
+  return d.via === 'ipp' ? 'IPP' : `SNMP v${d.snmpVersion}`;
 }
 
 const NAMES = Object.keys(OID) as OidName[];
