@@ -9,10 +9,25 @@
  * MFC-L2750DW.
  */
 
+/** The colors in Brother's SNMP records */
 export const COLORS = ['black', 'cyan', 'magenta', 'yellow'] as const;
-export type Color = typeof COLORS[number];
+export type BaseColor = typeof COLORS[number];
 
-export type PartKey = 'belt' | 'fuser' | 'laser' | 'paperFeedMP' | 'paperFeed1' | 'inkWasteBox';
+/**
+ * Every supply color the plugin shows, in display order. Beyond the four
+ * process colors, printers read over IPP can have photo inks and HP's single
+ * tri-color cartridge.
+ */
+export const ALL_COLORS = [...COLORS, 'photoBlack', 'gray', 'lightCyan', 'lightMagenta', 'tricolor'] as const;
+export type Color = typeof ALL_COLORS[number];
+
+/** How a color is named on its tile and in the log */
+export const COLOR_NAMES: Record<Color, string> = {
+  black: 'Black', cyan: 'Cyan', magenta: 'Magenta', yellow: 'Yellow',
+  photoBlack: 'Photo Black', gray: 'Gray', lightCyan: 'Light Cyan', lightMagenta: 'Light Magenta', tricolor: 'Tri-color',
+};
+
+export type PartKey = 'belt' | 'fuser' | 'laser' | 'paperFeedMP' | 'paperFeed1' | 'inkWasteBox' | 'maintenanceKit';
 export type PrinterType = 'laser' | 'ink';
 
 /** Raw SNMP value as net-snmp or a capture gives it */
@@ -42,8 +57,8 @@ export interface Part {
 }
 
 export interface Maintenance {
-  supplies: Record<Color, SupplyReading>;
-  drums: Partial<Record<Color, Drum>>;
+  supplies: Record<BaseColor, SupplyReading>;
+  drums: Partial<Record<BaseColor, Drum>>;
   parts: Partial<Record<PartKey, Part>>;
   misc: { legacy?: boolean; drumStatus?: number };
   unknown: Record<string, number>;
@@ -64,7 +79,7 @@ export interface ParsedRecord {
 }
 
 type MaintenanceDef =
-  | { group: 'level' | 'fine' | 'supplyStatus' | 'drum' | 'drumPagesUsed'; color: Color; percent?: boolean }
+  | { group: 'level' | 'fine' | 'supplyStatus' | 'drum' | 'drumPagesUsed'; color: BaseColor; percent?: boolean }
   | { group: 'parts'; key: PartKey; percent?: boolean }
   | { group: 'misc'; key: 'drumStatus'; percent?: boolean };
 
@@ -114,7 +129,7 @@ const COUNTERS: Record<number, keyof Counters> = {
 };
 
 type NextCareDef =
-  | { group: 'drumPagesRemaining'; color: Color }
+  | { group: 'drumPagesRemaining'; color: BaseColor }
   | { group: 'partPagesRemaining'; key: PartKey };
 
 // Next-care blob (brInfoNextCare), laser only: pages left
@@ -180,8 +195,8 @@ const pct = (rec: ParsedRecord, def: MaintenanceDef): number | null => {
 };
 const finite = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-function emptySupplies(): Record<Color, SupplyReading> {
-  return Object.fromEntries(COLORS.map((c) => [c, { level: null, fine: null, status: null }])) as Record<Color, SupplyReading>;
+function emptySupplies(): Record<BaseColor, SupplyReading> {
+  return Object.fromEntries(COLORS.map((c) => [c, { level: null, fine: null, status: null }])) as Record<BaseColor, SupplyReading>;
 }
 
 /** Decode the maintenance and next-care blobs */
@@ -236,7 +251,7 @@ export function decodeMaintenance(maintenance: RawValue, nextCare?: RawValue): M
   }
 
   // Drum entries that only carry a page count aren't useful on their own
-  for (const [color, d] of Object.entries(drums) as [Color, Drum][]) {
+  for (const [color, d] of Object.entries(drums) as [BaseColor, Drum][]) {
     if (d.percent === undefined && d.pagesRemaining === undefined) { delete drums[color]; }
   }
 
@@ -289,7 +304,7 @@ export function printerType(model: string | null | undefined, decoded: Maintenan
 }
 
 /** One entry per supply the printer reports a level for */
-export function supplyList(supplies: Record<Color, SupplyReading>): Supply[] {
+export function supplyList(supplies: Record<BaseColor, SupplyReading>): Supply[] {
   const list: Supply[] = [];
   for (const color of COLORS) {
     const s = supplies[color];

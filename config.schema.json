@@ -44,7 +44,7 @@
                 { "title": "SNMP, or IPP (AirPrint) when SNMP doesn't answer", "enum": ["auto"] },
                 { "title": "IPP (AirPrint) only", "enum": ["ipp"] }
               ],
-              "description": "IPP works with SNMP turned off, but many Brother printers report toner only as \"some remaining\" over it, without a %."
+              "description": "IPP works with SNMP turned off, but gives less: no drum, parts or page count, and on some Brother printers toner only as \"some remaining\", without a %."
             },
             "ippUrl": {
               "title": "IPP address",

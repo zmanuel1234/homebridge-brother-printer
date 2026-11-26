@@ -13,10 +13,10 @@ Shows a Brother laser or inkjet printer in HomeKit: whether it's printing, wheth
 needs attention, and how much toner or ink is left. Everything is read locally over SNMP,
 with no cloud or Brother account.
 
-Generic AirPrint/IPP plugins can't show real toner levels on many Brother printers,
-because the standard Printer MIB only reports "some remaining". Brother's own SNMP
+Generic AirPrint/IPP plugins see less of a Brother printer: some models report toner only
+as "some remaining", and none of the drum, parts life or page count. Brother's own SNMP
 records carry the actual percentages shown on the printer's web page, and this plugin
-reads those.
+reads those (and can also read IPP, as an option).
 
 Each printer gets these sensors:
 
@@ -47,8 +47,8 @@ printer, the difference is in what each can read and show:
 
 | | This plugin (SNMP) | AirPrint (IPP) plugins |
 |---|---|---|
-| Printer brands | Brother only | Most AirPrint printers |
-| Toner / ink level | The exact % from the printer's web page | On many Brother printers only "some remaining", not a % |
+| Printer brands | Brother; other AirPrint printers over IPP (status, problems, ink and toner) | Most AirPrint printers |
+| Toner / ink level | The % from the printer's web page, plus a finer reading for earlier low alerts | A % on some Brother printers (in 10% steps), only "some remaining" on others |
 | Drum, belt, fuser, laser unit, paper feed kits, ink waste box | Read, with a Maintenance sensor | Usually not on Brother printers (only parts the printer lists as supplies) |
 | Page count | Yes (in Eve and Controller, not Apple Home) | No |
 | Out of paper, jam, cover open | A Problem sensor, an optional Out of Paper sensor, and the exact problem in the log | One general fault |
@@ -230,11 +230,23 @@ life, and the page count. Set `protocol` to:
   switch to `ipp`.
 
 Over IPP the plugin reads the printer's state, its problems (paper, jam, cover, toner)
-and the supplies it lists. What that includes depends on the printer: many Brother lasers
-report toner only as "some remaining", with no %, and then there's no battery or tile;
+and the supplies it lists. What that includes depends on the printer. An MFC-L2750DW, for
+example, reports its toner % (in 10% steps, without SNMP's finer reading) but not its
+drum, page count or serial number. Some Brother printers report toner only as "some
+remaining", with no %, and then there's no battery or tile;
 the printer's own low-toner flag still opens the Toner Low sensor (`lowTonerSensor`) and
 is logged. Drum and parts appear only if the printer lists them
 as supplies, and the page count only if it reports `printer-impressions-completed`.
+
+Over IPP the plugin also shows the extra inks some printers have, each on its own tile:
+Photo Black, Gray (light black), Light Cyan, Light Magenta, and HP's single Tri-color
+cartridge. A maintenance kit counts as a part for the Maintenance sensor, and Home shows
+the printer's own maker and model.
+
+The IPP reading is checked against answers recorded from 50 real printers: Brother,
+Canon, Epson, HP (inkjets, LaserJets, OfficeJets, PageWide), Kyocera and Samsung
+(see `test/fixtures/ipp`). Report a printer that reads wrong with the probe's output
+(`--protocol ipp`).
 
 IPP is on by default on Brother printers (**Network → Protocol → IPP**). The default
 `ipp://` address isn't encrypted, like SNMP v1/v2c. With an `ipps://` address the
