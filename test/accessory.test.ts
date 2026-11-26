@@ -4,6 +4,8 @@ import type { API, Characteristic, Logging, PlatformAccessory, Service } from 'h
 import { PrinterAccessory } from '../src/accessory';
 import type { PrinterConfig, PrinterContext, QueryFn } from '../src/accessory';
 import * as snmp from '../src/snmp';
+import { startHistory } from '../src/history';
+import type { HistoryEntry } from '../src/history';
 import type { QueryResult } from '../src/snmp';
 import type * as HapNodejs from '@homebridge/hap-nodejs';
 import modelsJson from './fixtures/brother-models.json';
@@ -40,6 +42,16 @@ function defineTests(hap: Hap): void {
   const never: QueryFn = () => new Promise(() => {});
   let respond: QueryFn = never;
 
+  // Eve history: recorded by default; one test uses the real fakegato-history
+  let storageDir = '';
+  let entries: HistoryEntry[] = [];
+  let started = 0;
+  const recordHistory: typeof startHistory = () => {
+    started++;
+    return { addEntry: (e) => { entries.push(e); } };
+  };
+  let historyStarter: typeof startHistory = recordHistory;
+
   function setup(config: Partial<PrinterConfig> & Record<string, unknown>, accessory?: Acc | null, lines: string[] = []) {
     respond = never;
     const acc = accessory || Object.assign(
@@ -47,9 +59,9 @@ function defineTests(hap: Hap): void {
     ) as unknown as Acc;
     const log = Object.fromEntries(['info', 'warn', 'error', 'debug']
       .map((l) => [l, (m: string) => lines.push(`${l}: ${m}`)])) as unknown as Logging;
-    const api = { hap, updatePlatformAccessories: () => {} } as unknown as API;
+    const api = { hap, updatePlatformAccessories: () => {}, user: { storagePath: () => storageDir } } as unknown as API;
     const printer = new PrinterAccessory({ log, api }, acc, { name: 'Printer', host: '10.0.0.1', ...config },
-      { query: (options) => respond(options) });
+      { query: (options) => respond(options), startHistory: (...args) => historyStarter(...args) });
     printer.stop();
     return { acc, printer, lines };
   }
@@ -293,6 +305,68 @@ function defineTests(hap: Hap): void {
     printer.apply({ ...reading(50), serial: 'E222' });
     assert.ok(lines.some((l) => l.startsWith('warn: ') && l.includes('serial number E222, not E111')), lines.join('\n'));
     assert.equal(acc.context.serial, 'E222');
+  });
+
+  /* ------------------------------------------------------------ Eve history */
+
+  test('Eve history: off by default, and needs the toner tiles', () => {
+    entries = []; started = 0;
+    setup({ tonerTile: true }).printer.apply(reading(50));
+    assert.equal(started, 0);
+    const { printer, lines } = setup({ eveHistory: true });
+    printer.apply(reading(50));
+    printer.apply(reading(40));
+    assert.equal(started, 0);
+    assert.equal(lines.filter((l) => l.includes('Eve history needs')).length, 1, 'warned once');
+  });
+
+  test('Eve history: the lowest level, on a change or every 10 minutes', (t) => {
+    entries = []; started = 0;
+    t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+    const { printer } = setup({ eveHistory: true, tonerTile: true });
+    printer.apply(reading(70));
+    assert.equal(started, 1, 'started once the tiles exist');
+    printer.apply(reading(70));
+    assert.equal(entries.length, 1, 'no new entry within 10 minutes when nothing changed');
+    t.mock.timers.tick(10 * 60 * 1000);
+    printer.apply(reading(70));
+    assert.equal(entries.length, 2, 'repeated after 10 minutes');
+    printer.apply(reading(60));
+    assert.deepEqual(entries.map((e) => e.humidity), [70, 70, 60], 'a change is logged right away');
+    assert.equal(entries[1].time - entries[0].time, 600);
+    assert.equal(started, 1);
+  });
+
+  test('Eve history: the history service is removed when turned off', () => {
+    const { acc } = setup({});
+    acc.addService(new S('History', 'E863F007-079E-48FF-8F27-9C2605A29F52'));
+    setup({}, acc);
+    assert.equal(acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52'), undefined);
+  });
+
+  test('Eve history: works with the real fakegato-history', async (t) => {
+    const { mkdtempSync, readdirSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    storageDir = mkdtempSync(`${tmpdir()}/bp-history-`);
+    t.after(() => { rmSync(storageDir, { recursive: true, force: true }); historyStarter = recordHistory; });
+    historyStarter = startHistory;
+    const { acc, printer } = setup({ eveHistory: true, tonerTile: true });
+    printer.apply(reading(55));
+    const history = acc.services.find((svc) => svc.UUID === 'E863F007-079E-48FF-8F27-9C2605A29F52');
+    assert.ok(history, 'fakegato added Eve\'s history service');
+    assert.ok(printer.history);
+    // fakegato reads the saved history asynchronously; entries before that are
+    // dropped, so the plugin waits for it rather than losing one
+    const loaded = (): boolean => printer.history?.isHistoryLoaded?.() === true;
+    for (let i = 0; i < 100 && !loaded(); i++) { await new Promise((r) => setTimeout(r, 100)); }
+    assert.ok(loaded(), 'fakegato finished loading');
+    assert.equal(printer.lastEntry, undefined, 'the reading before that is not counted as logged');
+    printer.apply(reading(45));
+    assert.equal((printer.lastEntry as HistoryEntry | undefined)?.humidity, 45);
+    for (let i = 0; i < 50 && !readdirSync(storageDir).some((f) => f.endsWith('-history.json')); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.deepEqual(readdirSync(storageDir), [`homebridge-brother-printer-${acc.UUID}-history.json`]);
   });
 
   /* ------------------------------------------------------ optional sensors */

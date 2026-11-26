@@ -21,6 +21,10 @@
   their address and serial number, or read a printer with the settings as entered before
   saving.
 - Optional `serial` setting, filled in by the search.
+- Optional **Eve history** of the toner or ink level (`eveHistory`, with `tonerTile`): a
+  graph over about 60 days on the toner / ink tiles in the Eve app. Uses fakegato-history,
+  which adds about 250 MB to the install (Google's API client) and is only loaded when
+  this is on.
 
 The new sensors are off by default; with your current config nothing changes.
 

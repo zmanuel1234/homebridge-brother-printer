@@ -184,6 +184,12 @@
               "default": false,
               "description": "Adds an occupancy sensor that's Detected while the printer answers, for automations such as turning off its smart plug. Unlike the other sensors it doesn't show No Response when the printer is offline."
             },
+            "eveHistory": {
+              "title": "Eve history of the toner / ink level",
+              "type": "boolean",
+              "default": false,
+              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too). On a color printer each tile shows the lowest color. The first time, Homebridge takes a few seconds longer to start."
+            },
             "faultSensor": {
               "title": "Problem sensor",
               "description": "Adds a contact sensor that opens on a jam, open cover, empty tray or other error, so Home can show and notify it.",
@@ -230,6 +236,7 @@
                 "printers[].showDrum",
                 "printers[].lowDrumThreshold",
                 "printers[].tonerTile",
+                "printers[].eveHistory",
                 "printers[].faultSensor",
                 "printers[].paperSensor",
                 "printers[].maintenanceSensor",
