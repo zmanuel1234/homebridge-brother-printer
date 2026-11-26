@@ -661,7 +661,9 @@ export class PrinterAccessory {
       // reports every color SNMP did.
       const known = this.last.supplies || {};
       // Levels SNMP doesn't report (no-levels printers) aren't taken from IPP either
-      const ipp = this.accessory.context.noLevels ? [] : d.supplies;
+      const ipp = this.accessory.context.noLevels ? []
+        // Once SNMP has reported, only its colors (a color only IPP lists has no sensor)
+        : d.supplies.filter((s) => !Object.keys(known).length || known[s.color]);
       const levels: Partial<Record<Color, number>> = Object.fromEntries(
         Object.entries(known).map(([color, v]) => [color, v.level]));
       for (const s of ipp) { levels[s.color] = s.level; }
@@ -669,11 +671,12 @@ export class PrinterAccessory {
       // Without SNMP's levels since the restart, IPP's alone could show too high a level
       const haveSnmp = Object.keys(known).length > 0;
       const covers = haveSnmp && Object.keys(known).every((c) => ipp.some((s) => s.color === c));
-      // SNMP also judges low by its finer reading, which IPP doesn't have: a color
-      // SNMP found low stays low unless IPP's level rose (a new cartridge)
+      // SNMP also judges low by its finer reading, which IPP doesn't have, and
+      // counts in 10% steps: a color SNMP found low stays low unless IPP shows a
+      // clear rise above the threshold (a new cartridge)
       const stillLow = (Object.entries(known) as [Color, { level: number; low: boolean }][]).some(([c, v]) => {
         const now = ipp.find((s) => s.color === c);
-        return v.low && !(now && now.level > v.level);
+        return v.low && !(now && now.level >= v.level + 10 && now.level > this.lowToner);
       });
       const low = flagged || stillLow || ipp.some((s) => s.level <= this.lowToner);
       if (this.toner && haveSnmp && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }

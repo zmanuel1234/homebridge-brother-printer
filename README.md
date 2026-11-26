@@ -239,8 +239,10 @@ as supplies, and the page count only if it reports `printer-impressions-complete
 IPP is on by default on Brother printers (**Network → Protocol → IPP**). The default
 `ipp://` address isn't encrypted, like SNMP v1/v2c. With an `ipps://` address the
 connection is encrypted and the certificate is checked; Brother printers' own
-certificates are self-signed, so that fails unless you install a trusted certificate on
-the printer or turn on `ippAllowSelfSigned`. With that on the connection is still
+certificates are self-signed, so that fails unless you install a certificate on the
+printer that Node.js trusts (from a public authority, or your own with
+`NODE_EXTRA_CA_CERTS`; for an IP address it must list that IP) or turn on
+`ippAllowSelfSigned`. With that on the connection is still
 encrypted, but not verified: another device on your network could pose as the printer.
 **Search for printers** in the settings still uses SNMP; enter an IPP-only printer by
 hand and check it with **Test connection**.

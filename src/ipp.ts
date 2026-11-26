@@ -349,7 +349,7 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
     });
     req.on('timeout', () => req.destroy(new Error('Request timed out')));
     req.on('error', (err: Error & { code?: string }) => {
-      const certificate = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/.test(err.code || '');
+      const certificate = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER/.test(err.code || '');
       reject(certificate && options.allowSelfSigned !== true
         ? new Error(`The printer's certificate can't be verified (${err.code}); if it's the printer's own self-signed `
           + 'one, turn on "Accept the printer\'s self-signed certificate" (ippAllowSelfSigned), or use ipp://', { cause: err })
