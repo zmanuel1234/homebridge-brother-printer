@@ -675,7 +675,13 @@ export class PrinterAccessory {
       this.applyDrumAndParts(d);
       if (!this.standIn(d)) { this.recordUsage(d); }
     }
-    if (d.trays) { this.applyTrays(d.trays); }
+    if (d.trays) {
+      this.applyTrays(d.trays, this.standIn(d));
+    } else if (!d.errors.some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty')) {
+      // Trays read only while paper is low or out: no paper error means they all have
+      // paper, so the next tray to run out is warned about again
+      for (const key of Object.keys(this.last.warned || {})) { if (key.startsWith('tray-')) { this.last.warned![key] = false; } }
+    }
 
     if (d.totalPages !== null) { this.pages.updateValue(d.totalPages); }
     this.last.statusText = d.statusText;
@@ -810,7 +816,7 @@ export class PrinterAccessory {
       if (was && was.level !== s.level) { this.log.info(`[${this.name}] ${label(s)} ${s.level}%`); }
       if (isLow(s) && !(was && was.low)) {
         const fine = s.fine !== null && s.fine !== s.level ? ` (${s.fine}% by the finer reading)` : '';
-        const days = daysLeft(this.accessory.context.usage, s.color, Math.round(Date.now() / 1000), s.level);
+        const days = daysLeft(this.accessory.context.usage, s.color, Math.round(Date.now() / 1000), s.fine ?? s.level);
         const left = days !== null ? ` At the rate it's been going down, ${describeDays(days)} left.` : '';
         this.log.warn(`[${this.name}] ${label(s)} is low: ${s.level}%${fine}.${left}`);
       }
@@ -888,7 +894,8 @@ export class PrinterAccessory {
    */
   recordUsage(d: PrinterData): void {
     const now = Math.round(Date.now() / 1000);
-    const levels: Partial<Record<Color, number>> = Object.fromEntries(d.supplies.map((s) => [s.color, s.level]));
+    // The finer reading where there is one: some printers count the coarse one in 10% steps
+    const levels: Partial<Record<Color, number>> = Object.fromEntries(d.supplies.map((s) => [s.color, s.fine ?? s.level]));
     if (d.totalPages === null && !d.supplies.length) { return; }
     const ctx = this.accessory.context;
     const next = addSample(ctx.usage, now, d.totalPages, levels);
@@ -909,17 +916,23 @@ export class PrinterAccessory {
   /**
    * Paper trays: a warning when one runs out, and with paperTraySensors one contact
    * sensor per tray that opens when it's empty. Bypass and manual trays, often empty
-   * on purpose, get neither.
+   * on purpose, get neither, and nor does a tray whose level isn't known (no sensor
+   * that could never open). IPP standing in for SNMP (whose trays may have other
+   * names, and often unknown levels) only updates sensors SNMP made, and only to a
+   * state it's sure of.
    */
-  applyTrays(trays: Tray[]): void {
+  applyTrays(trays: Tray[], standIn = false): void {
     const { Service: S, Characteristic: C } = this.hap;
     const main = trays.filter((t) => !t.secondary);
     for (const t of main) {
+      if (standIn && t.state !== 'empty') { continue; }
       this.warnOnce(`tray-${t.key}`, t.state === 'empty', `${t.name} is out of paper.`);
     }
     if (!this.paperTraySensors) { return; }
     for (const t of main) {
       let svc = this.trays[t.key];
+      if (standIn && (!svc || t.state === 'unknown')) { continue; }
+      if (!svc && t.state === 'unknown') { continue; }
       if (!svc) {
         const name = `${this.name} ${t.name}`;
         svc = this.accessory.getServiceById(S.ContactSensor, TRAY_PREFIX + t.key)
@@ -931,13 +944,14 @@ export class PrinterAccessory {
         this.guard(svc.getCharacteristic(C.ContactSensorState));
         this.trays[t.key] = svc;
       }
-      // Only a tray that says it's empty opens; "some paper" and unknown stay closed
+      // Only a tray that says it's empty opens; an unknown level leaves the sensor as it was
+      if (t.state === 'unknown') { continue; }
       svc.updateCharacteristic(C.ContactSensorState, t.state === 'empty'
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
         : C.ContactSensorState.CONTACT_DETECTED);
     }
     // Trays the printer no longer lists (a removed paper drawer); not when it listed none
-    if (main.length) {
+    if (main.length && !standIn) {
       for (const [key, svc] of Object.entries(this.trays)) {
         if (main.some((t) => t.key === key)) { continue; }
         this.accessory.removeService(svc);

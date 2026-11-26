@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { trayName, traysFromIpp, traysFromTable } from '../src/trays';
 import { INPUT_TABLE, query } from '../src/snmp';
+import { parseResponse, toPrinterData } from '../src/ipp';
+import { readFileSync } from 'node:fs';
 import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from '../src/usage';
 import type { UsageSample } from '../src/usage';
 import { cachedUsage, testPrinter } from '../src/homebridge-ui/server';
@@ -55,6 +57,29 @@ test('trays: from the Printer MIB input table', () => {
     'Rear Auto Sheet Feeder* unknown, Sheet Feeder Bin 1 unknown'.replace('Sheet Feeder Bin 1', 'Sheet feeder bin 1'));
 });
 
+test('trays: type and status (HP marks its bypass tray "on request"; unknown status makes 0 unknown)', () => {
+  const withCols = (list: [string, number, number, number, number][]) => list.flatMap(([name, max, level, type, status], i) => [
+    ...rows([[name, max, level]]).map((r) => ({ ...r, oid: r.oid.replace(/\.1\.1$/, `.1.${i + 1}`) })),
+    { oid: `${INPUT_TABLE}.2.1.${i + 1}`, value: type },
+    { oid: `${INPUT_TABLE}.11.1.${i + 1}`, value: status },
+  ]);
+  // HP LaserJet M880: Tray 1 non-removable and "on request" (9); Tray 2 also non-removable
+  assert.equal(show(traysFromTable(withCols([['Tray 1', 100, 0, 4, 9], ['Tray 2', 500, 200, 4, 0], ['Tray 3', 1500, 300, 3, 0]]), INPUT_TABLE)),
+    'Tray 1* empty 0, Tray 2 ok 40, Tray 3 ok 20');
+  // A manual feed by type, however big; a tray at 0 whose status is unknown (5)
+  assert.equal(show(traysFromTable(withCols([['Feeder', 250, 0, 5, 0], ['Tray 2', 500, 0, 3, 5]]), INPUT_TABLE)),
+    'Feeder* empty 0, Tray 2 unknown');
+  // A rear feeder isn't taken for a bypass tray (the main tray on many inkjets)
+  assert.equal(traysFromIpp(['type=sheetFeedAutoNonRemovableTray;maxcapacity=100;level=0;status=0;name=Rear;'])[0].secondary, false);
+  assert.equal(traysFromIpp(['type=sheetFeedManual;maxcapacity=250;level=0;status=0;name=Slot;'])[0].secondary, true);
+});
+
+test('trays: from real IPP answers (HP LaserJet M605, Epson XP-6000)', () => {
+  const read = (f: string) => toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', f))).printer).trays!;
+  assert.equal(show(read('hp-laserjet-m605.bin')), 'Tray 3 ok, Tray 2 ok, Tray 1* empty 0');
+  assert.ok(read('epson-xp-6000.bin').every((t) => t.state === 'unknown'));
+});
+
 test('trays: from IPP printer-input-tray', () => {
   const trays = traysFromIpp([
     'type=other;mediafeed=0;mediaxfeed=0;maxcapacity=-2;level=-2;status=0;name=auto;',
@@ -86,6 +111,12 @@ const T0 = 1_700_000_000;
 /** One sample a day: pages and black level as given */
 const days = (list: [number, number][], from = T0): UsageSample[] =>
   list.map(([p, black], i) => ({ t: from + i * DAY, p, l: { black } }));
+
+test('usage: a sample from a wrong clock (in the future) doesn\'t block new ones', () => {
+  const future = [{ t: T0 + 3650 * DAY, p: 1, l: {} }, { t: T0 - DAY, p: 1, l: {} }];
+  const next = addSample(future, T0, 2, { black: 50 })!;
+  assert.deepEqual(next.map((s) => s.t), [T0 - DAY, T0]);
+});
 
 test('usage: one sample a day, about 120 days kept', () => {
   const first = addSample(undefined, T0, 100, { black: 80 })!;
@@ -146,7 +177,7 @@ test('settings test: paper trays and the plugin\'s usage history from the access
     { platform: 'Other', context: { host: '10.0.0.5', usage: [] } },
     { platform: 'BrotherPrinter', context: { name: 'Office', host: '10.0.0.5', usage } },
   ]));
-  assert.equal(cachedUsage(storage, 'Office', '10.0.0.5')?.length, 31);
+  assert.equal(cachedUsage(storage, 'Office', '10.0.0.5')?.samples.length, 31);
   assert.equal(cachedUsage(storage, 'Office', '10.0.0.6'), undefined);
   assert.equal(cachedUsage(join(storage, 'none'), 'Office', '10.0.0.5'), undefined);
 
@@ -157,7 +188,14 @@ test('settings test: paper trays and the plugin\'s usage history from the access
   const r = await testPrinter({ name: 'Office', host: '10.0.0.5' }, (o) => { asked = o.trays === true; return Promise.resolve(d); }, storage);
   assert.ok(asked, 'the test reads the trays');
   assert.equal(r.paper, 'MP Tray (bypass) empty, Tray 1 has paper');
-  assert.equal(r.usage, '70 in the last 7 days, 300 in the last 30 days');
+  assert.equal(r.usage, '70 pages in the last 7 days, 300 in the last 30 days');
+  // Read over IPP while the plugin counts SNMP's pages: no page figures from a mix of the two
+  writeFileSync(join(storage, 'accessories', 'cachedAccessories.0E1234567890'), JSON.stringify([
+    { platform: 'BrotherPrinter', context: { name: 'Office', host: '10.0.0.5', usage, snmpAnswered: true } },
+  ]));
+  const ipp = await testPrinter({ name: ' Office ', host: '10.0.0.5' }, () => Promise.resolve({ ...d, via: 'ipp' as const }), storage);
+  assert.equal(ipp.usage, null);
+  assert.equal(ipp.left, 'Toner: about 7 weeks left', 'levels still count; the name is matched trimmed');
   assert.equal(r.left, 'Toner: about 7 weeks left');
   // Not running in Homebridge yet: no history
   const fresh = await testPrinter({ name: 'New', host: '10.0.0.9' }, () => Promise.resolve(d), storage);

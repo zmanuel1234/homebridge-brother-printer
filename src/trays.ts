@@ -30,7 +30,8 @@ export interface Tray {
  */
 export const LOW_TRAY_PERCENT = 10;
 
-const SECONDARY = /bypass|manual|\bmp\b|^mp ?tray|multi|rear|single ?sheet|envelope|\bmsi\b|\bmpt\b/i;
+// (Not "rear": on many Epson and Canon inkjets the rear feeder is the main tray)
+const SECONDARY = /bypass|manual|\bmp\b|^mp ?tray|multi|single ?sheet|envelope|\bmsi\b|\bmpt\b/i;
 /** Not a tray: the printer's "pick the tray for me" entry */
 const VIRTUAL = /^auto(\s*select)?$/i;
 
@@ -49,14 +50,29 @@ export function trayName(raw: string, index: number): string {
 
 const keyOf = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tray';
 
+/** What else the printer says about a tray: its type and status, when it gives them */
+export interface TrayInfo {
+  /** prtInputType: 5 sheetFeedManual; over IPP type=sheetFeedManual */
+  manual?: boolean;
+  /**
+   * prtInputStatus / IPP status= (a SubUnitStatus): the low three bits say whether the
+   * tray is available; 1 "on request" is a manual feed, 5 unknown
+   */
+  status?: number | null;
+}
+
 /** One tray from its name, current level and capacity; null for the "auto select" entry */
-export function toTray(rawName: string, level: number | null, max: number | null, index: number): Tray | null {
+export function toTray(rawName: string, level: number | null, max: number | null, index: number, info: TrayInfo = {}): Tray | null {
   if (VIRTUAL.test(rawName.trim())) { return null; }
   const name = trayName(rawName, index);
+  const availability = typeof info.status === 'number' && info.status >= 0 ? info.status & 7 : null;
   let percent: number | null = null;
   let state: TrayState = 'unknown';
   if (level === -3) {
     state = 'ok';
+  } else if (level === 0 && availability === 5) {
+    // An empty reading the printer itself calls unknown
+    state = 'unknown';
   } else if (level === 0) {
     state = 'empty';
     percent = max !== null && max > 0 ? 0 : null;
@@ -65,7 +81,8 @@ export function toTray(rawName: string, level: number | null, max: number | null
     state = percent !== null && percent <= LOW_TRAY_PERCENT ? 'low' : 'ok';
   }
   const capacity = max !== null && max > 0 ? max : null;
-  return { name, key: keyOf(name), percent, state, capacity, secondary: SECONDARY.test(name) || capacity === 1 };
+  const secondary = SECONDARY.test(name) || capacity === 1 || info.manual === true || availability === 1;
+  return { name, key: keyOf(name), percent, state, capacity, secondary };
 }
 
 /**
@@ -81,12 +98,14 @@ function markSecondary(trays: Tray[]): Tray[] {
 
 /** Trays from walked prtInputTable values: (column, index) → value */
 export function traysFromTable(rows: { oid: string; value: unknown }[], table: string): Tray[] {
-  const byIndex = new Map<string, { name?: string; level?: number; max?: number }>();
+  const byIndex = new Map<string, { name?: string; level?: number; max?: number; type?: number; status?: number }>();
   for (const { oid, value } of rows) {
     if (!oid.startsWith(`${table}.`)) { continue; }
     const [col, ...index] = oid.slice(table.length + 1).split('.');
     const key = index.join('.');
     const row = byIndex.get(key) ?? {};
+    if (col === '2' && typeof value === 'number') { row.type = value; }
+    if (col === '11' && typeof value === 'number') { row.status = value; }
     if (col === '9' && typeof value === 'number') { row.max = value; }
     if (col === '10' && typeof value === 'number') { row.level = value; }
     if (col === '13') { row.name = Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''); }
@@ -97,7 +116,8 @@ export function traysFromTable(rows: { oid: string; value: unknown }[], table: s
     .sort(([a], [b]) => { const x = order(a); const y = order(b); return x[0] - y[0] || (x[1] ?? 0) - (y[1] ?? 0); })
     // Names may end in NULs or other control characters
     // eslint-disable-next-line no-control-regex
-    .map(([, row], i) => toTray((row.name ?? '').replace(/[\u0000-\u001f]+/g, ' '), row.level ?? null, row.max ?? null, i + 1))
+    .map(([, row], i) => toTray((row.name ?? '').replace(/[\u0000-\u001f]+/g, ' '), row.level ?? null, row.max ?? null, i + 1,
+      { manual: row.type === 5, status: row.status ?? null }))
     .filter((t): t is Tray => t !== null));
 }
 
@@ -113,7 +133,8 @@ export function traysFromIpp(values: unknown[]): Tray[] {
       return at < 0 ? [p.trim().toLowerCase(), ''] : [p.slice(0, at).trim().toLowerCase(), p.slice(at + 1).trim()];
     }));
     const num = (k: string): number | null => (fields[k] !== undefined && fields[k] !== '' && Number.isFinite(Number(fields[k])) ? Number(fields[k]) : null);
-    return toTray(fields.name ?? '', num('level'), num('maxcapacity'), i + 1);
+    return toTray(fields.name ?? '', num('level'), num('maxcapacity'), i + 1,
+      { manual: /^sheetfeedmanual$/i.test(fields.type ?? ''), status: num('status') });
   }).filter((t): t is Tray => t !== null));
 }
 

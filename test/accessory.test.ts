@@ -394,6 +394,37 @@ function defineTests(hap: Hap): void {
     assert.equal(first.acc.getServiceById(S.ContactSensor, 'tray-tray-1'), undefined);
   });
 
+  test('paper trays: IPP standing in updates SNMP\'s sensors only, to a state it\'s sure of', async () => {
+    const { acc, printer } = setup({ protocol: 'auto', paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Tray 1', 'empty'), tray('Tray 2', 'ok')] });
+    const t1 = acc.getServiceById(S.ContactSensor, 'tray-tray-1')!;
+    const ippReading = (trays: ReturnType<typeof tray>[]) => ({ ...reading(50), snmpVersion: null, via: 'ipp' as const, trays });
+    // Other names (Canon: "main", "rear") and unknown levels: nothing added, removed or closed
+    await pollWith(printer, ippReading([tray('Main', 'ok'), tray('Tray 1', 'unknown')]));
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-main'), undefined);
+    assert.ok(acc.getServiceById(S.ContactSensor, 'tray-tray-2'), 'not removed');
+    assert.equal(t1.getCharacteristic(C.ContactSensorState).value, OPEN, 'unknown doesn\'t close it');
+    // A definite reading does count
+    await pollWith(printer, ippReading([tray('Tray 1', 'ok')]));
+    assert.equal(t1.getCharacteristic(C.ContactSensorState).value, CLOSED);
+  });
+
+  test('paper trays: a tray whose level is never known gets no sensor', async () => {
+    const { acc, printer } = setup({ paperTraySensors: true });
+    await pollWith(printer, { ...reading(50), trays: [tray('Input Tray 1', 'unknown')] });
+    assert.equal(acc.getServiceById(S.ContactSensor, 'tray-input-tray-1'), undefined);
+  });
+
+  test('paper trays: the warning comes again after the paper error clears (trays read only during one)', async () => {
+    const lines: string[] = [];
+    const { printer } = setup({}, null, lines);
+    const out = { ...reading(50), errors: ['noPaper' as const], trays: [tray('Tray 1', 'empty')] };
+    await pollWith(printer, out);
+    await pollWith(printer, reading(50)); // refilled: no error, trays not read
+    await pollWith(printer, out);
+    assert.equal(lines.filter((l) => /Tray 1 is out of paper/.test(l)).length, 2);
+  });
+
   test('paper trays: without sensors, still a warning naming the empty tray', async () => {
     const lines: string[] = [];
     const { acc, printer } = setup({}, null, lines);

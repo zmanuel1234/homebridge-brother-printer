@@ -37,7 +37,7 @@ const errorText = (err: unknown): string => (err as { message?: string } | null)
 
 const TRAY_STATE = { empty: 'empty', low: 'low', ok: 'has paper', unknown: 'unknown' } as const;
 
-export function testSummary(d: QueryResult, samples?: UsageSample[]): TestResult {
+export function testSummary(d: QueryResult, cached?: CachedUsage): TestResult {
   const kind = d.type === 'ink' ? 'ink' : 'toner';
   const levels = d.supplies.length
     ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
@@ -53,18 +53,27 @@ export function testSummary(d: QueryResult, samples?: UsageSample[]): TestResult
     paper: d.trays?.length
       ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`).join(', ')
       : null,
-    ...usageSummary(d, samples),
+    ...usageSummary(d, cached),
   };
 }
 
-function usageSummary(d: QueryResult, samples?: UsageSample[]): { usage: string | null; left: string | null } {
+function usageSummary(d: QueryResult, cached?: CachedUsage): { usage: string | null; left: string | null } {
   const now = Math.round(Date.now() / 1000);
-  const week = pagesInLast(samples, now, d.totalPages, 7);
-  const month = pagesInLast(samples, now, d.totalPages, 30);
-  const usage = [week !== null ? `${week} in the last 7 days` : '', month !== null ? `${month} in the last 30 days` : '']
+  const samples = cached?.samples;
+  // IPP's page count may not match the SNMP one the plugin keeps
+  const pages = d.via === 'ipp' && cached?.snmpAnswered ? null : d.totalPages;
+  const week = pagesInLast(samples, now, pages, 7);
+  const month = pagesInLast(samples, now, pages, 30);
+  const usage = [week !== null ? `${week} pages in the last 7 days` : '', month !== null ? `${month} in the last 30 days` : '']
     .filter(Boolean).join(', ') || null;
-  const levels = Object.fromEntries(d.supplies.map((s) => [s.color, s.level]));
+  const levels = Object.fromEntries(d.supplies.map((s) => [s.color, s.fine ?? s.level]));
   return { usage, left: describeLeft(samples, now, levels, d.type === 'ink' ? 'Ink' : 'Toner') };
+}
+
+export interface CachedUsage {
+  samples: UsageSample[];
+  /** The plugin has read this printer over SNMP: its page counts are SNMP's */
+  snmpAnswered: boolean;
 }
 
 /**
@@ -72,16 +81,18 @@ function usageSummary(d: QueryResult, samples?: UsageSample[]): { usage: string 
  * main bridge's and any child bridge's), matched by name and address. Empty when
  * the printer hasn't been running in Homebridge.
  */
-export function cachedUsage(storagePath: string | undefined, name: string, host: string): UsageSample[] | undefined {
+export function cachedUsage(storagePath: string | undefined, name: string, host: string): CachedUsage | undefined {
   if (!storagePath) { return undefined; }
   const dir = join(storagePath, 'accessories');
   let files: string[];
   try { files = readdirSync(dir).filter((f) => f.startsWith('cachedAccessories')); } catch { return undefined; }
   for (const file of files) {
     try {
-      const list = JSON.parse(readFileSync(join(dir, file), 'utf8')) as { platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[] } }[];
+      const list = JSON.parse(readFileSync(join(dir, file), 'utf8')) as {
+        platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[]; snmpAnswered?: boolean };
+      }[];
       const hit = list.find((a) => a.platform === 'BrotherPrinter' && a.context?.host === host && (a.context?.name ?? name) === name);
-      if (hit?.context?.usage) { return hit.context.usage; }
+      if (hit?.context?.usage) { return { samples: hit.context.usage, snmpAnswered: hit.context.snmpAnswered === true }; }
     } catch { /* unreadable or being written: no history */ }
   }
   return undefined;
@@ -94,7 +105,7 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
   const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
   try {
     const d = await read({ ...options, timeout: 3000, retries: 0, trays: true });
-    return testSummary(d, cachedUsage(storagePath, String(config.name || 'Printer'), options.host));
+    return testSummary(d, cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host));
   } catch (err) {
     const what = options.protocol === 'ipp' ? 'IPP' : options.protocol === 'auto' ? 'SNMP or IPP' : 'SNMP';
     throw new Error(`Couldn't read ${options.host}: ${errorText(err)}. Check the address, that ${what} is on in the `

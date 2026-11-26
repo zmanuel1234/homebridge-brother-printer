@@ -27,9 +27,9 @@ export const OID = {
 export const SUPPLIES_TABLE = '1.3.6.1.2.1.43.11.1.1'; // prtMarkerSuppliesEntry
 export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantValue
 const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
-/** Printer MIB input table (prtInputEntry): paper trays; max capacity 9, current level 10, name 13 */
+/** Printer MIB input table (prtInputEntry): paper trays; type 2, max capacity 9, current level 10, status 11, name 13 */
 export const INPUT_TABLE = '1.3.6.1.2.1.43.8.2.1';
-const TRAY_COLUMNS = [9, 10, 13];
+const TRAY_COLUMNS = [2, 9, 10, 11, 13];
 /** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
 const SUPPLY_TYPES: Record<number, string> = {
   1: 'other', 2: 'unknown', 3: 'toner', 4: 'waste-toner', 5: 'ink', 6: 'ink-cartridge', 7: 'ink-ribbon', 8: 'waste-ink',

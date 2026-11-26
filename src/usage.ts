@@ -29,7 +29,8 @@ const MIN_DROP = 3;
 /** The samples with this reading added, when one is due; old ones dropped. Doesn't change the list it's given. */
 export function addSample(samples: UsageSample[] | undefined, now: number, pages: number | null,
   levels: Partial<Record<Color, number>>): UsageSample[] | null {
-  const list = Array.isArray(samples) ? samples.filter(valid) : [];
+  // A sample from the future (the clock was wrong when it was taken) would block new ones
+  const list = Array.isArray(samples) ? samples.filter((s) => valid(s) && s.t <= now + 3600) : [];
   const last = list[list.length - 1];
   if (last && now - last.t < SAMPLE_EVERY) { return null; }
   const sample: UsageSample = { t: now, l: { ...levels } };
