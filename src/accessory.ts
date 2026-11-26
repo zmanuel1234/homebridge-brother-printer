@@ -2,8 +2,9 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { format } from 'node:util';
-import { query } from './snmp';
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from './snmp';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp';
+import { readPrinter } from './read';
+import { ippEndpoint } from './ipp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
 import type { Color, PartKey, PrinterError, Supply } from './decode';
 import { entryDue, startHistory } from './history';
@@ -24,6 +25,8 @@ export interface PrinterContext {
   noLevels?: boolean;
   /** The name in the config when the accessory was last set up */
   name?: string;
+  /** The printer has answered SNMP (with protocol auto, IPP then only fills in) */
+  snmpAnswered?: boolean;
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -35,6 +38,10 @@ export interface PrinterConfig {
   community?: string;
   port?: unknown;
   snmpVersion?: unknown;
+  /** 'snmp' (default), 'ipp' or 'auto' */
+  protocol?: unknown;
+  ippUrl?: unknown;
+  ippAllowSelfSigned?: unknown;
   v3User?: unknown;
   v3AuthProtocol?: unknown;
   v3AuthPassword?: unknown;
@@ -148,7 +155,20 @@ export function queryOptions(config: PrinterConfig): QueryOptions & { host: stri
     version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
     state: {},
   };
-  if (options.version === '3') {
+  const protocol = String(config.protocol ?? '').trim().toLowerCase();
+  options.protocol = protocol === 'ipp' || protocol === 'auto' ? protocol : 'snmp';
+  const ippUrl = String(config.ippUrl ?? '').trim();
+  if (ippUrl && options.protocol !== 'snmp') {
+    try {
+      ippEndpoint(ippUrl);
+    } catch {
+      throw new Error(`IPP address "${ippUrl}" isn't valid; use the form ipp://<printer>:631/ipp/print`);
+    }
+    options.ippUrl = ippUrl;
+  }
+  if (options.protocol !== 'snmp' && config.ippAllowSelfSigned === true) { options.ippAllowSelfSigned = true; }
+  // SNMPv3 settings only matter when SNMP is used
+  if (options.version === '3' && options.protocol !== 'ipp') {
     options.v3 = {
       user: String(config.v3User ?? '').trim(),
       authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
@@ -205,6 +225,8 @@ export class PrinterAccessory {
   paper: Service | null = null;
   onlineSvc: Service | null = null;
   history: HistoryLog | null = null;
+  /** With protocol auto: SNMP has answered since Homebridge started, so IPP only stands in */
+  snmpAnswered = false;
   lastEntry: HistoryEntry | undefined;
   /** Starts the Eve history; tests pass their own */
   private readonly startHistory: typeof startHistory;
@@ -213,7 +235,7 @@ export class PrinterAccessory {
 
   constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
     deps: { query?: QueryFn; startHistory?: typeof startHistory } = {}) {
-    this.query = deps.query || query;
+    this.query = deps.query || readPrinter;
     this.startHistory = deps.startHistory || startHistory;
     this.platform = platform;
     this.log = platform.log;
@@ -238,6 +260,9 @@ export class PrinterAccessory {
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
+    // Kept across restarts, so a first poll that falls back to IPP after a
+    // restart doesn't count in full against what SNMP set up
+    this.snmpAnswered = accessory.context.snmpAnswered === true;
     this.renameFrom(accessory.context.name ?? accessory.displayName);
     this.buildServices();
     this.guardReads();
@@ -562,6 +587,10 @@ export class PrinterAccessory {
     const log = (m: string): void => (this.debug ? this.log.info(m) : this.log.debug(m));
 
     log(`[${this.name}] ${JSON.stringify(d)}`);
+    if (d.via !== 'ipp' && !this.snmpAnswered) {
+      this.snmpAnswered = true;
+      this.remember({ snmpAnswered: true });
+    }
     this.setOnline(true);
     this.updateInfo(d);
 
@@ -609,7 +638,7 @@ export class PrinterAccessory {
         ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
         : `no ${kind} levels reported`;
       const drum = d.drumPercent !== null ? `, drum ${d.drumPercent}%` : '';
-      this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (SNMP v${d.snmpVersion}): ${levels}${drum}, `
+      this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (${readVia(d)}): ${levels}${drum}, `
         + `${d.totalPages ?? '?'} pages, status "${d.statusText || 'unknown'}".`);
       this.last.summary = true;
     }
@@ -623,7 +652,44 @@ export class PrinterAccessory {
   applySupplies(d: PrinterData): void {
     const C = this.hap.Characteristic;
     const kind: Kind = d.type === 'ink' ? 'Ink' : 'Toner';
+    const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
 
+    if (this.standIn(d)) {
+      // IPP standing in for SNMP: its levels update the sensors SNMP set up,
+      // combined with SNMP's last levels for colors IPP doesn't report. It adds,
+      // removes and stores nothing, and clears a low warning only when it
+      // reports every color SNMP did.
+      const known = this.last.supplies || {};
+      // Levels SNMP doesn't report (no-levels printers) aren't taken from IPP either
+      const ipp = this.accessory.context.noLevels ? []
+        // Once SNMP has reported, only its colors (a color only IPP lists has no sensor)
+        : d.supplies.filter((s) => !Object.keys(known).length || known[s.color]);
+      const levels: Partial<Record<Color, number>> = Object.fromEntries(
+        Object.entries(known).map(([color, v]) => [color, v.level]));
+      for (const s of ipp) { levels[s.color] = s.level; }
+      const values = Object.values(levels) as number[];
+      // Without SNMP's levels since the restart, IPP's alone could show too high a level
+      const haveSnmp = Object.keys(known).length > 0;
+      const covers = haveSnmp && Object.keys(known).every((c) => ipp.some((s) => s.color === c));
+      // SNMP also judges low by its finer reading, which IPP doesn't have, and
+      // counts in 10% steps: a color SNMP found low stays low unless IPP shows a
+      // clear rise above the threshold (a new cartridge)
+      const stillLow = (Object.entries(known) as [Color, { level: number; low: boolean }][]).some(([c, v]) => {
+        const now = ipp.find((s) => s.color === c);
+        return v.low && !(now && now.level >= v.level + 10 && now.level > this.lowToner);
+      });
+      const low = flagged || stillLow || ipp.some((s) => s.level <= this.lowToner);
+      if (this.toner && haveSnmp && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
+      for (const s of ipp) { this.tiles[s.color]?.updateCharacteristic(C.CurrentRelativeHumidity, clamp(s.level)); }
+      if (low || covers) {
+        this.toner?.updateCharacteristic(C.StatusLowBattery, low
+          ? C.StatusLowBattery.BATTERY_LEVEL_LOW : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
+        this.lowSensor?.updateCharacteristic(C.ContactSensorState, low
+          ? C.ContactSensorState.CONTACT_NOT_DETECTED : C.ContactSensorState.CONTACT_DETECTED);
+      }
+      if (ipp.length && haveSnmp) { this.logHistory(clamp(Math.min(...values))); }
+      return;
+    }
     if (!d.supplies.length || !d.lowestSupply) {
       // Some models (e.g. ink tank printers) report no levels at all
       this.remember({ noLevels: true });
@@ -635,7 +701,13 @@ export class PrinterAccessory {
         this.guarded = this.guarded.filter((ch) => !toner.characteristics.includes(ch));
         this.toner = null;
       }
-      this.removeLowSensor();
+      this.ensureTiles(d); // tiles for levels no longer reported go too
+      // The printer's own low flag still works without levels
+      this.ensureLowSensor(kind);
+      this.lowSensor?.updateCharacteristic(C.ContactSensorState, flagged
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
+      this.warnOnce('flagged-no-levels', flagged, `The printer reports ${kind.toLowerCase()} low.`);
       return;
     }
     let toner = this.toner;
@@ -649,7 +721,6 @@ export class PrinterAccessory {
     this.renameBattery(toner, kind);
     this.remember({ noLevels: false, kind });
 
-    const flagged = d.errors.includes('lowToner') || d.errors.includes('noToner');
     const isLow = (s: Supply): boolean => s.level <= this.lowToner || (s.fine !== null && s.fine <= this.lowToner);
     const low = d.supplies.filter(isLow);
     const level = clamp(d.lowestSupply.level);
@@ -716,26 +787,32 @@ export class PrinterAccessory {
 
   /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
   applyDrumAndParts(d: PrinterData): void {
+    const standIn = this.standIn(d);
     let due = false;
     const drums = (Object.entries(d.drums) as [Color, { percent?: number; pagesRemaining?: number }][])
       .filter((e): e is [Color, { percent: number; pagesRemaining?: number }] => typeof e[1].percent === 'number');
     if (drums.length) {
       const [color, lowest] = drums.reduce((a, b) => (b[1].percent < a[1].percent ? b : a));
       const level = clamp(lowest.percent);
-      if (this.drum) { this.setBattery(this.drum, level, this.lowDrum); }
       due = level <= this.lowDrum;
+      // A stand-in reading only lowers the drum or marks it low, never clears it
+      if (this.drum && (!standIn || due)) { this.setBattery(this.drum, level, this.lowDrum); }
       const name = drums.length > 1 ? `${cap(color)} drum` : 'Drum';
-      this.warnOnce('drum', level <= this.lowDrum,
-        `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
+      if (!standIn || due) {
+        this.warnOnce('drum', due, `${name} is near end of life (${level}%, ${lowest.pagesRemaining ?? '?'} pages left).`);
+      }
     }
     for (const [key, part] of Object.entries(d.parts) as [PartKey, { percent?: number; pagesRemaining?: number }][]) {
       if (typeof part.percent !== 'number' || !PART_NAMES[key]) { continue; }
       if (part.percent <= this.lowDrum) { due = true; }
       const left = part.pagesRemaining !== undefined ? `, ${part.pagesRemaining} pages left` : '';
+      if (standIn && part.percent > this.lowDrum) { continue; }
       this.warnOnce(`part-${key}`, part.percent <= this.lowDrum,
         `${PART_NAMES[key]} is near end of life (${part.percent}%${left}).`);
     }
-    if (this.maintenance) {
+    // IPP standing in for SNMP may not report every part, so it can open the
+    // sensor but not close it
+    if (this.maintenance && !(standIn && !due)) {
       const C = this.hap.Characteristic;
       this.maintenance.updateCharacteristic(C.ContactSensorState, due
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
@@ -780,8 +857,19 @@ export class PrinterAccessory {
       : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
   }
 
+  /**
+   * A reading over IPP while the plugin is set to auto: IPP stands in for SNMP
+   * until SNMP answers again, so it only adds to what SNMP showed and doesn't
+   * remove sensors, reset readings or change the serial number.
+   */
+  standIn(d: PrinterData): boolean {
+    return this.options.protocol === 'auto' && (d as QueryResult).via === 'ipp' && this.snmpAnswered;
+  }
+
   updateInfo(d: PrinterData): void {
     const { Service: S, Characteristic: C } = this.hap;
+    // IPP may format the model and serial number differently; SNMP's stay
+    if (this.standIn(d)) { return; }
     const ctx = this.accessory.context;
     let changed = false;
     const model = d.model ? d.model.replace(/^Brother\s+/i, '') : null;

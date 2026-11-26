@@ -127,12 +127,161 @@ function defineTests(hap: Hap): void {
     assert.equal(lowSensor(acc)?.getCharacteristic(C.ConfiguredName).value, 'Printer Ink Low');
   });
 
-  test('low toner sensor: left out on printers that report no levels', () => {
+  test('low toner sensor: without levels it follows the printer\'s own low flag', () => {
     const { acc, printer } = setup({ lowTonerSensor: true });
-    printer.apply(reading(50));
-    assert.ok(lowSensor(acc));
     printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
-    assert.equal(lowSensor(acc), undefined);
+    assert.equal(state(acc), CLOSED);
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null, errors: ['lowToner'] });
+    assert.equal(state(acc), OPEN);
+  });
+
+  /* ------------------------------------------------------------------- IPP */
+
+  const viaIpp = (d: QueryResult): QueryResult => ({ ...d, via: 'ipp', snmpVersion: null });
+  const noLevels = (extra: Partial<QueryResult> = {}): QueryResult =>
+    viaIpp({ ...reading(50), supplies: [], lowestSupply: null, drums: {}, parts: {}, serial: 'IPP-FORMAT', ...extra });
+
+  test('IPP in auto: standing in for SNMP keeps its battery, drum, maintenance and serial', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, maintenanceSensor: true, showDrum: true });
+    printer.apply({ ...reading(40), serial: 'E111', drums: { black: { percent: 5 } } });
+    const maintenance = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+
+    printer.apply(noLevels());
+    assert.ok(battery(acc), 'the toner battery stays');
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 40, 'with SNMP\'s level');
+    assert.equal(acc.context.noLevels, false);
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN, 'not reset');
+    assert.equal(acc.context.serial, 'E111', 'SNMP\'s serial number stays');
+    assert.equal(state(acc), CLOSED);
+
+    printer.apply(noLevels({ errors: ['lowToner'] }));
+    assert.equal(state(acc), OPEN, 'the printer\'s low flag still shows');
+    assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+  });
+
+  test('IPP in auto with levels: updates SNMP\'s tiles but removes none, and stores nothing', () => {
+    const { acc, printer } = setup({ protocol: 'auto', tonerTile: true });
+    const two = (b: number, c: number): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    printer.apply(two(60, 50));
+    const cyan = acc.getServiceById(S.HumiditySensor, 'tile-cyan');
+    assert.ok(cyan);
+    const remembered = { ...acc.context };
+    printer.apply(viaIpp({ ...reading(55), drums: {}, parts: {} })); // black only
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tile-cyan'), cyan, 'the cyan tile stays');
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile')?.getCharacteristic(C.CurrentRelativeHumidity).value, 55);
+    assert.deepEqual(acc.context, remembered, 'nothing stored from the stand-in reading');
+  });
+
+  test('IPP in auto: the battery is the lowest of IPP\'s and SNMP\'s last levels; a full reading can clear low', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    const sup = (b: number, c: number): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: c }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    printer.apply(sup(60, 50));
+    printer.apply(viaIpp({ ...reading(55), drums: {}, parts: {} })); // black only
+    assert.equal(battery(acc)?.getCharacteristic(C.BatteryLevel).value, 50, 'cyan is still at 50');
+    printer.apply(viaIpp({ ...reading(5), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN);
+    printer.apply(viaIpp({ ...reading(100), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'black only: not enough to clear');
+    printer.apply(viaIpp({ ...sup(100, 50), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED, 'every color SNMP had, none low: cleared');
+    assert.equal(battery(acc)?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
+  });
+
+  test('IPP in auto: after a restart, SNMP having answered before still counts', () => {
+    const first = setup({ protocol: 'auto', tonerTile: true });
+    first.printer.apply({ ...reading(60), serial: 'E1' });
+    assert.equal(first.acc.context.snmpAnswered, true);
+    const again = setup({ protocol: 'auto', tonerTile: true }, first.acc);
+    again.printer.apply(viaIpp({ ...reading(60), supplies: [], lowestSupply: null, serial: 'e1' }));
+    assert.equal(first.acc.context.serial, 'E1', 'not changed by IPP');
+    assert.ok(battery(first.acc), 'the battery stays');
+  });
+
+  test('IPP in auto: right after a restart IPP doesn\'t raise the battery; a finer-reading low stays low', () => {
+    const sup = (b: number, c: number, cFine = c): QueryResult => {
+      const supplies = [{ color: 'black' as const, level: b, fine: b }, { color: 'cyan' as const, level: c, fine: cFine }];
+      return { ...reading(b), supplies, lowestSupply: supplies[c < b ? 1 : 0] };
+    };
+    const first = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    first.printer.apply(sup(60, 5));
+    const again = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 }, first.acc);
+    again.printer.apply(viaIpp({ ...reading(60), drums: {}, parts: {} })); // black only, before SNMP answers
+    assert.equal(battery(first.acc)?.getCharacteristic(C.BatteryLevel).value, 5, 'the cached level stays');
+
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    printer.apply(sup(60, 20, 8)); // cyan low by its finer reading
+    assert.equal(state(acc), OPEN);
+    printer.apply(viaIpp({ ...sup(60, 20), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'not cleared by IPP, which has no finer reading');
+    printer.apply(viaIpp({ ...sup(60, 25), drums: {}, parts: {} }));
+    assert.equal(state(acc), OPEN, 'IPP rounding a little higher isn\'t a new cartridge');
+    printer.apply(viaIpp({ ...sup(60, 100), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED, 'a new cartridge clears it');
+  });
+
+  test('IPP in auto: a printer without SNMP levels ignores IPP\'s', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true, lowTonerThreshold: 10 });
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
+    printer.apply(viaIpp({ ...reading(5), drums: {}, parts: {} }));
+    assert.equal(state(acc), CLOSED);
+  });
+
+  test('IPP in auto: a drum reading only lowers the drum, and warns once', () => {
+    const { acc, printer, lines } = setup({ protocol: 'auto', showDrum: true });
+    printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
+    const drum = acc.getServiceById(S.Battery, 'drum');
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 40 } }, parts: {} }));
+    assert.equal(drum?.getCharacteristic(C.BatteryLevel).value, 5);
+    assert.equal(drum?.getCharacteristic(C.StatusLowBattery).value, C.StatusLowBattery.BATTERY_LEVEL_LOW);
+    printer.apply({ ...reading(50), drums: { black: { percent: 5 } } });
+    assert.equal(lines.filter((l) => l.includes('Drum is near end of life')).length, 1);
+  });
+
+  test('IPP in auto: an ink tank printer without levels over SNMP doesn\'t get a battery from IPP', () => {
+    const { acc, printer } = setup({ protocol: 'auto' });
+    printer.apply({ ...reading(50), supplies: [], lowestSupply: null });
+    assert.equal(battery(acc), undefined);
+    printer.apply(viaIpp(reading(70)));
+    assert.equal(battery(acc), undefined);
+    assert.equal(acc.context.noLevels, true);
+  });
+
+  test('IPP in auto: drums without parts don\'t close the Maintenance sensor', () => {
+    const { acc, printer } = setup({ protocol: 'auto', maintenanceSensor: true });
+    printer.apply({ ...reading(50), drums: { black: { percent: 60 } }, parts: { fuser: { percent: 2 } } });
+    const maintenance = service(acc, S.ContactSensor, 'maintenance');
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 60 } }, parts: {} }));
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN, 'still open');
+    printer.apply(viaIpp({ ...reading(50), drums: { black: { percent: 3 } }, parts: {} }));
+    assert.equal(maintenance?.getCharacteristic(C.ContactSensorState).value, OPEN);
+  });
+
+  test('IPP in auto before SNMP has ever answered: IPP readings count in full', () => {
+    const { acc, printer } = setup({ protocol: 'auto', lowTonerSensor: true });
+    printer.apply(noLevels({ model: 'Brother MFC-L2750DW series', serial: 'E9' }));
+    assert.equal(acc.context.model, 'MFC-L2750DW series');
+    assert.equal(acc.context.serial, 'E9');
+    assert.equal(battery(acc), undefined, 'no level to show');
+    assert.ok(lowSensor(acc), 'the low sensor follows the printer\'s flag');
+  });
+
+  test('IPP only, toner as "some remaining": no battery or tiles, low flag on the sensor', () => {
+    const { acc, printer } = setup({ protocol: 'ipp', lowTonerSensor: true, tonerTile: true });
+    printer.apply(viaIpp(reading(50)));
+    assert.ok(acc.getServiceById(S.HumiditySensor, 'tonerTile'));
+    printer.apply(noLevels());
+    assert.equal(battery(acc), undefined);
+    assert.equal(acc.getServiceById(S.HumiditySensor, 'tonerTile'), undefined, 'no stale tile');
+    printer.apply(noLevels({ errors: ['lowToner'] }));
+    assert.equal(state(acc), OPEN);
   });
 
   test('low toner sensor: kept across restarts, removed when turned off', () => {

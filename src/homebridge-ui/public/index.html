@@ -146,7 +146,7 @@
         ...(r.drum ? [['Drum', r.drum]] : []),
         ['Pages printed', r.pages ?? 'unknown'],
         ['Serial number', r.serial || 'unknown'],
-        ['SNMP', `v${r.snmpVersion}`],
+        ['Read over', r.via],
       ];
       out.innerHTML = '<span class="text-success">Connected.</span><table class="table table-sm mb-0 mt-1"><tbody>'
         + rows.map(([k, v]) => `<tr><th class="font-weight-normal text-muted" style="width: 9rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')

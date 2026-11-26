@@ -54,11 +54,11 @@ printer, the difference is in what each can read and show:
 | Out of paper, jam, cover open | A Problem sensor, an optional Out of Paper sensor, and the exact problem in the log | One general fault |
 | Printer turned off or unplugged | Online sensor, and No Response on the rest | Online switch |
 | Find printers from the settings screen | Yes, with a connection test | Yes |
-| Works with SNMP turned off | No (SNMP v1, v2c or v3 must be on) | Yes |
+| Works with SNMP turned off | Yes, over IPP (`protocol`, below), with IPP's detail | Yes |
 
-Both read the printer locally, with no cloud account. Use an AirPrint plugin for other
-brands, or for a Brother printer that doesn't report levels over SNMP (see the table
-below).
+Both read the printer locally, with no cloud account. This plugin can also read a Brother
+printer over IPP, as an option (see [Reading over IPP](#reading-over-ipp-airprint)); an
+AirPrint plugin is the one to use for other brands.
 
 ## Requirements
 
@@ -78,6 +78,8 @@ below).
   [printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml).
 - SNMP turned on in the printer's web page: **Network → Protocol → SNMP** (v1/v2c,
   read-only is enough). The default community is `public`. SNMPv3 works too (below).
+  Without SNMP, the plugin can read the printer over IPP instead, with less detail
+  ([below](#reading-over-ipp-airprint)).
 - A fixed address for the printer: reserve its IP in your router, or use its mDNS
   hostname (for example `brn3c2af4919dfc.local`).
 - Homebridge 1.6 or later (including 2.x), Node.js 22 (22.19 or later), 24 or 26.
@@ -124,6 +126,9 @@ In `config.json`:
 | `host` | | Printer IP address or hostname. Printers without one are ignored. |
 | `community` | `public` | SNMP community string. |
 | `port` | `161` | SNMP port. |
+| `protocol` | `snmp` | How to read the printer: `snmp`; `auto` (SNMP, and IPP when SNMP doesn't answer); or `ipp` (IPP only). See [Reading over IPP](#reading-over-ipp-airprint). |
+| `ippUrl` | | IPP address, for `auto` and `ipp`. Empty means `ipp://<host>:631/ipp/print`, which Brother printers use; `ipps://` for an encrypted connection. |
+| `ippAllowSelfSigned` | `false` | With an `ipps://` address, accept the printer's self-signed certificate (below). |
 | `snmpVersion` | `auto` | `auto` tries v2c, then v1. Set `1` for older printers that only answer v1, or `3` for SNMPv3 (below). |
 | `v3User` | | SNMPv3 user name. Used only with `snmpVersion` `3`. |
 | `v3AuthProtocol` | `sha` | SNMPv3 authentication: `none`, `md5`, `sha` (SHA-1), `sha224`, `sha256`, `sha384` or `sha512`. `none` needs `v3PrivProtocol` `none` too. |
@@ -203,7 +208,52 @@ If the printer hasn't answered since Homebridge started and `snmpVersion` is `au
 poll tries v2c and then v1, so the timeout counts twice (about 20 s per poll). Once it has
 answered, the version that worked is used.
 
+Over IPP the timeout is 5 s, so with `protocol: ipp` it's `pollInterval` + 5 s per failed
+poll. With `protocol: auto` a poll tries SNMP and then IPP, so a failed one takes the SNMP
+time plus 5 s.
+
 Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
+
+## Reading over IPP (AirPrint)
+
+SNMP gives the most: Brother's own records with the exact toner or ink %, drum and parts
+life, and the page count. Set `protocol` to:
+
+- `ipp` for a printer with SNMP turned off, or a model that reports no levels over SNMP:
+  IPP only (the SNMP settings, including SNMPv3, aren't used).
+- `auto` to read over SNMP but carry on over IPP when SNMP doesn't answer. Until SNMP has
+  answered once, IPP readings count in full. After that IPP only fills in: it updates the
+  sensors SNMP set up (combining its levels with SNMP's last ones) and can raise low or
+  maintenance warnings, but doesn't add or remove sensors, so a missed SNMP answer doesn't
+  change Home. It clears a low-toner warning only if it reports every color SNMP did;
+  drum and parts warnings stay until SNMP answers again. If SNMP is turned off for good,
+  switch to `ipp`.
+
+Over IPP the plugin reads the printer's state, its problems (paper, jam, cover, toner)
+and the supplies it lists. What that includes depends on the printer: many Brother lasers
+report toner only as "some remaining", with no %, and then there's no battery or tile;
+the printer's own low-toner flag still opens the Toner Low sensor (`lowTonerSensor`) and
+is logged. Drum and parts appear only if the printer lists them
+as supplies, and the page count only if it reports `printer-impressions-completed`.
+
+IPP is on by default on Brother printers (**Network → Protocol → IPP**). The default
+`ipp://` address isn't encrypted, like SNMP v1/v2c. With an `ipps://` address the
+connection is encrypted and the certificate is checked; Brother printers' own
+certificates are self-signed, so that fails unless you install a certificate on the
+printer that Node.js trusts (from a public authority, or your own with
+`NODE_EXTRA_CA_CERTS`; for an IP address it must list that IP) or turn on
+`ippAllowSelfSigned`. With that on the connection is still
+encrypted, but not verified: another device on your network could pose as the printer.
+**Search for printers** in the settings still uses SNMP; enter an IPP-only printer by
+hand and check it with **Test connection**.
+
+Check what your printer reports over IPP with:
+
+```bash
+npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --protocol ipp
+```
+
+(A `:port` after the address is the SNMP port; for another IPP port use `--ipp-url`.)
 
 ## SNMPv3
 

@@ -35,6 +35,29 @@
               "type": "string",
               "description": "Optional; filled in by Search or Test connection above. Keeps this printer in Home (room, automations, notifications) when you rename it or its address changes."
             },
+            "protocol": {
+              "title": "Read the printer over",
+              "type": "string",
+              "default": "snmp",
+              "oneOf": [
+                { "title": "SNMP (most detail: exact toner %, drum and parts, page count)", "enum": ["snmp"] },
+                { "title": "SNMP, or IPP (AirPrint) when SNMP doesn't answer", "enum": ["auto"] },
+                { "title": "IPP (AirPrint) only", "enum": ["ipp"] }
+              ],
+              "description": "IPP works with SNMP turned off, but many Brother printers report toner only as \"some remaining\" over it, without a %."
+            },
+            "ippUrl": {
+              "title": "IPP address",
+              "type": "string",
+              "placeholder": "ipp://10.0.4.150:631/ipp/print",
+              "description": "Leave empty for ipp://<address>:631/ipp/print, which Brother printers use. ipps:// for an encrypted connection."
+            },
+            "ippAllowSelfSigned": {
+              "title": "Accept the printer's self-signed certificate (ipps://)",
+              "type": "boolean",
+              "default": false,
+              "description": "Brother printers' own certificates are self-signed, so ipps:// fails without this. With it on, the connection is encrypted but not verified: another device on your network could pose as the printer. ipp:// doesn't need it."
+            },
             "community": {
               "title": "SNMP community",
               "type": "string",
@@ -249,6 +272,9 @@
               "expandable": true,
               "items": [
                 "printers[].serial",
+                "printers[].protocol",
+                { "key": "printers[].ippUrl", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].protocol && model.printers[arrayIndices].protocol !== 'snmp';" } },
+                { "key": "printers[].ippAllowSelfSigned", "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].protocol && model.printers[arrayIndices].protocol !== 'snmp';" } },
                 "printers[].community",
                 {
                   "key": "printers[].port",
