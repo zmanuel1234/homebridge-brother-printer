@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0-beta.1 - 2026-11-27
 
 ### Added
 - **Pages by kind**: color, black-and-white and two-sided pages, where the printer counts
