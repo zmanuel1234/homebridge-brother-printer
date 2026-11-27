@@ -168,6 +168,37 @@ test('trays: a column the printer doesn\'t answer (type, status) loses only itse
   } as unknown as snmpLib.Session;
   assert.equal(await readTrays(slow), undefined);
   assert.equal(walks, 2);
+  // A timeout on an optional column, bulk and row by row alike, stops the read too
+  const optional = {
+    subtree(oid: string, _m: number, feed: (vbs: snmpLib.Varbind[]) => boolean, done: (err?: Error) => void) {
+      const col = Number(oid.split('.').pop());
+      if (col === 2) { done(new Error('Request timed out')); return; }
+      feed([{ oid: `${oid}.1.1`, type: 2, value: col === 13 ? Buffer.from('TRAY1') : 0 } as snmpLib.Varbind]);
+      done();
+    },
+    getNext: (_o: string[], cb: (err: Error) => void) => cb(new Error('Request timed out')),
+  } as unknown as snmpLib.Session;
+  assert.equal(await readTrays(optional), undefined);
+  // An agent that keeps giving the same row doesn't loop: one row, then the next column
+  const stuck = {
+    version: 0, // v1: row by row
+    getNext: (oids: string[], cb: (err: null, vbs: snmpLib.Varbind[]) => void) =>
+      cb(null, [{ oid: oids[0].split('.').length > 12 ? oids[0] : `${oids[0]}.1.1`, type: 2, value: oids[0].endsWith('.13') ? Buffer.from('TRAY1') : -3 } as snmpLib.Varbind]),
+  } as unknown as snmpLib.Session;
+  assert.equal(show(traysFromTable((await readTrays(stuck))!, INPUT_TABLE)), 'Tray 1 ok');
+  // v1's end of a column: noSuchName
+  let calls = 0;
+  const v1 = {
+    version: 0,
+    subtree: () => { throw new Error('no bulk on v1'); },
+    getNext: (oids: string[], cb: (err: Error | null, vbs?: snmpLib.Varbind[]) => void) => {
+      calls++;
+      if (oids[0].split('.').length > 12) { cb(new Error(`NoSuchName: ${oids[0]}`)); return; }
+      cb(null, [{ oid: `${oids[0]}.1.1`, type: 2, value: oids[0].endsWith('.13') ? Buffer.from('TRAY1') : -3 } as snmpLib.Varbind]);
+    },
+  } as unknown as snmpLib.Session;
+  assert.equal(show(traysFromTable((await readTrays(v1))!, INPUT_TABLE)), 'Tray 1 ok');
+  assert.equal(calls, 10, 'two requests per column, no bulk try');
   // Nothing answers: undefined, never an error
   const none = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(new Error('timeout')) } as unknown as snmpLib.Session;
   assert.equal(await readTrays(none), undefined);

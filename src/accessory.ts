@@ -27,6 +27,8 @@ export interface PrinterContext {
   kind?: Kind;
   /** The printer reported no supply levels last time */
   noLevels?: boolean;
+  /** The printer never answers bulk SNMP requests: its tables are read row by row */
+  noBulk?: boolean;
   /** The name in the config when the accessory was last set up */
   name?: string;
   /** As the printer gives it over IPP; Brother otherwise */
@@ -278,6 +280,8 @@ export class PrinterAccessory {
     // Supplies shown before a restart: a supplies walk that fails on the first poll is a
     // failed poll, not "no supplies" (which would take the battery and tiles away)
     this.options.state!.suppliesRead = accessory.context.noLevels === false;
+    // Known from an earlier run: skip the bulk try (and its timeout) after a restart
+    if (accessory.context.noBulk) { this.options.state!.noBulk = true; }
     this.interval = setting(config.pollInterval, 60, 10, 3600) * 1000;
     this.lowToner = setting(config.lowTonerThreshold, 10, 0, 100);
     this.lowDrum = setting(config.lowDrumThreshold, 10, 0, 100);
@@ -688,6 +692,8 @@ export class PrinterAccessory {
       this.snmpAnswered = true;
       this.remember({ snmpAnswered: true });
     }
+    // Learnt during a poll: this printer is read row by row; keep it for the next start
+    if (this.options.state?.noBulk && !this.accessory.context.noBulk) { this.remember({ noBulk: true }); }
     this.setOnline(true);
     this.updateInfo(d);
 
