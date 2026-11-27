@@ -2,7 +2,7 @@
   "name": "homebridge-brother-printer",
   "displayName": "Brother Printer",
   "version": "0.10.0",
-  "description": "Brother laser and inkjet printers in HomeKit: printing state, problem alerts and toner or ink levels, read locally over SNMP.",
+  "description": "Printers in HomeKit, any make (Brother in most detail): printing state, problem alerts, toner or ink levels and paper trays, read locally over SNMP or IPP (AirPrint).",
   "author": "Manuel Zamfir",
   "license": "MIT",
   "homepage": "https://github.com/zmanuel1234/homebridge-brother-printer#readme",
@@ -61,7 +61,15 @@
     "mfc",
     "dcp",
     "drum",
-    "out-of-paper"
+    "out-of-paper",
+    "ipp",
+    "airprint",
+    "bonjour",
+    "hp",
+    "canon",
+    "epson",
+    "lexmark",
+    "dashboard"
   ],
   "engines": {
     "node": "^22.19.0 || ^24.0.0 || ^26.0.0",

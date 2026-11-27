@@ -4,18 +4,22 @@
  * Quick check from the command line:
  *   npx brother-printer-probe 10.0.4.150 [community]
  *   npx brother-printer-probe 10.0.4.150 --v3 <user> [--auth sha] [--auth-pass <pw>] [--priv aes] [--priv-pass <pw>]
- * Prints what the plugin would read from the printer.
+ * Prints what the plugin would read from the printer; with --report, a report of
+ * everything it answers, to paste into a GitHub issue.
  */
 
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from '../snmp';
 import { readPrinter } from '../read';
 import { ippEndpoint } from '../ipp';
 import type { QueryOptions } from '../snmp';
+import { buildReport } from '../report';
 
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]
                              [--priv ${PRIV_PROTOCOLS.join('|')}] [--priv-pass <password>] [--context <name>]
        brother-printer-probe <printer> --protocol ipp|auto [--ipp-url <ipp://printer:631/ipp/print>] [--ipp-self-signed yes|no]
+Add --report for a report of everything the printer answers, to paste into a GitHub issue
+(passwords and the community left out, the serial number shortened).
 SNMPv3 defaults to SHA authentication and AES encryption. --priv none turns encryption off;
 --auth none needs --priv none too. Passwords given as options are saved in your shell
 history and visible in the process list; to avoid that, set the environment variables
@@ -29,9 +33,11 @@ function fail(message: string): never {
 const args = process.argv.slice(2);
 const positional: string[] = [];
 const flags: Record<string, string> = {};
+let report = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '-h' || a === '--help') { console.log(USAGE); process.exit(0); }
+  if (a === '--report') { report = true; continue; }
   if (!a.startsWith('-')) { positional.push(a); continue; }
   if (!a.startsWith('--')) { fail(`Unknown option ${a} (options start with --).\n${USAGE}`); }
   const value = args[i + 1];
@@ -93,6 +99,16 @@ if (flags['ipp-self-signed'] !== undefined) {
 // The paper trays too, as the settings screen's test shows them
 options.trays = true;
 
+if (report) {
+  const entry: Record<string, unknown> = { host, ...(port ? { port: Number(port) } : {}), protocol: options.protocol ?? 'snmp',
+    ...(options.version === '3' ? { snmpVersion: '3', v3User: '(set)' } : { community }),
+    ...(options.ippUrl ? { ippUrl: options.ippUrl } : {}) };
+  buildReport(entry, { ...options, host }).then((text) => { console.log(text); }, (err: unknown) => {
+    console.error(`Couldn't make the report: ${(err as Error)?.message || String(err)}`);
+    process.exit(1);
+  });
+} else {
+
 readPrinter(options)
   .then((d) => {
     console.log(JSON.stringify(d, null, 2));
@@ -105,3 +121,4 @@ readPrinter(options)
     if (options.version === '3') { console.error('For SNMPv3, also check the user name, protocols and passwords.'); }
     process.exit(1);
   });
+}

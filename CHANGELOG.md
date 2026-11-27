@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Bonjour search**: the settings screen's search also asks for printers by Bonjour (as
+  AirPrint does), so it finds printers with SNMP off; those are added to be read over IPP,
+  at the address they advertise.
+- **Finding a printer again after its address changes**: once a printer shows as offline,
+  and every 15 minutes after that, the plugin looks for its serial number on the network.
+  When it's found, it's read at its new address (kept after a restart until the address in
+  the settings changes), and the log says so.
+- **Copy a report** in the settings screen, and `--report` for the probe command: everything
+  the printer answers over SNMP and IPP, ready to paste into a GitHub issue. Passwords and
+  the community are left out; the serial number, MAC address and UUIDs are shortened.
+- **Your printers**, a dashboard at the top of the settings screen: each printer's state,
+  levels as bars, recent pages and paper, read when the screen opens.
+- `dashboardPort`: the same dashboard on a page of its own, at
+  `http://<Homebridge address>:<port>/`, from the plugin's latest readings. Off unless a
+  port is set; read-only, with no serial numbers or settings.
+
+### Changed
+- The package description, keywords and settings header now say any make, over SNMP or IPP.
+
 ## 0.10.0 - 2026-11-26
 
 From testing 0.9.0 on a real printer (an MFC-L2750DW) in Apple's Home app; tested there as

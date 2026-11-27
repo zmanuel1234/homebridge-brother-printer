@@ -77,14 +77,14 @@ export const REQUESTED = [
   'printer-input-tray', 'printer-firmware-string-version',
 ];
 
-export function getPrinterAttributes(uri: string, requestId: number): Buffer {
+export function getPrinterAttributes(uri: string, requestId: number, requested: string[] = REQUESTED): Buffer {
   return ippMessage(0x000b, requestId, [{
     tag: TAG.operation,
     attributes: [
       { tag: TAG.charset, name: 'attributes-charset', values: ['utf-8'] },
       { tag: TAG.language, name: 'attributes-natural-language', values: ['en'] },
       { tag: TAG.uri, name: 'printer-uri', values: [uri] },
-      { tag: TAG.keyword, name: 'requested-attributes', values: REQUESTED },
+      { tag: TAG.keyword, name: 'requested-attributes', values: requested },
     ],
   }]);
 }
@@ -273,10 +273,15 @@ export function ippEndpoint(url: string): { http: URL; uri: string } {
 }
 
 /** Read a printer over IPP. Rejects when it can't be reached or refuses the request. */
-export function ippQuery(options: IppOptions): Promise<PrinterData> {
+export async function ippQuery(options: IppOptions): Promise<PrinterData> {
+  return toPrinterData(await ippAttributes(options));
+}
+
+/** The printer's attributes as it gives them (the ones the plugin reads, or `requested`, e.g. ['all']) */
+export function ippAttributes(options: IppOptions, requested: string[] = REQUESTED): Promise<IppAttributes> {
   const { http: target, uri } = ippEndpoint(options.url);
   const requestId = 1 + Math.floor(Math.random() * 0x7ffffffe);
-  const body = getPrinterAttributes(uri, requestId);
+  const body = getPrinterAttributes(uri, requestId, requested);
   const timeout = options.timeout ?? 5000;
   const lib = target.protocol === 'https:' ? https : http;
 
@@ -306,7 +311,7 @@ export function ippQuery(options: IppOptions): Promise<PrinterData> {
           const r = parseResponse(Buffer.concat(chunks));
           if (r.requestId !== requestId) { reject(new Error('IPP response is for another request')); return; }
           if (r.status > 0x00ff) { reject(new Error(`IPP request refused (status 0x${r.status.toString(16).padStart(4, '0')})`)); return; }
-          resolve(toPrinterData(r.printer));
+          resolve(r.printer);
         } catch (err) {
           reject(err as Error);
         }

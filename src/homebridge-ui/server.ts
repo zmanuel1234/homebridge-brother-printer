@@ -1,6 +1,6 @@
 /*
  * The settings screen's server side (Homebridge UI custom UI): searching the
- * network for Brother printers, and testing a printer's settings.
+ * network for printers, testing a printer's settings, and its report.
  * It runs in its own process, started by the Homebridge UI while the plugin's
  * settings are open.
  */
@@ -8,75 +8,18 @@ import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-ut
 import { discover } from '../discover';
 import { queryOptions } from '../accessory';
 import type { PrinterConfig } from '../accessory';
-import { readVia } from '../snmp';
 import { readPrinter } from '../read';
-import type { QueryResult } from '../snmp';
-import { describeLeft, pagesInLast } from '../usage';
 import type { UsageSample } from '../usage';
+import { testSummary } from '../summary';
+import type { CachedUsage, TestResult } from '../summary';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { buildReport } from '../report';
 
-export interface TestResult {
-  model: string | null;
-  serial: string | null;
-  /** "SNMP v2c" or "IPP" */
-  via: string;
-  status: string;
-  levels: string;
-  drum: string | null;
-  pages: number | null;
-  /** "Tray 1 40%, Tray 2 empty, MP Tray (bypass) empty"; null when the printer lists none */
-  paper: string | null;
-  /** "12 in the last 7 days, 85 in the last 30 days", from the plugin's history; null without it */
-  usage: string | null;
-  /** "Toner: about 6 weeks left", from the plugin's history; null without enough of it */
-  left: string | null;
-}
+export { testSummary } from '../summary';
+export type { CachedUsage, TestResult } from '../summary';
 
 const errorText = (err: unknown): string => (err as { message?: string } | null)?.message || String(err);
-
-const TRAY_STATE = { empty: 'empty', low: 'low', ok: 'has paper', unknown: 'unknown' } as const;
-
-export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: string): TestResult {
-  const kind = d.type === 'ink' ? 'ink' : 'toner';
-  const levels = d.supplies.length
-    ? d.supplies.map((s) => (d.supplies.length === 1 ? `${kind} ${s.level}%` : `${s.color} ${s.level}%`)).join(', ')
-    : `no ${kind} levels reported`;
-  return {
-    model: d.model,
-    serial: d.serial,
-    via: readVia(d),
-    status: d.statusText || (d.printing ? 'printing' : d.fault ? 'problem' : 'unknown'),
-    levels,
-    drum: d.drumPercent !== null ? `${d.drumPercent}%` : null,
-    pages: d.totalPages,
-    paper: d.trays?.length
-      ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`).join(', ')
-      : null,
-    ...usageSummary(d, cached, protocol),
-  };
-}
-
-function usageSummary(d: QueryResult, cached?: CachedUsage, protocol?: string): { usage: string | null; left: string | null } {
-  const now = Math.round(Date.now() / 1000);
-  // With auto, the plugin keeps SNMP's readings once SNMP has answered; IPP's page count
-  // and levels, read now as a fallback, may not match them
-  if (protocol === 'auto' && d.via === 'ipp' && cached?.snmpAnswered) { return { usage: null, left: null }; }
-  const samples = cached?.samples;
-  const pages = d.totalPages;
-  const week = pagesInLast(samples, now, pages, 7);
-  const month = pagesInLast(samples, now, pages, 30);
-  const usage = [week !== null ? `${week} pages in the last 7 days` : '', month !== null ? `${month} in the last 30 days` : '']
-    .filter(Boolean).join(', ') || null;
-  const levels = Object.fromEntries(d.supplies.map((s) => [s.color, s.fine ?? s.level]));
-  return { usage, left: describeLeft(samples, now, levels, d.type === 'ink' ? 'Ink' : 'Toner') };
-}
-
-export interface CachedUsage {
-  samples: UsageSample[];
-  /** The plugin has read this printer over SNMP: its page counts are SNMP's */
-  snmpAnswered: boolean;
-}
 
 /**
  * The plugin's daily readings for a printer, from Homebridge's accessory cache (the
@@ -115,13 +58,21 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
   }
 }
 
+/** The report for "Copy a report", for the settings as entered */
+export async function printerReport(entry: unknown): Promise<string> {
+  const config = (entry && typeof entry === 'object' ? entry : {}) as Partial<PrinterConfig> & Record<string, unknown>;
+  if (!String(config.host ?? '').trim()) { throw new Error('Enter the printer\'s IP address or hostname first.'); }
+  const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
+  return buildReport(config, options);
+}
+
 export class BrotherPrinterUiServer extends HomebridgePluginUiServer {
   constructor() {
     super();
     this.onRequest('/discover', async (payload: unknown) => {
       const community = (payload as { community?: unknown } | null)?.community;
       try {
-        return await discover({ community: typeof community === 'string' && community ? community : 'public' });
+        return await discover({ community: typeof community === 'string' && community ? community : 'public', wait: 2500 });
       } catch (err) {
         throw new RequestError(`Search failed: ${errorText(err)}`, {});
       }
@@ -129,6 +80,13 @@ export class BrotherPrinterUiServer extends HomebridgePluginUiServer {
     this.onRequest('/test', async (payload: unknown) => {
       try {
         return await testPrinter(payload, readPrinter, this.homebridgeStoragePath);
+      } catch (err) {
+        throw new RequestError(errorText(err), {});
+      }
+    });
+    this.onRequest('/report', async (payload: unknown) => {
+      try {
+        return { text: await printerReport(payload) };
       } catch (err) {
         throw new RequestError(errorText(err), {});
       }

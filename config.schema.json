@@ -4,7 +4,7 @@
   "singular": true,
   "customUi": true,
   "customUiPath": "./dist/homebridge-ui",
-  "headerDisplay": "Shows Brother laser and inkjet printers in HomeKit: printing state, problems, and toner or ink levels. SNMP must be on in the printer's web page (Network > Protocol).",
+  "headerDisplay": "Shows printers in HomeKit, any make: printing state, problems, toner or ink levels and paper. Read locally over SNMP or IPP (AirPrint).",
   "schema": {
     "type": "object",
     "properties": {
@@ -252,6 +252,14 @@
             }
           }
         }
+      },
+      "dashboardPort": {
+        "title": "Dashboard port",
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65535,
+        "placeholder": "off",
+        "description": "Set a port (for example 8587) to see all printers on a page of their own at http://<Homebridge address>:<port>/, for a browser or a wall tablet. Read-only. Leave empty for none."
       }
     }
   },
@@ -322,6 +330,12 @@
           ]
         }
       ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Dashboard",
+      "expandable": true,
+      "items": ["dashboardPort"]
     }
   ]
 }

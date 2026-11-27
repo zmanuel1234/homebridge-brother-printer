@@ -1,6 +1,6 @@
 <!--
-  Brother Printer settings: a search for printers and a connection test above the
-  usual settings form. Runs inside the Homebridge UI, which provides `homebridge`
+  Printer settings: a dashboard of the printers, a search for printers, a connection
+  test and a report for support above the usual settings form. Runs inside the Homebridge UI, which provides `homebridge`
   and its own stylesheet (Bootstrap 5 with the UI's themes, light and dark, in its
   colors). This page uses the classes those themes style (card, btn-primary,
   btn-elegant, custom-input / custom-select, list-group, table) and the UI's font.
@@ -26,12 +26,23 @@
   /* The UI's custom-select padding would let a long name run under the arrow */
   #bp-tools .custom-select { padding-right: 2.25rem; }
   #bp-tools .list-group-item { border-color: rgba(128, 128, 128, 0.35); }
+  #bp-dash-card .bp-muted { color: inherit; opacity: 0.7; }
+  #bp-tools textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; color: inherit;
+    background: transparent; border: 1px solid rgba(128, 128, 128, 0.35); width: 100%; height: 12rem; }
 </style>
+<div class="card card-body mb-3" id="bp-dash-card">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="card-title mb-0">Your printers</h5>
+    <button type="button" class="btn btn-elegant btn-sm" id="bp-dash-refresh">Refresh</button>
+  </div>
+  <div id="bp-dash"><span class="small bp-muted">Reading the printers…</span></div>
+</div>
 <div class="card card-body mb-3" id="bp-tools">
   <h5 class="card-title mb-2">Find and test printers</h5>
   <p class="small bp-muted mb-2">
-    Searches this network for printers with SNMP turned on (Brother and other makes), and fills in a new printer's address and serial
-    number. The serial number lets the plugin keep a printer in Home when you rename it or its address changes.
+    Searches this network for printers, any make: those with SNMP on, and those Bonjour (AirPrint) finds, read over IPP.
+    It fills in a new printer's address and serial number. With the serial number, the plugin keeps a printer in Home when
+    you rename it, and finds it again when its address changes.
   </p>
   <div class="d-flex flex-wrap align-items-end mb-2" style="gap: .5rem">
     <div>
@@ -49,9 +60,12 @@
       <select class="form-select custom-select" id="bp-which" style="min-width: 12rem"></select>
     </div>
     <button type="button" class="btn btn-elegant" id="bp-test">Test connection</button>
+    <button type="button" class="btn btn-elegant" id="bp-report">Copy a report</button>
   </div>
   <div id="bp-result" class="small mt-2"></div>
+  <div id="bp-report-out" class="small mt-2"></div>
 </div>
+<script src="dashboard.js"></script>
 
 <script>
 (async () => {
@@ -94,9 +108,9 @@
       found = await homebridge.request('/discover', { community: $('bp-community').value.trim() || 'public' });
       const configured = (await platformConfig())[0].printers;
       if (!found.length) {
-        out.innerHTML = '<p class="small mb-0">No printers answered. Check that SNMP is on in the printer\'s web page '
-          + '(Network &gt; Protocol) and the community above, or enter the address in the form below. '
-          + 'The search can\'t find printers that only have SNMPv3 on, or that are on another network.</p>';
+        out.innerHTML = '<p class="small mb-0">No printers answered. Check that SNMP or AirPrint (IPP) is on in the printer\'s '
+          + 'web page (Network &gt; Protocol) and the community above, or enter the address in the form below. '
+          + 'The search can\'t find printers on another network.</p>';
         return;
       }
       out.innerHTML = '<ul class="list-group list-group-flush mb-0">' + found.map((p, i) => {
@@ -107,7 +121,7 @@
           : `<button type="button" class="btn btn-primary btn-sm" data-add="${i}">Add</button>`;
         return `<li class="list-group-item d-flex justify-content-between align-items-center px-0">
           <span><strong>${esc(p.model)}</strong> · ${esc(p.host)}<br>
-          <span class="small bp-muted">${esc(p.levels)}${p.serial ? ` · serial ${esc(p.serial)}` : ''}</span></span>
+          <span class="small bp-muted">${esc(p.levels)}${p.serial ? ` · serial ${esc(p.serial)}` : ''}${p.protocol === 'ipp' ? ' · over IPP (SNMP is off)' : ''}</span></span>
           ${action}</li>`;
       }).join('') + '</ul>';
     } catch (err) {
@@ -139,7 +153,13 @@
     const entry = { name, host: p.host };
     if (p.serial) { entry.serial = p.serial; }
     const community = $('bp-community').value.trim();
-    if (community && community !== 'public') { entry.community = community; }
+    if (p.protocol === 'ipp') {
+      // SNMP didn't answer: read it over IPP, at the address it advertises
+      entry.protocol = 'ipp';
+      if (p.ippUrl && p.ippUrl !== `ipp://${p.host}:631/ipp/print`) { entry.ippUrl = p.ippUrl; }
+    } else if (community && community !== 'public') {
+      entry.community = community;
+    }
     // Replace the untouched blank row a new install starts with, rather than adding beside it
     const blank = printers.findIndex((c) => !c.host && (!c.name || c.name === 'Printer'));
     if (blank >= 0) { printers[blank] = { ...printers[blank], ...entry }; } else { printers.push(entry); }
@@ -203,5 +223,61 @@
       $('bp-test').disabled = false;
     }
   });
+
+  /* ---------------------------------------------------------------- report */
+
+  $('bp-report').addEventListener('click', async () => {
+    const out = $('bp-report-out');
+    const index = $('bp-which').value;
+    if (index === '') { out.innerHTML = '<span class="bp-muted">Add a printer first.</span>'; return; }
+    const printer = (await platformConfig())[0].printers[Number(index)];
+    out.innerHTML = '<span class="bp-muted">Reading everything the printer answers (up to a minute)…</span>';
+    $('bp-report').disabled = true;
+    try {
+      const { text } = await homebridge.request('/report', printer);
+      out.innerHTML = '<p class="mb-1">The report is below. Passwords and the community are left out, and the serial number '
+        + 'is shortened. Paste it into a <a href="https://github.com/zmanuel1234/homebridge-brother-printer/issues/new" '
+        + 'target="_blank" rel="noopener">GitHub issue</a>.</p><textarea id="bp-report-text" readonly></textarea>';
+      $('bp-report-text').value = text;
+      let copied = false;
+      try { await navigator.clipboard.writeText(text); copied = true; } catch { /* not allowed in this frame */ }
+      if (!copied) {
+        $('bp-report-text').select();
+        try { copied = document.execCommand('copy'); } catch { /* select it by hand */ }
+      }
+      if (copied) { homebridge.toast.success('Report copied.', 'Printer'); } else { $('bp-report-text').select(); }
+    } catch (err) {
+      out.innerHTML = `<span class="text-danger">${esc(errorText(err))}</span>`;
+    } finally {
+      $('bp-report').disabled = false;
+    }
+  });
+
+  /* ------------------------------------------------------------- dashboard */
+
+  // Each printer as saved or entered, read now, all at once
+  async function refreshDashboard() {
+    const button = $('bp-dash-refresh');
+    button.disabled = true;
+    try {
+      const printers = (await platformConfig())[0].printers.filter((p) => String(p.host || '').trim());
+      if (!window.PrinterDashboard) { $('bp-dash').textContent = 'The dashboard couldn\'t load.'; return; }
+      const list = await Promise.all(printers.map(async (p) => {
+        const base = { name: p.name || 'Printer', host: String(p.host).trim() };
+        try {
+          return { ...base, online: true, updated: Date.now(), result: await homebridge.request('/test', p) };
+        } catch (err) {
+          return { ...base, online: false, error: errorText(err).replace(/\. Check the address.*$/, '.') };
+        }
+      }));
+      PrinterDashboard.render($('bp-dash'), list);
+    } catch (err) {
+      $('bp-dash').innerHTML = `<span class="text-danger small">${esc(errorText(err))}</span>`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+  $('bp-dash-refresh').addEventListener('click', () => { refreshDashboard(); });
+  refreshDashboard();
 })();
 </script>

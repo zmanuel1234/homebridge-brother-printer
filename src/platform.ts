@@ -2,6 +2,10 @@ import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformCo
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { PrinterAccessory } from './accessory';
 import type { PrinterConfig, PrinterContext } from './accessory';
+import { startDashboard } from './dashboard-server';
+import type { DashboardPrinter } from './dashboard-server';
+import { testSummary } from './summary';
+import type { Server } from 'node:http';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -23,6 +27,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
   readonly api: API;
   readonly cached = new Map<string, PlatformAccessory<PrinterContext>>();
   readonly printers: PrinterAccessory[] = [];
+  dashboard: Server | null = null;
 
   constructor(log: Logging, config: PlatformConfig | undefined, api: API) {
     this.log = log;
@@ -36,8 +41,12 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         const e = err as { stack?: string } | null;
         this.log.error(`Setup failed: ${e?.stack || String(err)}`);
       }
+      this.startDashboard();
     });
-    this.api.on('shutdown', () => this.printers.forEach((p) => p.stop()));
+    this.api.on('shutdown', () => {
+      this.printers.forEach((p) => p.stop());
+      this.dashboard?.close();
+    });
   }
 
   configureAccessory(accessory: PlatformAccessory): void {
@@ -61,6 +70,32 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         ch.onGet(() => { throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE); });
       }
     }
+  }
+
+  /** The dashboard page, when a port is set for it */
+  startDashboard(): void {
+    const raw: unknown = this.config.dashboardPort;
+    if (raw === undefined || raw === null || raw === '') { return; }
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      this.log.warn(`Dashboard port ${String(raw)} isn't a port from 1024 to 65535; the dashboard is off.`);
+      return;
+    }
+    this.dashboard = startDashboard(port, this.log, () => this.dashboardPrinters());
+  }
+
+  /** Each printer's latest reading as the dashboard shows it (no serial numbers) */
+  dashboardPrinters(): DashboardPrinter[] {
+    return this.printers.map((p) => {
+      const ctx = p.accessory.context;
+      let result: Record<string, unknown> | null = null;
+      if (p.lastReading) {
+        const { serial: _serial, ...rest } = testSummary(p.lastReading, { samples: ctx.usage ?? [], snmpAnswered: ctx.snmpAnswered === true },
+          p.options.protocol);
+        result = rest;
+      }
+      return { name: p.name, host: p.options.host, online: p.online && !!p.lastReading, updated: p.lastReadAt, result };
+    });
   }
 
   setup(): void {
