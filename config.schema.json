@@ -224,6 +224,12 @@
               "default": false,
               "description": "Adds a contact sensor that opens when a tray is out of paper, so Home notifies \"Printer Out of Paper opened\". The Problem sensor opens for this too."
             },
+            "outputSensor": {
+              "title": "Output tray full sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds a contact sensor that opens while the output tray is full, so Home notifies \"Printer Output Full opened\". The Problem sensor opens for this too."
+            },
             "paperTraySensors": {
               "title": "A sensor for each paper tray",
               "type": "boolean",
@@ -305,6 +311,7 @@
                 "printers[].eveHistory",
                 "printers[].faultSensor",
                 "printers[].paperSensor",
+                "printers[].outputSensor",
                 "printers[].paperTraySensors",
                 "printers[].maintenanceSensor",
                 "printers[].onlineSensor",

@@ -94,6 +94,8 @@ export interface PrinterConfig {
   faultSensor?: unknown;
   maintenanceSensor?: unknown;
   paperSensor?: unknown;
+  /** A contact sensor that opens while the output tray is full */
+  outputSensor?: unknown;
   paperTraySensors?: unknown;
   onlineSensor?: unknown;
   eveHistory?: unknown;
@@ -254,6 +256,7 @@ export class PrinterAccessory {
   readonly lowTonerSensor: boolean;
   readonly maintenanceSensor: boolean;
   readonly paperSensor: boolean;
+  readonly outputSensor: boolean;
   readonly paperTraySensors: boolean;
   readonly onlineSensor: boolean;
   readonly eveHistory: boolean;
@@ -284,6 +287,8 @@ export class PrinterAccessory {
   lowSensor: Service | null = null;
   maintenance: Service | null = null;
   paper: Service | null = null;
+  /** Output tray full */
+  output: Service | null = null;
   /** Paper tray sensors by tray key */
   trays: Record<string, Service> = {};
   onlineSvc: Service | null = null;
@@ -359,6 +364,7 @@ export class PrinterAccessory {
     this.lowTonerSensor = config.lowTonerSensor === true;
     this.maintenanceSensor = config.maintenanceSensor === true;
     this.paperSensor = config.paperSensor === true;
+    this.outputSensor = config.outputSensor === true;
     this.paperTraySensors = config.paperTraySensors === true;
     // Tray sensors need the trays on every poll
     if (this.paperTraySensors) { this.options.trays = true; }
@@ -473,6 +479,7 @@ export class PrinterAccessory {
     this.maintenance = this.optionalContact(this.maintenanceSensor, 'maintenance', 'Maintenance');
     // Out of paper on its own, the problem people most often fix themselves
     this.paper = this.optionalContact(this.paperSensor, 'noPaper', 'Out of Paper');
+    this.output = this.optionalContact(this.outputSensor, 'outputFull', 'Output Full');
 
     // One sensor per paper tray, made once the printer lists its trays; here only the
     // ones restored from the cache are picked up
@@ -607,6 +614,7 @@ export class PrinterAccessory {
       [this.lowSensor, C.ContactSensorState],
       [this.maintenance, C.ContactSensorState],
       [this.paper, C.ContactSensorState],
+      [this.output, C.ContactSensorState],
       ...Object.values(this.tiles).map((svc): [Service, CharacteristicType] => [svc, this.tileCharacteristic()]),
       ...Object.values(this.trays).map((svc): [Service, CharacteristicType] => [svc, C.ContactSensorState]),
     ];
@@ -828,7 +836,7 @@ export class PrinterAccessory {
     this.main.updateCharacteristic(C.StatusActive, online);
     for (const svc of Object.values(this.tiles)) { svc.updateCharacteristic(C.StatusActive, online); }
     if (this.problem) { this.problem.updateCharacteristic(C.StatusActive, online); }
-    for (const svc of [this.lowSensor, this.maintenance, this.paper, ...Object.values(this.trays)]) {
+    for (const svc of [this.lowSensor, this.maintenance, this.paper, this.output, ...Object.values(this.trays)]) {
       if (svc) { svc.updateCharacteristic(C.StatusActive, online); }
     }
     if (this.onlineSvc) {
@@ -874,6 +882,13 @@ export class PrinterAccessory {
     if (this.paper) {
       const out = d.errors.includes('noPaper') || d.errors.includes('inputTrayEmpty');
       this.paper.updateCharacteristic(C.ContactSensorState, out
+        ? C.ContactSensorState.CONTACT_NOT_DETECTED
+        : C.ContactSensorState.CONTACT_DETECTED);
+    }
+    if (this.output) {
+      // The error bit, or the display ("Output Tray Full") on printers that don't set it
+      const full = d.errors.includes('outputFull') || /output\s*(tray|bin)?\s*full/i.test(d.statusText || '');
+      this.output.updateCharacteristic(C.ContactSensorState, full
         ? C.ContactSensorState.CONTACT_NOT_DETECTED
         : C.ContactSensorState.CONTACT_DETECTED);
     }

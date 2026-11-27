@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `outputSensor`: an Output Full contact sensor that opens while the output tray is full
+  (the printer's error flag, or its display saying "Output Tray Full"), for its own
+  notification. The Problem sensor opens for it too, as before.
+- Test connection and the dashboards show how long the printer has been on ("On for 6
+  days"; SNMP's sysUpTime or IPP's printer-up-time) and the paper type each tray is set for
+  ("Tray 1 has paper (Regular)"; the Printer MIB's media name or IPP's medianame).
+
 ## 0.12.0-beta.4 - 2026-11-27
 
 From checking 0.12.0-beta.3 in the Home app.

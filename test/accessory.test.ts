@@ -1179,6 +1179,20 @@ function defineTests(hap: Hap): void {
     assert.equal(byName(mono.acc, 'Black-and-White Pages'), undefined, 'the total says it');
   });
 
+  test('output tray full sensor: opens on the error bit or the display, closes after; off by default', () => {
+    const { acc, printer } = setup({ outputSensor: true });
+    const output = () => service(acc, S.ContactSensor, 'outputFull');
+    printer.apply(reading(50));
+    assert.equal(output()?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    printer.apply(reading(50, 50, { errors: ['outputFull'], fault: true, faults: ['outputFull'] }));
+    assert.equal(output()?.getCharacteristic(C.ContactSensorState).value, OPEN);
+    printer.apply(reading(50, 50, { statusText: 'Output Tray Full' }));
+    assert.equal(output()?.getCharacteristic(C.ContactSensorState).value, OPEN, 'from the display');
+    printer.apply(reading(50));
+    assert.equal(output()?.getCharacteristic(C.ContactSensorState).value, CLOSED);
+    assert.equal(service(setup({}).acc, S.ContactSensor, 'outputFull'), undefined);
+  });
+
   test('dashboard: the latest reading and its time are kept', async () => {
     const { printer } = setup({});
     assert.equal(printer.lastReading, null);

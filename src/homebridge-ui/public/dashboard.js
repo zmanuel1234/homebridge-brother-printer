@@ -56,6 +56,7 @@
       r.usage ? `Recently: ${r.usage}` : '',
       r.left || '',
       r.paper ? `Paper: ${r.paper}` : '',
+      r.uptime ? `On for ${r.uptime}` : '',
     ].filter(Boolean) : [];
     return `<div class="pd-card pd-${state}">
       <div class="pd-head"><span class="pd-name">${esc(p.name)}</span>

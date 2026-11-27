@@ -77,6 +77,7 @@ export const REQUESTED = [
   'printer-input-tray', 'printer-firmware-string-version',
   // Page counts by kind (PWG 5100.11), where a printer gives them
   'printer-impressions-completed-col',
+  'printer-up-time',
 ];
 
 /** Collections whose integer members are kept, as "collection.member" */
@@ -265,6 +266,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     unknown: {},
     ...(a['printer-input-tray'] ? { trays: traysFromIpp(a['printer-input-tray']) } : {}),
     firmware: str('printer-firmware-string-version') || null,
+    ...(num('printer-up-time', 0) !== null && num('printer-up-time', 0)! >= 0 ? { uptime: num('printer-up-time', 0) } : {}),
   };
 }
 
