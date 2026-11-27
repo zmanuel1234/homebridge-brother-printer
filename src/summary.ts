@@ -20,21 +20,35 @@ export function monoPages(d: PrinterData): number | null {
   return null;
 }
 
+/**
+ * The counts by kind worth showing. On a black-and-white printer (no color supply, no
+ * color pages) a color count of 0 and a black-and-white count equal to the total say
+ * nothing, so they're left out; two-sided stays.
+ */
+export function shownCounts(d: PrinterData): { color: number | null; mono: number | null; duplex: number | null } {
+  const color = typeof d.colorPages === 'number' && d.colorPages >= 0 ? d.colorPages : null;
+  const colorPrinter = d.supplies.some((s) => s.color !== 'black') || (color !== null && color > 0);
+  const duplex = typeof d.duplexPages === 'number' && d.duplexPages >= 0 ? d.duplexPages : null;
+  if (!colorPrinter) { return { color: null, mono: null, duplex }; }
+  return { color, mono: monoPages(d), duplex };
+}
+
 /** "3,744 black-and-white, 1,200 color, 1,634 two-sided"; null when the printer gives none of these */
 export function pageDetail(d: PrinterData): string | null {
   const n = (v: number): string => v.toLocaleString('en-US');
-  const mono = monoPages(d);
+  const { color, mono, duplex } = shownCounts(d);
   const parts = [
     mono !== null ? `${n(mono)} black-and-white` : '',
-    typeof d.colorPages === 'number' ? `${n(d.colorPages)} color` : '',
-    typeof d.duplexPages === 'number' ? `${n(d.duplexPages)} two-sided` : '',
+    color !== null ? `${n(color)} color` : '',
+    duplex !== null ? `${n(duplex)} two-sided` : '',
   ].filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }
 
 /** "40 minutes", "18 hours", "5 days": how long the printer has been on */
 export function describeUptime(seconds: number | null | undefined): string | null {
-  if (typeof seconds !== 'number' || seconds < 0) { return null; }
+  // Over ten years is a clock time, not how long it's been on
+  if (typeof seconds !== 'number' || seconds < 0 || seconds > 10 * 365 * 86400) { return null; }
   const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
   if (seconds < 3600) { return plural(Math.max(1, Math.round(seconds / 60)), 'minute'); }
   if (seconds < 48 * 3600) { return plural(Math.round(seconds / 3600), 'hour'); }
