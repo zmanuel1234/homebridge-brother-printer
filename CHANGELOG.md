@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.10.0-beta.2 - 2026-11-26
+
+The second beta of 0.10.0: everything in 0.10.0-beta.1 below, and this fix.
 
 ### Fixed
 - **Paper trays over SNMP on printers that don't answer bulk requests** (GETBULK), such as
