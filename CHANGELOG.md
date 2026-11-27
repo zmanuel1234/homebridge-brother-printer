@@ -2,7 +2,8 @@
 
 ## 0.12.0 - 2026-11-27
 
-Tested as 0.12.0-beta.1 to beta.4 on an MFC-L2750DW in Apple's Home app and Eve.
+The betas (0.12.0-beta.1 to beta.4) were tested on an MFC-L2750DW in Apple's Home app; the
+Output Full sensor, uptime and paper type came after them.
 
 ### Changed
 - **Sensor names start with the printer's name** ("Printer Problem", "Printer Toner Low",
@@ -28,8 +29,10 @@ Tested as 0.12.0-beta.1 to beta.4 on an MFC-L2750DW in Apple's Home app and Eve.
 - Test connection shows the printer's firmware; over SNMP, Brother's main firmware
   ("ZE2505240255"). Home's Firmware row still shows the plugin's version unless the printer's
   is a number like 1.14, which HomeKit needs.
-- README: where the Home app shows the toner level: **Battery Level** under Status when you
-  open one of the printer's sensors (Toner Low, for example).
+
+### Documentation
+- Where the Home app shows the toner level: **Battery Level** under Status when you open one
+  of the printer's sensors (Toner Low, for example).
 
 ### Fixed
 - SNMP v1 printers: values a printer doesn't have are remembered, so each poll is one
