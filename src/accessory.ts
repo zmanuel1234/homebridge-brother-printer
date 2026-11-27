@@ -2,8 +2,10 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { format } from 'node:util';
+import { isIP } from 'node:net';
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp';
 import { readPrinter } from './read';
+import { findBySerial } from './discover';
 import { ippEndpoint } from './ipp';
 import type { PrinterData, QueryOptions, QueryResult } from './snmp';
 import { ALL_COLORS, COLOR_NAMES } from './decode';
@@ -19,6 +21,11 @@ import type { Tray } from './trays';
 const { version } = require('../package.json') as { version: string };
 
 /** What the plugin keeps in Homebridge's accessory cache */
+/** While the printer is offline, how often to look for it at another address (ms) */
+const SEARCH_EVERY = 15 * 60 * 1000;
+/** How long another printer answers at the address before it's taken as this one (ms) */
+const ADOPT_AFTER = 24 * 60 * 60 * 1000;
+
 export interface PrinterContext {
   host?: string;
   model?: string;
@@ -43,6 +50,13 @@ export interface PrinterContext {
   usageLogged?: number;
   /** The printer's firmware version, when it gives one in a form Home shows (1.14) */
   firmware?: string;
+  /**
+   * The printer was found at another address by its serial number while the
+   * settings still say `from`: it's read at `to` until the settings change
+   */
+  moved?: { from: string; to: string; ippUrl?: string };
+  /** Another printer has answered at the address since then (ms), not this one */
+  otherSerial?: { serial: string; since: number };
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -260,14 +274,26 @@ export class PrinterAccessory {
   /** With protocol auto: SNMP has answered since Homebridge started, so IPP only stands in */
   snmpAnswered = false;
   lastEntry: HistoryEntry | undefined;
+  /** The latest reading and when it came (ms), for the dashboard */
+  lastReading: QueryResult | null = null;
+  lastReadAt = 0;
+  /** A search for the printer at another address is running */
+  searching = false;
+  /** When another printer's serial number last started a search (ms) */
+  swapSearchAt = 0;
+  /** The address (and IPP address) in the settings */
+  readonly configured: { host: string; ippUrl?: string };
+  /** Looks for the printer at another address; tests pass their own */
+  private readonly find: typeof findBySerial;
   /** Starts the Eve history; tests pass their own */
   private readonly startHistory: typeof startHistory;
 
   private readonly query: QueryFn;
 
   constructor(platform: PrinterHost, accessory: PlatformAccessory<PrinterContext>, config: PrinterConfig,
-    deps: { query?: QueryFn; startHistory?: typeof startHistory; prefixNames?: boolean } = {}) {
+    deps: { query?: QueryFn; startHistory?: typeof startHistory; prefixNames?: boolean; find?: typeof findBySerial } = {}) {
     this.query = deps.query || readPrinter;
+    this.find = deps.find || findBySerial;
     this.startHistory = deps.startHistory || startHistory;
     this.platform = platform;
     this.log = platform.log;
@@ -277,6 +303,17 @@ export class PrinterAccessory {
     this.name = config.name;
 
     this.options = queryOptions(config);
+    this.configured = { host: this.options.host, ippUrl: this.options.ippUrl };
+    // Found at another address before a restart, and the settings still have the old one
+    const moved = accessory.context.moved;
+    if (moved && moved.from === this.options.host) {
+      platform.log.info(`[${config.name}] Using ${moved.to}, where the printer was found by its serial number; `
+        + `the settings still say ${moved.from}.`);
+      this.options.host = moved.to;
+      if (moved.ippUrl) { this.options.ippUrl = moved.ippUrl; }
+    } else if (moved) {
+      delete accessory.context.moved; // the settings have a new address
+    }
     // Supplies shown before a restart: a supplies walk that fails on the first poll is a
     // failed poll, not "no supplies" (which would take the battery and tiles away)
     this.options.state!.suppliesRead = accessory.context.noLevels === false;
@@ -631,15 +668,9 @@ export class PrinterAccessory {
     try {
       data = await this.query(this.options);
     } catch (err) {
-      this.failures += 1;
-      const msg = errorText(err);
-      if (this.failures === this.offlineAfter) {
-        this.log.warn(`[${this.name}] Can't reach ${this.options.host} (${msg}). Showing it as offline.`);
-        this.setOnline(false);
-      } else if (this.debug || this.failures < this.offlineAfter) {
-        this.log.debug(`[${this.name}] Poll failed (${this.failures}/${this.offlineAfter}): ${msg}`);
-      }
+      data = await this.failed(errorText(err));
     }
+    if (data) { data = await this.checkSerial(data); }
     if (data) {
       this.failures = 0;
       try {
@@ -649,6 +680,113 @@ export class PrinterAccessory {
       }
     }
     if (!this.stopped) { this.timer = setTimeout(() => void this.poll(), this.interval); }
+  }
+
+  /**
+   * A poll that got no reading of this printer. Once offline (and every 15 minutes
+   * after), look for it at another address; resolves with its reading there.
+   */
+  async failed(msg: string): Promise<QueryResult | undefined> {
+    this.failures += 1;
+    // Another printer counts as taking over only while it keeps answering
+    if (this.accessory.context.otherSerial) { this.remember({ otherSerial: undefined }); }
+    if (this.failures === this.offlineAfter) {
+      this.log.warn(`[${this.name}] Can't reach ${this.options.host} (${msg}). Showing it as offline.`);
+      this.setOnline(false);
+    } else if (this.debug || this.failures < this.offlineAfter) {
+      this.log.debug(`[${this.name}] Poll failed (${this.failures}/${this.offlineAfter}): ${msg}`);
+    }
+    const every = Math.max(1, Math.round(SEARCH_EVERY / this.interval));
+    if (this.failures >= this.offlineAfter && (this.failures - this.offlineAfter) % every === 0) {
+      return (await this.findMoved()).data;
+    }
+    return undefined;
+  }
+
+  /**
+   * A reading from another printer (its serial number isn't the one this printer
+   * gave before): the router gave this printer's old address to another one. It
+   * isn't taken as this printer's; this one is looked for by its serial number
+   * (every 15 minutes) and shows as offline meanwhile. A printer with a new serial
+   * number (a replaced mainboard, or a replaced printer) is taken as this one after
+   * answering there for a day, unless the settings name another serial number; at
+   * once when its serial number is in the settings.
+   */
+  async checkSerial(d: QueryResult): Promise<QueryResult | undefined> {
+    const ctx = this.accessory.context;
+    const norm = (v: string | null | undefined): string => (v ?? '').trim().toUpperCase();
+    const seen = norm(d.serial);
+    const known = norm(ctx.serial);
+    if (!seen || !known || seen === known || this.standIn(d) || seen === norm(this.configSerial)) {
+      if (ctx.otherSerial && seen === known) { this.remember({ otherSerial: undefined }); }
+      return d;
+    }
+    const now = Date.now();
+    if (ctx.otherSerial?.serial !== seen) {
+      this.remember({ otherSerial: { serial: seen, since: now } });
+      this.log.warn(`[${this.name}] Another printer (serial number ${d.serial}) answers at ${this.options.host}, not this one `
+        + `(${ctx.serial}). Looking for this one on the network; it shows as offline meanwhile. If the printer was replaced `
+        + `or repaired and has a new serial number, it's taken as this one right away once its serial number in the `
+        + `settings is ${d.serial}${this.configSerial ? '' : ', or after it has answered there for a day'}.`);
+    }
+    // Never when the settings name this printer's serial number: they say which printer it is
+    if (!this.configSerial && now - ctx.otherSerial!.since >= ADOPT_AFTER) {
+      this.remember({ otherSerial: undefined });
+      return d; // updateInfo takes the new serial number, and says so
+    }
+    if (now - this.swapSearchAt >= SEARCH_EVERY) {
+      this.swapSearchAt = now;
+      const elsewhere = await this.findMoved();
+      if (elsewhere.data) { return elsewhere.data; }
+    }
+    // Not counted again toward the offline search above: this check has its own pace
+    this.failures += 1;
+    if (this.failures === this.offlineAfter) {
+      this.log.warn(`[${this.name}] Showing it as offline while another printer answers at its address.`);
+      this.setOnline(false);
+    }
+    return undefined;
+  }
+
+  /**
+   * Look for the printer by its serial number at another address. When it's
+   * there, read it there from now on and say so. Resolves with whether it was
+   * found, and its reading there when that read worked.
+   */
+  async findMoved(): Promise<{ found: boolean; data?: QueryResult }> {
+    const serial = (this.accessory.context.serial || this.configSerial).trim();
+    // A host name follows the printer by itself (and may just not resolve for a moment)
+    if (!serial || this.searching || this.stopped || !isIP(this.configured.host)) { return { found: false }; }
+    this.searching = true;
+    try {
+      const from = this.options.host;
+      const hit = await this.find(serial, this.options, from, { model: this.accessory.context.model });
+      if (!hit || this.stopped) { return { found: false }; }
+      if (hit.host === this.configured.host) {
+        // Back where the settings say
+        this.options.host = this.configured.host;
+        this.options.ippUrl = this.configured.ippUrl;
+        this.log.info(`[${this.name}] The printer is back at ${hit.host}, its address in the settings.`);
+        this.remember({ moved: undefined });
+      } else {
+        this.options.host = hit.host;
+        if (this.options.protocol !== 'snmp') { this.options.ippUrl = hit.ippUrl; }
+        this.log.warn(`[${this.name}] Found the printer (serial number ${serial}) at ${hit.host} instead of ${from}. `
+          + `Reading it there now; change its address in the settings to ${hit.host} to keep it there. `
+          + 'A reserved address for the printer in your router stops this happening.');
+        this.remember({ moved: { from: this.configured.host, to: hit.host, ...(this.options.ippUrl ? { ippUrl: this.options.ippUrl } : {}) } });
+      }
+      try {
+        return { found: true, data: await this.query(this.options) };
+      } catch {
+        return { found: true };
+      }
+    } catch (err) {
+      this.log.debug(`[${this.name}] Looking for the printer at another address failed: ${errorText(err)}`);
+      return { found: false };
+    } finally {
+      this.searching = false;
+    }
   }
 
   stop(): void {
@@ -688,6 +826,8 @@ export class PrinterAccessory {
     const log = (m: string): void => (this.debug ? this.log.info(m) : this.log.debug(m));
 
     log(`[${this.name}] ${JSON.stringify(d)}`);
+    this.lastReading = d;
+    this.lastReadAt = Date.now();
     if (d.via !== 'ipp' && !this.snmpAnswered) {
       this.snmpAnswered = true;
       this.remember({ snmpAnswered: true });

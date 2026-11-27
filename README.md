@@ -127,12 +127,21 @@ with the probe's output.
 
 Set it up in the plugin's settings screen, or in `config.json`.
 
-At the top of the settings screen, **Search for printers** finds printers on your
-network that have SNMP on, and **Add** fills in a printer's name, address and serial
-number. **Test connection** reads a printer with the settings as entered, before you
-save, and shows its model, status and levels. The search sends one SNMP broadcast on the
-Homebridge machine's networks, so it can't find printers on another network or ones with
-only SNMPv3 on; enter those by hand.
+At the top of the settings screen, **Your printers** shows each printer's state, levels,
+recent pages and paper, read when the screen opens (**Refresh** reads them again).
+
+**Search for printers** finds printers on your network, and **Add** fills in a printer's
+name, address and serial number. It sends one SNMP broadcast on the Homebridge machine's
+networks and asks for printers by Bonjour (as AirPrint does) at the same time, so it also
+finds printers with SNMP off, which it adds to be read over IPP. It can't find printers on
+another network; enter those by hand.
+
+**Test connection** reads a printer with the settings as entered, before you save, and
+shows its model, status and levels. **Copy a report** reads everything the printer answers
+over SNMP and IPP and copies it, for a [printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml)
+when a printer shows something wrong. Passwords, the community, the SNMPv3 user and the
+printer's location and contact details are left out; the serial number, MAC address
+(also in Brother's `BRN…`/`BRW…` names) and UUIDs are shortened.
 
 In `config.json`:
 
@@ -180,6 +189,13 @@ In `config.json`:
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
+
+One setting is for all printers (under **Dashboard** in the settings screen):
+
+| Option | Default | Description |
+|---|---|---|
+| `dashboardPort` | (none) | A port (1024–65535, for example `8587`) for a page showing all printers at `http://<Homebridge address>:<port>/`, for a browser or a wall tablet. It shows what the plugin last read, refreshes every 30 seconds and changes nothing. It has no password: anyone on your network can see the printers' names, addresses and readings (no serial numbers or other settings). Empty: no page. |
+| `dashboardHosts` | | The page opens by an address, a one-word name, or a name ending `.local`, `.lan`, `.home`, `.home.arpa` or `.internal` (so a web page elsewhere can't read it through a domain of its own). List any other name you open it by, such as a reverse proxy's or dynamic DNS name. |
 
 ## What the Home app shows
 
@@ -277,6 +293,29 @@ time plus 5 s.
 
 Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 
+### When the printer's address changes
+
+If the printer gets a new address from the router, the plugin looks for it once the
+printer shows as offline, and every 15 minutes after that. If another printer answers at
+its address (its serial number isn't the one this printer gave), that printer's readings
+aren't used: this printer shows as offline and is looked for every 15 minutes. A printer
+that keeps answering there with a new serial number for a day (a replaced printer or
+mainboard) is taken as this one then, unless the settings name another serial number; it's
+taken right away once its serial number is in the settings. It searches the network (SNMP and
+Bonjour) for a printer with the same serial number. When it finds it, it reads it there,
+logs the new address, and keeps using it after a restart until you change the address in
+the settings (the settings screen's test and dashboard read it there too).
+
+- It needs the serial number, which the plugin learns from the printer's first reading
+  (or the settings screen fills in).
+- Only for an address entered as numbers: a host name follows the printer by itself.
+- The search asks each device without your SNMP settings (over IPP, and SNMP with
+  `public`). With a private community or SNMPv3, those go only to a device whose
+  Bonjour name says it's the same model (so such a printer is found only if it
+  advertises by Bonjour).
+
+A reserved address for the printer in your router avoids the change altogether.
+
 ## Reading over IPP (AirPrint)
 
 SNMP gives the most: Brother's own records with the exact toner or ink %, drum and parts
@@ -365,6 +404,13 @@ unset BROTHER_SNMP_AUTH_PASS BROTHER_SNMP_PRIV_PASS
 
 Passwords given with `--auth-pass` and `--priv-pass` are saved in your shell history and
 visible to other users in the process list; `read -s` keeps them out of both.
+
+Add `--report` for everything the printer answers, ready to paste into an issue (the same
+as **Copy a report** in the settings screen):
+
+```bash
+npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --report
+```
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't
 match, or values are `null`, please open a

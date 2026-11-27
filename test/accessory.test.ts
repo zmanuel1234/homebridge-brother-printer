@@ -55,6 +55,11 @@ function defineTests(hap: Hap): void {
   };
   let historyStarter: typeof startHistory = recordHistory;
 
+  // Looking for a printer that moved: nothing found unless a test says otherwise
+  type Find = NonNullable<ConstructorParameters<typeof PrinterAccessory>[3]>['find'] & {};
+  const findNothing: Find = () => Promise.resolve(null);
+  let finder: Find = findNothing;
+
   function setup(config: Partial<PrinterConfig> & Record<string, unknown>, accessory?: Acc | null, lines: string[] = []) {
     respond = never;
     const acc = accessory || Object.assign(
@@ -64,7 +69,7 @@ function defineTests(hap: Hap): void {
       .map((l) => [l, (m: string) => lines.push(`${l}: ${m}`)])) as unknown as Logging;
     const api = { hap, updatePlatformAccessories: () => {}, user: { storagePath: () => storageDir } } as unknown as API;
     const printer = new PrinterAccessory({ log, api }, acc, { name: 'Printer', host: '10.0.0.1', ...config },
-      { query: (options) => respond(options), startHistory: (...args) => historyStarter(...args) });
+      { query: (options) => respond(options), startHistory: (...args) => historyStarter(...args), find: (...args) => finder(...args) });
     printer.stop();
     return { acc, printer, lines };
   }
@@ -987,4 +992,173 @@ function defineTests(hap: Hap): void {
     assert.ok(lines.some((l) => l.startsWith('error: [Printer] Couldn\'t update HomeKit: ') && l.includes('bad reading')), lines.join('\n'));
     assert.equal(printer.failures, 0, 'the poll itself counts as a success');
   });
+
+  /* ------------------------------------------------------------ moved printer */
+
+  test('moved printer: once offline, found by its serial number at a new address and read there', async () => {
+    const lines: string[] = [];
+    const serial = 'E78123A4N123456';
+    const { acc, printer } = setup({ offlineAfter: 2, pollInterval: 60 }, null, lines);
+    acc.context.host = '10.0.0.1';
+    await pollWith(printer, reading(50, 50, { serial }));
+    assert.equal(acc.context.serial, serial);
+    const searches: [string, string][] = [];
+    finder = (s, options, skip) => { searches.push([s, skip]); return Promise.resolve({ host: '10.0.0.9' }); };
+    try {
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(searches.length, 0, 'not on the first failure');
+      // The poll fails at the old address; the search's own read answers at the new one
+      printer.stopped = false;
+      const read: string[] = [];
+      respond = (o) => { read.push(o.host); return read.length === 1 ? Promise.reject(new Error('Request timed out')) : Promise.resolve(reading(40)); };
+      await printer.poll();
+      printer.stop();
+      assert.deepEqual(searches, [[serial, '10.0.0.1']]);
+      assert.deepEqual(read, ['10.0.0.1', '10.0.0.9']);
+      assert.equal(printer.options.host, '10.0.0.9');
+      assert.equal(printer.failures, 0, 'read at the new address: back online');
+      assert.deepEqual(acc.context.moved, { from: '10.0.0.1', to: '10.0.0.9' });
+      assert.ok(lines.some((l) => l.startsWith('warn: ') && l.includes('at 10.0.0.9 instead of 10.0.0.1')), lines.join('\n'));
+
+      // After a restart with the same settings: read at the new address straight away
+      const again = setup({}, acc, lines);
+      assert.equal(again.printer.options.host, '10.0.0.9');
+      // With the address changed in the settings: that one, and the note goes
+      const changed = setup({ host: '10.0.0.20' }, acc, lines);
+      assert.equal(changed.printer.options.host, '10.0.0.20');
+      assert.equal(acc.context.moved, undefined);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('moved printer: no search without a serial number, and every 15 minutes while offline', async () => {
+    let searches = 0;
+    finder = () => { searches++; return Promise.resolve(null); };
+    try {
+      const { printer } = setup({ offlineAfter: 1, pollInterval: 300 });
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(searches, 0, 'no serial number known');
+      const withSerial = setup({ offlineAfter: 1, pollInterval: 300, serial: 'E78123A4N123456' });
+      for (let i = 0; i < 7; i++) { await pollWith(withSerial.printer, new Error('Request timed out')); }
+      // At the 1st failure, then every 3 polls of 5 minutes: 1st, 4th, 7th
+      assert.equal(searches, 3);
+      assert.equal(withSerial.printer.options.host, '10.0.0.1', 'not found: the same address');
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('moved printer: another printer at its address starts a search; back at the set address clears the note', async () => {
+    const serial = 'E78123A4N123456';
+    const lines: string[] = [];
+    const { acc, printer } = setup({ serial }, null, lines);
+    acc.context.host = '10.0.0.1';
+    await pollWith(printer, reading(50, 50, { serial }));
+    let hosts: string[] = [];
+    finder = () => Promise.resolve({ host: '10.0.0.9' });
+    try {
+      respond = (o) => { hosts.push(o.host); return Promise.resolve(reading(o.host === '10.0.0.9' ? 40 : 90, undefined, { serial: o.host === '10.0.0.9' ? serial : 'OTHER123' })); };
+      printer.stopped = false;
+      await printer.poll();
+      printer.stop();
+      assert.deepEqual(hosts, ['10.0.0.1', '10.0.0.9'], 'read where it was found');
+      assert.equal(acc.context.serial, serial, 'the serial number stays');
+      assert.equal(printer.lastReading?.supplies[0].level, 40);
+      assert.deepEqual(acc.context.moved, { from: '10.0.0.1', to: '10.0.0.9' });
+
+      // Found back at the address in the settings
+      finder = () => Promise.resolve({ host: '10.0.0.1' });
+      printer.stopped = false;
+      const r = await printer.findMoved();
+      printer.stop();
+      assert.equal(r.found, true);
+      assert.equal(printer.options.host, '10.0.0.1');
+      assert.equal(acc.context.moved, undefined);
+      assert.ok(lines.some((l) => l.includes('back at 10.0.0.1')));
+      hosts = [];
+    } finally {
+      finder = findNothing;
+      respond = never;
+    }
+  });
+
+  test('another printer at the address: not taken as this one; offline while it\'s looked for; taken after a day', async () => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({ offlineAfter: 1 }, null, lines);
+    await pollWith(printer, reading(50, 50, { serial: 'MINE1' }));
+    let searches = 0;
+    finder = () => { searches++; return Promise.resolve(null); };
+    try {
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'MINE1');
+      assert.equal(printer.lastReading?.supplies[0].level, 50, 'the other printer\'s reading isn\'t used');
+      assert.equal(printer.online, false);
+      assert.equal(searches, 1);
+      assert.equal(acc.context.otherSerial?.serial, 'OTHER1');
+      assert.equal(lines.filter((l) => l.includes('Another printer (serial number OTHER1)')).length, 1);
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(searches, 1, 'searched again only after 15 minutes');
+      assert.equal(acc.context.serial, 'MINE1');
+
+      // A day later: a replaced printer, taken as this one
+      acc.context.otherSerial!.since -= 25 * 3600 * 1000;
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'OTHER1');
+      assert.equal(printer.online, true);
+      assert.equal(acc.context.otherSerial, undefined);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('another printer at the address: never taken while the settings name this one\'s serial number', async () => {
+    const { acc, printer } = setup({ serial: 'MINE1', offlineAfter: 1 });
+    await pollWith(printer, reading(50, 50, { serial: 'MINE1' }));
+    try {
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      acc.context.otherSerial!.since -= 48 * 3600 * 1000;
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'MINE1');
+      assert.equal(printer.online, false);
+      // Silent in between: the day starts again
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(acc.context.otherSerial, undefined);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('another printer at the address: taken at once when its serial number is in the settings', async () => {
+    const { acc, printer } = setup({ serial: 'NEW1' });
+    acc.context.serial = 'OLD1';
+    finder = () => { throw new Error('no search expected'); };
+    try {
+      await pollWith(printer, reading(60, 60, { serial: 'NEW1' }));
+      assert.equal(acc.context.serial, 'NEW1');
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('moved printer: no search for a host name', async () => {
+    let searches = 0;
+    finder = () => { searches++; return Promise.resolve(null); };
+    try {
+      const { printer } = setup({ host: 'printer.local', offlineAfter: 1, serial: 'E78123A4N123456' });
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(searches, 0);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('dashboard: the latest reading and its time are kept', async () => {
+    const { printer } = setup({});
+    assert.equal(printer.lastReading, null);
+    await pollWith(printer, reading(30));
+    assert.equal((printer.lastReading as QueryResult | null)?.supplies[0].level, 30);
+    assert.ok(Date.now() - printer.lastReadAt < 5000);
+  });
+
 }

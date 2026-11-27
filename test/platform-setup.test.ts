@@ -307,4 +307,28 @@ function defineTests(hap: Hap): void {
     api.emit('shutdown');
     assert.ok(platform.printers.every((p) => p.stopped));
   });
+
+  test('dashboard: each printer\'s latest reading without its serial number; a bad port turns it off', async () => {
+    const { api, lines, start } = homebridge();
+    const platform = start([{ name: 'Office', host: '10.0.0.1' }]);
+    assert.deepEqual(platform.dashboardPrinters().map((p) => [p.name, p.online, p.result]), [['Office', false, null]]);
+    const printer = platform.printers[0];
+    printer.lastReading = {
+      model: 'MFC', serial: 'E78123A4N123456', type: 'laser', statusText: 'Ready', printerStatus: 3, errors: [], supplies: [],
+      lowestSupply: null, drums: {}, parts: {}, totalPages: 5, colorPages: null, duplexPages: null, tonerPercent: null,
+      tonerPercentFine: null, drumPercent: null, drumPagesUsed: null, drumPagesRemaining: null, unknown: {},
+      printing: false, fault: false, faults: [], sleeping: false, snmpVersion: '2c',
+    };
+    printer.lastReadAt = 1;
+    const [shown] = platform.dashboardPrinters();
+    assert.equal(shown.online, true);
+    assert.equal(shown.result?.pages, 5);
+    assert.ok(!JSON.stringify(shown).includes('E78123A4N123456'), 'no serial number');
+
+    const bad = new BrotherPrinterPlatform(platform.log, { platform: 'BrotherPrinter', printers: [], dashboardPort: 80 } as PlatformConfig, api as unknown as API);
+    bad.startDashboard();
+    assert.equal(bad.dashboard, null);
+    assert.ok(lines.some((l) => l.includes('Dashboard port 80 isn\'t a port')));
+  });
+
 }

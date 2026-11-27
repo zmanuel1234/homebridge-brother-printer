@@ -206,7 +206,7 @@ export async function subtree(session: snmp.Session, oid: string, limit: number,
 
 const isTimeout = (err: unknown): boolean => /time(d)? ?out/i.test((err as Error)?.message ?? '');
 
-function bulkWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+export function bulkWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     const out: snmp.Varbind[] = [];
     session.subtree(oid, 20, (varbinds) => {
@@ -217,7 +217,7 @@ function bulkWalk(session: snmp.Session, oid: string, limit: number): Promise<sn
 }
 
 /** Row by row (GETNEXT), until the column ends or `limit` rows */
-async function nextWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+export async function nextWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
   const out: snmp.Varbind[] = [];
   let at = oid;
   while (out.length < limit) {
@@ -342,7 +342,8 @@ function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
  * One request. Under SNMP v1 an OID the printer doesn't have fails the whole
  * request (noSuchName), so that OID is dropped and the request repeated.
  */
-async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawReadings> {
+/** A session for one printer; close it when done */
+export function openSession(options: QueryOptions, version: SnmpVersion): snmp.Session {
   const common = {
     port: options.port || 161,
     timeout: options.timeout ?? 5000,
@@ -355,6 +356,11 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
     })
     : snmp.createSession(options.host, options.community || 'public', { ...common, version: VERSIONS[version] });
   (session as unknown as EventEmitter).on('error', () => { /* surfaced through the request callback */ });
+  return session;
+}
+
+async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawReadings> {
+  const session = openSession(options, version);
 
   const names = [...NAMES];
   const raw: RawReadings = {};
