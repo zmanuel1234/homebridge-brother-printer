@@ -188,8 +188,7 @@
               "type": "string",
               "oneOf": [
                 { "title": "Light sensors (the level in lux; few rooms have another one)", "enum": ["light"] },
-                { "title": "Humidity sensors (% — needed for Eve history; Home counts them as the room's humidity)", "enum": ["humidity"] },
-                { "title": "Filter life (% with a replace alert when low; trial)", "enum": ["filter"] }
+                { "title": "Humidity sensors (% — needed for Eve history; Home counts them as the room's humidity)", "enum": ["humidity"] }
               ],
               "condition": { "functionBody": "return model.printers && model.printers[arrayIndices] && model.printers[arrayIndices].tonerTile === true;" }
             },

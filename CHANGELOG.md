@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+From checking 0.12.0-beta.3 in the Home app.
+
+### Removed
+- The filter-life tiles (`tileType: filter`) from beta.3: the Home app shows a filter on its
+  own nowhere. A filter tile becomes a light tile again. The toner level is in the Home app
+  as **Battery Level** under Status when you open one of the printer's sensors (Toner Low,
+  for example), so the tile isn't needed for it.
+
 ## 0.12.0-beta.3 - 2026-11-27
 
 ### Added

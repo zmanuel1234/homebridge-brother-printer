@@ -25,7 +25,9 @@ Each printer gets these sensors:
   (open) while a job prints. Use it in automations.
 - **Problem** (contact sensor): Open on a jam, open cover, empty tray or other
   error. Turn on notifications for it in the Home app.
-- **Toner / Ink** (battery level on the Printer accessory): the toner or ink %, with Home's
+- **Toner / Ink** (battery level on the Printer accessory; the Home app shows it as
+  **Battery Level** under Status when you open one of the printer's sensors, such as Toner
+  Low): the toner or ink %, with Home's
   native low-battery alert at or below your threshold. On color printers it shows the
   lowest color, so the alert fires when any color runs low.
 - **Toner Low** (optional contact sensor): Opens when the toner or ink is low, so Home
@@ -184,11 +186,11 @@ In `config.json`:
 | `paperTraySensors` | `false` | Add one contact sensor per paper tray that opens when that tray is empty (bypass and manual trays, often empty on purpose, get none). The trays are then read on every poll. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
-| `sensorNames` | `prefixed` | `prefixed`: sensor names start with the printer's name ("Printer Problem"); `plain`: just what they are ("Problem"; with several printers they're always prefixed). Names you set in the Home app stay. |
+| `sensorNames` | `prefixed` | `prefixed`: sensor names start with the printer's name ("Printer Problem"); `plain`: just what they are ("Problem"; with several printers they're always prefixed). Home's tiles fit about 13 characters, so longer names are cut there ("Printer Probl…"); the full name shows when the sensor is opened. Names you set in the Home app stay. |
 | `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`; the tiles are then humidity sensors (unless `tileType` is set to `light`). |
 | `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's light level (or humidity, with `tileType` set to `humidity`). |
-| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor), `humidity` (%, needed for Eve history, but Home counts it as the room's humidity) or `filter` (filter life in %, with a "change" alert while the supply is low; a trial: how Apple's Home app shows a filter on its own varies). |
+| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity) (`filter`, tried in 0.12.0-beta.3, is no longer offered: the Home app doesn't show it; it's read as `light`). |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |
