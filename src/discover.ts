@@ -269,7 +269,7 @@ export async function findBySerial(serial: string, settings: QueryOptions & { ho
   for (const { host, bonjour } of candidates) {
     if (!bonjour || (!same(bonjour.model) && !same(bonjour.name))) { continue; }
     try {
-      const d = await read({ ...settings, host, timeout: 2000, retries: 0, state: { ...settings.state }, trays: false });
+      const d = await read({ ...settings, host, timeout: 2000, retries: 0, state: { version: settings.state?.version }, trays: false });
       if (matches(d)) { return { host }; }
     } catch { /* not this one */ }
   }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as snmpLib from 'net-snmp';
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp';
+import { AUTH_PROTOCOLS, OID, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp';
 import type { QueryOptions } from '../src/snmp';
 import { startFakePrinter } from './fake-agent';
 
@@ -49,6 +49,37 @@ test('SNMP v1: drops OIDs the printer lacks and still reads the rest', async (t)
   assert.equal(r.tonerPercent, 70);
   assert.equal(r.printerStatus, null);
   assert.equal(r.model, null);
+});
+
+test('SNMP v1: OIDs a printer refuses with noSuchName aren\'t asked for again', async (t) => {
+  // A v1 agent that refuses the whole request for an OID it lacks (net-snmp's own agent doesn't)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const lib = require('net-snmp') as { createSession: typeof snmpLib.createSession };
+  const real = lib.createSession;
+  t.after(() => { lib.createSession = real; });
+  const asked: string[][] = [];
+  const lacks = new Set<string>([OID.brFirmware, OID.deviceId]);
+  lib.createSession = (() => ({
+    on: () => {},
+    close: () => {},
+    get: (oids: string[], cb: (err: Error | null, vbs?: snmpLib.Varbind[]) => void) => {
+      asked.push(oids);
+      const bad = oids.find((o) => lacks.has(o));
+      if (bad) { const e = new Error(`NoSuchName: ${bad}`); e.name = 'RequestFailedError'; cb(e); return; }
+      cb(null, oids.map((oid) => ({ oid, type: 4, value: oid === OID.model ? Buffer.from('Old printer') : null } as unknown as snmpLib.Varbind)));
+    },
+    subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(),
+    getNext: (_o: string[], cb: (err: Error | null, vbs?: snmpLib.Varbind[]) => void) => cb(new Error('NoSuchName: end'), []),
+  })) as unknown as typeof snmpLib.createSession;
+  const state: QueryOptions['state'] = {};
+  const r = await query({ host: '10.0.0.1', version: '1', state });
+  assert.equal(r.model, 'Old printer');
+  assert.deepEqual(new Set(state.missing), new Set(['brFirmware', 'deviceId']));
+  const first = asked.length;
+  asked.length = 0;
+  await query({ host: '10.0.0.1', version: '1', state });
+  assert.equal(asked.length, 1, `one request the second time (${first} the first)`);
+  assert.ok(!asked[0].includes(OID.brFirmware));
 });
 
 test('auto: uses v2c when it answers and remembers it', async (t) => {

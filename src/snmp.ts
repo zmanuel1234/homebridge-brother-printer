@@ -103,7 +103,7 @@ export interface QueryOptions {
   /** Needed for version '3' */
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
-  state?: { version?: SnmpVersion; suppliesRead?: boolean; noBulk?: boolean };
+  state?: { version?: SnmpVersion; suppliesRead?: boolean; noBulk?: boolean; missing?: OidName[] };
   /**
    * Read the paper trays on every poll (for tray sensors and the settings test).
    * Without it they're read only while the printer reports paper low or out, to say which tray.
@@ -365,7 +365,9 @@ export function openSession(options: QueryOptions, version: SnmpVersion): snmp.S
 async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawReadings> {
   const session = openSession(options, version);
 
-  const names = [...NAMES];
+  // Values an SNMP v1 printer said it doesn't have aren't asked for again (each costs a request)
+  const missing = new Set(options.state?.missing ?? []);
+  const names = NAMES.filter((n) => !missing.has(n));
   const raw: RawReadings = {};
   try {
     while (names.length) {
@@ -391,6 +393,7 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         const idx = missing ? names.findIndex((n) => OID[n] === missing[1]) : -1;
         if (idx < 0) { throw err; }
         raw[names[idx]] = null;
+        (options.state ||= {}).missing = [...(options.state.missing ?? []), names[idx]];
         names.splice(idx, 1);
       }
     }
