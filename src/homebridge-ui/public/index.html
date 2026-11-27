@@ -188,7 +188,8 @@
         ['Status', r.status],
         ['Levels', r.levels],
         ...(r.drum ? [['Drum', r.drum]] : []),
-        ['Pages printed', r.pages ?? 'unknown'],
+        ['Pages printed', r.pages === null || r.pages === undefined ? 'unknown'
+          : `${Number(r.pages).toLocaleString('en-US')}${r.pageDetail ? ` (${r.pageDetail})` : ''}`],
         ...(r.usage ? [['Recently', r.usage]] : []),
         ...(r.left ? [['Time left', r.left]] : []),
         ...(r.paper ? [['Paper', r.paper]] : []),

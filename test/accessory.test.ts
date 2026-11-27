@@ -1153,6 +1153,21 @@ function defineTests(hap: Hap): void {
     }
   });
 
+  test('page counts by kind: on the printer tile when the printer gives them', async () => {
+    const byName = (acc: Acc, name: string) => acc.getService(S.OccupancySensor)?.characteristics.find((c) => c.displayName === name);
+    const color = setup({});
+    await pollWith(color.printer, fromModel('dcp-l3550cdw'));
+    assert.equal(byName(color.acc, 'Color Pages')?.value, 902);
+    assert.equal(byName(color.acc, 'Black-and-White Pages')?.value, 709);
+    assert.equal(byName(color.acc, 'Two-Sided Pages')?.value, 538);
+    assert.equal(byName(color.acc, 'Pages Printed')?.value, 1611);
+
+    const mono = setup({});
+    await pollWith(mono.printer, fromModel('hl-l2340dw'));
+    assert.equal(byName(mono.acc, 'Color Pages'), undefined, 'none it doesn\'t give');
+    assert.equal(byName(mono.acc, 'Black-and-White Pages'), undefined, 'the total says it');
+  });
+
   test('dashboard: the latest reading and its time are kept', async () => {
     const { printer } = setup({});
     assert.equal(printer.lastReading, null);

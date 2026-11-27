@@ -75,7 +75,12 @@ export const REQUESTED = [
   'printer-device-id', 'printer-serial-number', 'printer-info', 'marker-names', 'marker-levels',
   'marker-high-levels', 'marker-low-levels', 'marker-types', 'marker-colors', 'printer-impressions-completed',
   'printer-input-tray', 'printer-firmware-string-version',
+  // Page counts by kind (PWG 5100.11), where a printer gives them
+  'printer-impressions-completed-col',
 ];
+
+/** Collections whose integer members are kept, as "collection.member" */
+const COUNTED = new Set(['printer-impressions-completed-col']);
 
 export function getPrinterAttributes(uri: string, requestId: number, requested: string[] = REQUESTED): Buffer {
   return ippMessage(0x000b, requestId, [{
@@ -107,7 +112,9 @@ export function parseResponse(buf: Buffer): IppResponse {
   const printer: IppAttributes = {};
   let group = 0;
   let last = '';
-  let depth = 0; // inside a collection: values belong to its members, not kept
+  let depth = 0; // inside a collection: values belong to its members, not kept (but see COUNTED)
+  let counted = ''; // the COUNTED collection being read
+  let member = '';
   let i = 8;
   const need = (n: number): void => { if (i + n > buf.length) { throw new Error('IPP response cut short'); } };
   for (;;) {
@@ -124,9 +131,25 @@ export function parseResponse(buf: Buffer): IppResponse {
     need(valueLen);
     const data = buf.subarray(i, i + valueLen); i += valueLen;
 
-    if (tag === TAG.begCollection) { if (depth === 0 && name) { last = name; } depth++; continue; }
-    if (tag === TAG.endCollection) { depth = Math.max(0, depth - 1); continue; }
-    if (depth > 0 || tag === TAG.memberName) { continue; }
+    if (tag === TAG.begCollection) {
+      if (depth === 0 && name) { last = name; counted = group === TAG.printer && COUNTED.has(name) ? name : ''; member = ''; }
+      depth++;
+      continue;
+    }
+    if (tag === TAG.endCollection) { depth = Math.max(0, depth - 1); if (depth === 0) { counted = ''; } continue; }
+    if (depth > 0) {
+      // A counted collection's own members (not nested ones): keep the integers
+      if (counted && depth === 1) {
+        if (tag === TAG.memberName) {
+          member = data.toString('utf8');
+        } else if (member && tag === TAG.integer && data.length === 4) {
+          printer[`${counted}.${member}`] = [data.readInt32BE(0)];
+          member = '';
+        }
+      }
+      continue;
+    }
+    if (tag === TAG.memberName) { continue; }
     if (name) { last = name; }
     if (group !== TAG.printer || !last) { continue; }
 
@@ -233,8 +256,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     drums,
     parts,
     totalPages: num('printer-impressions-completed', 0),
-    colorPages: null,
-    duplexPages: null,
+    ...countsByKind(a),
     tonerPercent: supplies.find((s) => s.color === 'black')?.level ?? null,
     tonerPercentFine: null,
     drumPercent: black.percent ?? null,
@@ -243,6 +265,27 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     unknown: {},
     ...(a['printer-input-tray'] ? { trays: traysFromIpp(a['printer-input-tray']) } : {}),
     firmware: str('printer-firmware-string-version') || null,
+  };
+}
+
+/**
+ * Color, black-and-white and two-sided pages from printer-impressions-completed-col
+ * (PWG 5100.11: members such as monochrome, full-color, monochrome-two-sided,
+ * full-color-two-sided); null for each the printer doesn't give.
+ */
+export function countsByKind(a: IppAttributes): { colorPages: number | null; monoPages: number | null; duplexPages: number | null } {
+  const prefix = 'printer-impressions-completed-col.';
+  const members = Object.fromEntries(Object.entries(a)
+    .filter(([k, v]) => k.startsWith(prefix) && typeof v[0] === 'number' && (v[0] as number) >= 0)
+    .map(([k, v]) => [k.slice(prefix.length), v[0] as number]));
+  const sum = (keys: string[]): number | null => {
+    const have = keys.filter((k) => k in members);
+    return have.length ? have.reduce((t, k) => t + members[k], 0) : null;
+  };
+  return {
+    colorPages: sum(['full-color', 'highlight-color']),
+    monoPages: sum(['monochrome']),
+    duplexPages: sum(['monochrome-two-sided', 'full-color-two-sided', 'highlight-color-two-sided', 'blank-two-sided']),
   };
 }
 

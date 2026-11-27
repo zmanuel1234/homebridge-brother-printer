@@ -4,9 +4,33 @@
  */
 import { COLOR_NAMES } from './decode';
 import { readVia } from './snmp';
-import type { QueryResult } from './snmp';
+import type { PrinterData, QueryResult } from './snmp';
 import { describeLeft, pagesInLast } from './usage';
 import type { UsageSample } from './usage';
+
+/**
+ * Black-and-white pages, on a printer that counts color ones: as it gives them, or the
+ * total less the color pages. Null otherwise (on a black-and-white printer it's the total).
+ */
+export function monoPages(d: PrinterData): number | null {
+  if (typeof d.monoPages === 'number') { return d.monoPages; }
+  if (typeof d.colorPages === 'number' && typeof d.totalPages === 'number' && d.totalPages >= d.colorPages) {
+    return d.totalPages - d.colorPages;
+  }
+  return null;
+}
+
+/** "3,744 black-and-white, 1,200 color, 1,634 two-sided"; null when the printer gives none of these */
+export function pageDetail(d: PrinterData): string | null {
+  const n = (v: number): string => v.toLocaleString('en-US');
+  const mono = monoPages(d);
+  const parts = [
+    mono !== null ? `${n(mono)} black-and-white` : '',
+    typeof d.colorPages === 'number' ? `${n(d.colorPages)} color` : '',
+    typeof d.duplexPages === 'number' ? `${n(d.duplexPages)} two-sided` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
 
 export interface TestResult {
   model: string | null;
@@ -17,6 +41,8 @@ export interface TestResult {
   levels: string;
   drum: string | null;
   pages: number | null;
+  /** The pages by kind: "3,744 black-and-white, 1,200 color, 1,634 two-sided"; null when not given */
+  pageDetail: string | null;
   /** "Tray 1 40%, Tray 2 empty, MP Tray (bypass) empty"; null when the printer lists none */
   paper: string | null;
   /** "12 in the last 7 days, 85 in the last 30 days", from the plugin's history; null without it */
@@ -48,6 +74,7 @@ export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: str
     levels,
     drum: d.drumPercent !== null ? `${d.drumPercent}%` : null,
     pages: d.totalPages,
+    pageDetail: pageDetail(d),
     paper: d.trays?.length
       ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`).join(', ')
       : null,

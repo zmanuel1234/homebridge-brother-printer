@@ -220,7 +220,10 @@ words them its own way:
   level is in the log and in **Test connection** in the settings, the plugin logs a warning
   when it nears end of life, and `maintenanceSensor` opens for it.
 - The page count is a custom characteristic, visible in Eve, Controller and the Homebridge
-  UI, not in Apple Home.
+  UI, not in Apple Home. Printers that count them also get **Color Pages**,
+  **Black-and-White Pages** and **Two-Sided Pages** beside it (a black-and-white printer
+  gets no black-and-white count: that's the total). The same counts are in the log when
+  the printer connects, in **Test connection** and on the dashboards.
 
 ## Eve history
 
@@ -338,7 +341,9 @@ drum, page count or serial number. Some Brother printers report toner only as "s
 remaining", with no %, and then there's no battery or tile;
 the printer's own low-toner flag still opens the Toner Low sensor (`lowTonerSensor`) and
 is logged. Drum and parts appear only if the printer lists them
-as supplies, and the page count only if it reports `printer-impressions-completed`.
+as supplies, and the page count only if it reports `printer-impressions-completed`
+(color, black-and-white and two-sided counts only if it reports
+`printer-impressions-completed-col`, which few printers do).
 
 Over IPP the plugin also shows the extra inks some printers have, each on its own tile:
 Photo Black, Gray (light black), Light Cyan, Light Magenta, and HP's single Tri-color
@@ -448,6 +453,7 @@ current/max form. The main codes:
 | `0x69`–`0x6d`, `0x85` | Belt, fuser, laser unit, paper feed kits, ink waste box |
 | next care `0x82`, `0xa4`–`0xa7` | Drum pages remaining |
 | counter `0x00` | Total pages printed |
+| counter `0x01`, `0x02`, `0x06` | Black-and-white, color and two-sided pages |
 
 Printing and problem state come from the standard Host Resources MIB (`hrPrinterStatus`,
 `hrPrinterDetectedErrorState`), with the display text as a fallback.

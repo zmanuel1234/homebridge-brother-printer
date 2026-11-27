@@ -125,6 +125,8 @@ export interface PrinterData extends StatusSummary {
   parts: Partial<Record<PartKey, Part>>;
   totalPages: number | null;
   colorPages: number | null;
+  /** Black-and-white pages, when the printer counts them apart from color ones */
+  monoPages?: number | null;
   duplexPages: number | null;
   // Kept for the mono-laser view and the probe
   tonerPercent: number | null;
@@ -496,6 +498,7 @@ export function parse(raw: RawReadings): PrinterData {
     parts,
     totalPages: counters.totalPages ?? pageCount ?? sumPages(counters),
     colorPages: counters.colorPages ?? null,
+    monoPages: counters.monoPages ?? null,
     duplexPages: counters.duplexPages ?? null,
     tonerPercent: supplies.find((s) => s.color === 'black')?.level ?? null,
     tonerPercentFine: supplies.find((s) => s.color === 'black')?.fine ?? null,

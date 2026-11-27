@@ -51,7 +51,8 @@
     const label = { offline: p.error ? 'Not reachable' : 'Offline', problem: 'Problem', printing: 'Printing', ok: 'Ready' }[state];
     const bars = (r && r.bars) || [];
     const rows = r ? [
-      r.pages !== null && r.pages !== undefined ? `Pages printed: ${r.pages}` : '',
+      r.pages !== null && r.pages !== undefined
+        ? `Pages printed: ${Number(r.pages).toLocaleString('en-US')}${r.pageDetail ? ` (${r.pageDetail})` : ''}` : '',
       r.usage ? `Recently: ${r.usage}` : '',
       r.left || '',
       r.paper ? `Paper: ${r.paper}` : '',
