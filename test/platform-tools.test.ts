@@ -300,6 +300,7 @@ test('dashboard page: answers only to an address or this machine\'s name', () =>
   assert.ok(!allowedHost('evil.example.com:8587'));
   assert.ok(!allowedHost('10.0.0.2.nip.io'));
   assert.ok(allowedHost('hb.example.com:443', ['HB.example.com']), 'a name from the settings');
+  assert.ok(allowedHost('hb.example.com:8443', ['hb.example.com:8443']), 'with a port');
 });
 
 test('report: a community that\'s an ordinary word is hidden in values only', async () => {

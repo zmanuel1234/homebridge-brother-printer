@@ -45,7 +45,7 @@ export function allowedHost(header: string | undefined, extra: string[] = []): b
   if (!name) { return false; }
   const me = os.hostname().toLowerCase();
   return isIP(name) !== 0 || !name.includes('.') || LOCAL_NAMES.test(name) || name === me
-    || extra.some((e) => e.trim().toLowerCase().replace(/\.$/, '') === name);
+    || extra.some((e) => e.trim().toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '') === name);
 }
 
 export function startDashboard(port: number, log: Logging, printers: () => DashboardPrinter[], hosts: string[] = []): http.Server {

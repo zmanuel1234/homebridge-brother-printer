@@ -1112,6 +1112,23 @@ function defineTests(hap: Hap): void {
     }
   });
 
+  test('another printer at the address: never taken while the settings name this one\'s serial number', async () => {
+    const { acc, printer } = setup({ serial: 'MINE1', offlineAfter: 1 });
+    await pollWith(printer, reading(50, 50, { serial: 'MINE1' }));
+    try {
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      acc.context.otherSerial!.since -= 48 * 3600 * 1000;
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'MINE1');
+      assert.equal(printer.online, false);
+      // Silent in between: the day starts again
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(acc.context.otherSerial, undefined);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
   test('another printer at the address: taken at once when its serial number is in the settings', async () => {
     const { acc, printer } = setup({ serial: 'NEW1' });
     acc.context.serial = 'OLD1';

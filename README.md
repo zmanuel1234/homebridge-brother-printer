@@ -300,8 +300,8 @@ printer shows as offline, and every 15 minutes after that. If another printer an
 its address (its serial number isn't the one this printer gave), that printer's readings
 aren't used: this printer shows as offline and is looked for every 15 minutes. A printer
 that keeps answering there with a new serial number for a day (a replaced printer or
-mainboard) is taken as this one then, or right away once that serial number is in the
-settings. It searches the network (SNMP and
+mainboard) is taken as this one then, unless the settings name another serial number; it's
+taken right away once its serial number is in the settings. It searches the network (SNMP and
 Bonjour) for a printer with the same serial number. When it finds it, it reads it there,
 logs the new address, and keeps using it after a restart until you change the address in
 the settings (the settings screen's test and dashboard read it there too).

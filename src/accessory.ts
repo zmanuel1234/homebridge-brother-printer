@@ -688,6 +688,8 @@ export class PrinterAccessory {
    */
   async failed(msg: string): Promise<QueryResult | undefined> {
     this.failures += 1;
+    // Another printer counts as taking over only while it keeps answering
+    if (this.accessory.context.otherSerial) { this.remember({ otherSerial: undefined }); }
     if (this.failures === this.offlineAfter) {
       this.log.warn(`[${this.name}] Can't reach ${this.options.host} (${msg}). Showing it as offline.`);
       this.setOnline(false);
@@ -707,7 +709,8 @@ export class PrinterAccessory {
    * isn't taken as this printer's; this one is looked for by its serial number
    * (every 15 minutes) and shows as offline meanwhile. A printer with a new serial
    * number (a replaced mainboard, or a replaced printer) is taken as this one after
-   * a day, or right away once that serial number is in the settings.
+   * answering there for a day, unless the settings name another serial number; at
+   * once when its serial number is in the settings.
    */
   async checkSerial(d: QueryResult): Promise<QueryResult | undefined> {
     const ctx = this.accessory.context;
@@ -723,10 +726,11 @@ export class PrinterAccessory {
       this.remember({ otherSerial: { serial: seen, since: now } });
       this.log.warn(`[${this.name}] Another printer (serial number ${d.serial}) answers at ${this.options.host}, not this one `
         + `(${ctx.serial}). Looking for this one on the network; it shows as offline meanwhile. If the printer was replaced `
-        + `or repaired and has a new serial number, it's taken as this one after a day, or right away once its serial `
-        + `number in the settings is ${d.serial}.`);
+        + `or repaired and has a new serial number, it's taken as this one right away once its serial number in the `
+        + `settings is ${d.serial}${this.configSerial ? '' : ', or after it has answered there for a day'}.`);
     }
-    if (now - ctx.otherSerial!.since >= ADOPT_AFTER) {
+    // Never when the settings name this printer's serial number: they say which printer it is
+    if (!this.configSerial && now - ctx.otherSerial!.since >= ADOPT_AFTER) {
       this.remember({ otherSerial: undefined });
       return d; // updateInfo takes the new serial number, and says so
     }
