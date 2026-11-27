@@ -1318,8 +1318,9 @@ export class PrinterAccessory {
           + 'as before: it looks like a different printer, now shown with this one\'s room and automations in Home. '
           + 'If that\'s not what you want, remove it and add it again (or use Search in the settings).');
       }
+      // A different printer from before (not the first reading): what it lacks is learnt again
+      if (ctx.serial && this.options.state) { delete this.options.state.missing; }
       ctx.serial = d.serial;
-      if (this.options.state) { delete this.options.state.missing; }
       changed = true;
     }
     if (!changed) { return; }
