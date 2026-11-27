@@ -16,6 +16,7 @@ import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './
 import type { UsageSample } from './usage';
 import type { Tray } from './trays';
 import { pageDetail, shownCounts } from './summary';
+import { text } from './text';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -208,9 +209,9 @@ export function queryOptions(config: PrinterConfig): QueryOptions & { host: stri
     version: snmpVersion === '1' || snmpVersion === '2c' || snmpVersion === '3' ? snmpVersion : 'auto',
     state: {},
   };
-  const protocol = String(config.protocol ?? '').trim().toLowerCase();
+  const protocol = text(config.protocol).trim().toLowerCase();
   options.protocol = protocol === 'ipp' || protocol === 'auto' ? protocol : 'snmp';
-  const ippUrl = String(config.ippUrl ?? '').trim();
+  const ippUrl = text(config.ippUrl).trim();
   if (ippUrl && options.protocol !== 'snmp') {
     try {
       ippEndpoint(ippUrl);
@@ -223,12 +224,12 @@ export function queryOptions(config: PrinterConfig): QueryOptions & { host: stri
   // SNMPv3 settings only matter when SNMP is used
   if (options.version === '3' && options.protocol !== 'ipp') {
     options.v3 = {
-      user: String(config.v3User ?? '').trim(),
+      user: text(config.v3User).trim(),
       authProtocol: protocolSetting(config.v3AuthProtocol, AUTH_PROTOCOLS, 'sha', 'authentication'),
-      authPassword: String(config.v3AuthPassword ?? ''),
+      authPassword: text(config.v3AuthPassword),
       privProtocol: protocolSetting(config.v3PrivProtocol, PRIV_PROTOCOLS, 'aes', 'encryption'),
-      privPassword: String(config.v3PrivPassword ?? ''),
-      context: String(config.v3Context ?? '').trim(),
+      privPassword: text(config.v3PrivPassword),
+      context: text(config.v3Context).trim(),
     };
     v3User(options.v3);
   }
@@ -351,14 +352,14 @@ export class PrinterAccessory {
     this.tonerTile = config.tonerTile === true;
     // Light by default: Home counts humidity tiles as the room's humidity. Eve history needs
     // humidity, so with it on and no tileType set, the tiles stay humidity sensors.
-    const tileType = String(config.tileType ?? '').trim().toLowerCase();
+    const tileType = text(config.tileType).trim().toLowerCase();
     // 0.12.0-beta.3 tried filter-life tiles; Apple's Home app doesn't show those, so they're light now
     if (tileType === 'filter' && config.tonerTile === true) {
       platform.log.info(`[${config.name}] "Show the tiles as: Filter life" is no longer offered (the Home app doesn't `
         + 'show it); the tiles are light sensors. Choose light or humidity in the settings to stop this note.');
     }
     this.tileType = tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
-    this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
+    this.printingSensor = text(config.printingSensor).trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
     this.prefixNames = deps.prefixNames === true;
     this.faultSensor = config.faultSensor !== false;
     this.lowTonerSensor = config.lowTonerSensor === true;
@@ -370,7 +371,7 @@ export class PrinterAccessory {
     if (this.paperTraySensors) { this.options.trays = true; }
     this.onlineSensor = config.onlineSensor === true;
     this.eveHistory = config.eveHistory === true;
-    this.configSerial = String(config.serial ?? '').trim();
+    this.configSerial = text(config.serial).trim();
     this.offlineAfter = setting(config.offlineAfter, 3, 1, 20);
     this.debug = config.debug === true;
 
@@ -666,7 +667,7 @@ export class PrinterAccessory {
     if (!svc.testCharacteristic(C.ConfiguredName)) { svc.addOptionalCharacteristic(C.ConfiguredName); }
     const current = svc.getCharacteristic(C.ConfiguredName).value;
     const own = what ? [`${this.name} ${what}`, what, ...(this.previousName ? [`${this.previousName} ${what}`] : []), ...before] : [];
-    if (!current || (current !== name && own.includes(String(current)))) { svc.setCharacteristic(C.ConfiguredName, name); }
+    if (!current || (current !== name && own.includes(text(current)))) { svc.setCharacteristic(C.ConfiguredName, name); }
   }
 
   /** The toner / ink tiles' sensor type, and the characteristic that shows the level */

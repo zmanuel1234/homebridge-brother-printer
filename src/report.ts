@@ -14,6 +14,7 @@ import type { QueryOptions, QueryResult, SnmpVersion } from './snmp';
 import { ippAttributes } from './ipp';
 import type { IppAttributes } from './ipp';
 import { defaultIppUrl, readPrinter } from './read';
+import { text } from './text';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { version } = require('../package.json') as { version: string };
@@ -56,7 +57,7 @@ export function valueText(v: unknown): string {
       ? JSON.stringify(text)
       : `hex ${v.toString('hex')}`;
   }
-  return v === null || v === undefined ? 'null' : String(v);
+  return v === null || v === undefined ? 'null' : typeof v === 'object' ? JSON.stringify(v) : text(v);
 }
 
 async function snmpWalk(options: QueryOptions, ver: SnmpVersion, oid: string, limit: number): Promise<string[]> {
@@ -231,6 +232,6 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
     add('#### IPP', '', `No answer over IPP: ${errorText(err)}`, '');
   }
 
-  return fit(redact(lines.join('\n'), [reading?.serial, String(entry.serial ?? '')],
-    [String(options.community ?? ''), options.v3?.user ?? '', String(entry.community ?? ''), String(entry.v3User ?? '')]));
+  return fit(redact(lines.join('\n'), [reading?.serial, text(entry.serial)],
+    [text(options.community), options.v3?.user ?? '', text(entry.community), text(entry.v3User)]));
 }

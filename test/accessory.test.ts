@@ -972,7 +972,7 @@ function defineTests(hap: Hap): void {
     const { acc, printer } = setup({});
     const info = () => acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value;
     printer.apply({ ...reading(50), firmware: 'SWP1FN1514BR' });
-    assert.match(String(info()), /^\d+\.\d+\.\d+/, 'the plugin\'s version');
+    assert.match(info() as string, /^\d+\.\d+\.\d+/, 'the plugin\'s version');
     printer.apply({ ...reading(50), firmware: '1.14' });
     assert.equal(info(), '1.14');
     assert.equal(acc.context.firmware, '1.14');
@@ -981,7 +981,7 @@ function defineTests(hap: Hap): void {
     // A firmware Home can't show (say, another printer at the address): the plugin's again
     again.printer.apply({ ...reading(50), firmware: 'SWP1FN1514BR' });
     assert.equal(acc.context.firmware, undefined);
-    assert.match(String(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value), /^\d+\.\d+\.\d+/);
+    assert.match(again.acc.getService(S.AccessoryInformation)!.getCharacteristic(C.FirmwareRevision).value as string, /^\d+\.\d+\.\d+/);
   });
 
   test('toner tiles: kept across restarts when on, removed from the cache when turned off', () => {

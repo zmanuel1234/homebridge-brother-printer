@@ -9,6 +9,7 @@
  * listened for there, for responders that only answer the multicast group.
  */
 import dgram from 'node:dgram';
+import { text } from './text';
 
 export const MDNS_ADDRESS = '224.0.0.251';
 export const MDNS_PORT = 5353;
@@ -63,7 +64,7 @@ export function followUps(records: DnsRecord[], services: string[] = SERVICES): 
   const has = (type: number, name: string): boolean => records.some((r) => r.type === type && r.name === name.toLowerCase());
   const out: { name: string; type: number }[] = [];
   for (const ptr of records.filter((r) => r.type === TYPE.PTR && services.includes(r.name))) {
-    const instance = String(ptr.data);
+    const instance = text(ptr.data);
     if (!has(TYPE.SRV, instance)) { out.push({ name: instance, type: TYPE.SRV }); }
     if (!has(TYPE.TXT, instance)) { out.push({ name: instance, type: TYPE.TXT }); }
   }
@@ -152,7 +153,7 @@ export function printersFrom(records: DnsRecord[], services: string[] = SERVICES
   const byHost = new Map<string, BonjourPrinter>();
   for (const service of services) {
     for (const ptr of of(TYPE.PTR, service)) {
-      const instance = String(ptr.data);
+      const instance = text(ptr.data);
       const srv = of(TYPE.SRV, instance)[0]?.data as { port: number; target: string } | undefined;
       const txt = (of(TYPE.TXT, instance)[0]?.data ?? {}) as Record<string, string>;
       const address = srv ? of(TYPE.A, srv.target)[0]?.data as string | undefined : undefined;

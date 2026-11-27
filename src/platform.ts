@@ -6,6 +6,7 @@ import { startDashboard } from './dashboard-server';
 import type { DashboardPrinter } from './dashboard-server';
 import { testSummary } from './summary';
 import type { Server } from 'node:http';
+import { text } from './text';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -78,7 +79,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     if (raw === undefined || raw === null || raw === '') { return; }
     const port = Number(raw);
     if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-      this.log.warn(`Dashboard port ${String(raw)} isn't a port from 1024 to 65535; the dashboard is off.`);
+      this.log.warn(`Dashboard port ${text(raw) || JSON.stringify(raw)} isn't a port from 1024 to 65535; the dashboard is off.`);
       return;
     }
     const names: unknown = this.config.dashboardHosts;
@@ -109,7 +110,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
     const entries: Entry[] = [];
     const names = new Set<string>();
     raw.forEach((rawEntry, idx) => {
-      if (!rawEntry || !String(rawEntry.host || '').trim()) {
+      if (!rawEntry || !text(rawEntry.host).trim()) {
         // The settings screen can save a blank row; only warn when it was filled in
         const filled = !!rawEntry && Object.entries(rawEntry).some(([k, v]) => k !== 'host' && v !== DEFAULTS[k] && v !== '');
         const msg = `Printer #${idx + 1} has no host set, skipping it.`;
@@ -122,7 +123,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
         return;
       }
       names.add(name);
-      entries.push({ raw: rawEntry, name, host: String(rawEntry.host).trim(), serial: String(rawEntry.serial ?? '').trim() });
+      entries.push({ raw: rawEntry, name, host: text(rawEntry.host).trim(), serial: text(rawEntry.serial).trim() });
     });
 
     // Which cached accessory is which printer. An accessory keeps the UUID it was
@@ -176,7 +177,7 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       try {
         // Sensors' names start with the printer's name ("Printer Problem"), unless set to plain
         // ("Problem"); with several printers always, so they can be told apart
-        const plain = String(e.raw.sensorNames ?? '').trim().toLowerCase() === 'plain';
+        const plain = text(e.raw.sensorNames).trim().toLowerCase() === 'plain';
         this.printers.push(new PrinterAccessory(this, accessory, { ...e.raw, host: e.host, name: e.name },
           { prefixNames: !plain || entries.length > 1 }));
       } catch (err) {

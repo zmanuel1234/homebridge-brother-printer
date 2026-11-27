@@ -6,6 +6,7 @@ import type { Marker } from './markers';
 import { traysFromTable } from './trays';
 import type { Tray } from './trays';
 import type { Color, Drum, Part, PartKey, PrinterError, PrinterType, RawValue, StatusSummary, Supply } from './decode';
+import { text } from './text';
 
 export const OID = {
   maintenance: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.8.0', // brInfoMaintenance
@@ -78,11 +79,11 @@ const ALIASES: Record<string, string> = { sha1: 'sha', aes128: 'aes' };
  * default, anything not supported throws, so it can't fail later as "can't reach".
  */
 export function protocolSetting<T extends string>(value: unknown, allowed: readonly T[], def: T, what: string): T {
-  if (value === undefined || value === null || String(value).trim() === '') { return def; }
-  const key = String(value).trim().toLowerCase().replace(/[-_\s]/g, '');
+  if (text(value).trim() === '') { return def; }
+  const key = text(value).trim().toLowerCase().replace(/[-_\s]/g, '');
   const name = ALIASES[key] ?? key;
   if ((allowed as readonly string[]).includes(name)) { return name as T; }
-  throw new Error(`SNMPv3 ${what} "${String(value)}" isn't supported; use one of ${allowed.join(', ')}`);
+  throw new Error(`SNMPv3 ${what} "${text(value)}" isn't supported; use one of ${allowed.join(', ')}`);
 }
 
 /** How the plugin reads the printer: SNMP (the default), IPP, or SNMP with IPP when SNMP doesn't answer */
@@ -245,7 +246,7 @@ export async function nextWalk(session: snmp.Session, oid: string, limit: number
   return out;
 }
 
-const clean = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') : v === null || v === undefined ? '' : String(v))
+const clean = (v: unknown): string => text(v)
   // Some printers end names with NULs or pad them; keep printable text
   // eslint-disable-next-line no-control-regex
   .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();

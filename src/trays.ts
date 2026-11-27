@@ -4,6 +4,7 @@
  * Both give a tray's name, its capacity and how much paper is in it: a number of
  * sheets, -3 "some paper", 0 empty, or -2 / -1 unknown.
  */
+import { text } from './text';
 
 export type TrayState = 'empty' | 'low' | 'ok' | 'unknown';
 
@@ -124,8 +125,8 @@ export function traysFromTable(rows: { oid: string; value: unknown }[], table: s
     if (col === '11' && typeof value === 'number') { row.status = value; }
     if (col === '9' && typeof value === 'number') { row.max = value; }
     if (col === '10' && typeof value === 'number') { row.level = value; }
-    if (col === '12') { row.media = Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''); }
-    if (col === '13') { row.name = Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''); }
+    if (col === '12') { row.media = text(value); }
+    if (col === '13') { row.name = text(value); }
     byIndex.set(key, row);
   }
   const order = (k: string): number[] => k.split('.').map(Number);
