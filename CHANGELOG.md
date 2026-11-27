@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0-beta.3 - 2026-11-27
 
 ### Added
 - `tileType: filter` (a trial): the toner / ink tiles as filter life, the level in % with a
@@ -10,6 +10,10 @@
 - Test connection shows the printer's firmware; over SNMP, Brother's main firmware
   ("ZE2505240255"). Home's Firmware row still shows the plugin's version unless the printer's
   is a number like 1.14, which HomeKit needs.
+
+### Fixed
+- SNMP v1 printers: values a printer doesn't have are remembered, so each poll is one
+  request instead of one more per missing value.
 
 ## 0.12.0-beta.2 - 2026-11-27
 
