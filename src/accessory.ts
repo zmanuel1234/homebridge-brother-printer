@@ -89,7 +89,7 @@ export interface PrinterConfig {
   tileType?: unknown;
   /** 'occupancy' (default) or 'contact': how the printer's own tile shows printing */
   printingSensor?: unknown;
-  /** "prefixed" (default: "Printer Problem") or "plain" ("Problem"; one printer only) */
+  /** "plain" (default: "Problem"; one printer only) or "prefixed" ("Printer Problem") */
   sensorNames?: unknown;
   faultSensor?: unknown;
   maintenanceSensor?: unknown;
@@ -246,7 +246,7 @@ export class PrinterAccessory {
   readonly lowToner: number;
   readonly lowDrum: number;
   readonly tonerTile: boolean;
-  readonly tileType: 'humidity' | 'light' | 'filter';
+  readonly tileType: 'humidity' | 'light';
   readonly printingSensor: 'occupancy' | 'contact';
   /** Sensor names start with the printer's name (several printers), or are just what they are */
   readonly prefixNames: boolean;
@@ -347,8 +347,8 @@ export class PrinterAccessory {
     // Light by default: Home counts humidity tiles as the room's humidity. Eve history needs
     // humidity, so with it on and no tileType set, the tiles stay humidity sensors.
     const tileType = String(config.tileType ?? '').trim().toLowerCase();
-    this.tileType = tileType === 'filter' ? 'filter'
-      : tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
+    // (0.12.0-beta.3 tried filter-life tiles: Apple's Home app doesn't show those; they're light now)
+    this.tileType = tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
     this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
     this.prefixNames = deps.prefixNames === true;
     this.faultSensor = config.faultSensor !== false;
@@ -507,6 +507,7 @@ export class PrinterAccessory {
     // Supply tiles are created once the printer says which colors it has;
     // here only the ones restored from the cache are picked up.
     for (const [color, subtype] of Object.entries(TILE_SUBTYPE) as [Color, string][]) {
+      // Filter-life tiles from 0.12.0-beta.3 are removed too
       for (const type of [S.HumiditySensor, S.LightSensor, S.FilterMaintenance]) {
         const svc = acc.getServiceById(type, subtype);
         if (!svc) { continue; }
@@ -634,8 +635,8 @@ export class PrinterAccessory {
   }
 
   /**
-   * A sensor's name: what it is, with the printer's name in front ("Printer Toner Low"),
-   * or just what it is ("Toner Low") with sensorNames plain and one printer.
+   * A sensor's name: what it is ("Toner Low"), or with the printer's name in front
+   * ("Printer Toner Low") with sensorNames prefixed or several printers.
    */
   sensorName(what: string): string {
     return !what ? this.name : this.prefixNames ? `${this.name} ${what}` : what;
@@ -656,30 +657,21 @@ export class PrinterAccessory {
     if (!current || (current !== name && own.includes(String(current)))) { svc.setCharacteristic(C.ConfiguredName, name); }
   }
 
-  /** The toner / ink tiles' service type, and the characteristic that shows the level */
+  /** The toner / ink tiles' sensor type, and the characteristic that shows the level */
   tileService(): ServiceType {
-    const S = this.hap.Service;
-    return this.tileType === 'light' ? S.LightSensor : this.tileType === 'filter' ? S.FilterMaintenance : S.HumiditySensor;
+    return this.tileType === 'light' ? this.hap.Service.LightSensor : this.hap.Service.HumiditySensor;
   }
 
   tileCharacteristic(): CharacteristicType {
     const C = this.hap.Characteristic;
-    return this.tileType === 'light' ? C.CurrentAmbientLightLevel
-      : this.tileType === 'filter' ? C.FilterLifeLevel : C.CurrentRelativeHumidity;
+    return this.tileType === 'light' ? C.CurrentAmbientLightLevel : C.CurrentRelativeHumidity;
   }
 
-  /**
-   * Show a level on a tile: as % humidity, as lux (whose lowest value is 0.0001), or
-   * as filter life (%), whose "change filter" alert follows the supply being low
-   */
-  setTile(svc: Service | undefined, level: number, low?: boolean): void {
+  /** Show a level on a tile: as % humidity, or as lux (whose lowest value is 0.0001) */
+  setTile(svc: Service | undefined, level: number): void {
     if (!svc) { return; }
     const v = clamp(level);
     svc.updateCharacteristic(this.tileCharacteristic(), this.tileType === 'light' ? Math.max(v, 0.0001) : v);
-    if (this.tileType === 'filter' && low !== undefined) {
-      const C = this.hap.Characteristic;
-      svc.updateCharacteristic(C.FilterChangeIndication, low ? C.FilterChangeIndication.CHANGE_FILTER : C.FilterChangeIndication.FILTER_OK);
-    }
   }
 
   removeSubtype(type: ServiceType, subtype: string): void {
@@ -985,7 +977,7 @@ export class PrinterAccessory {
       });
       const low = flagged || stillLow || ipp.some((s) => s.level <= this.lowToner);
       if (this.toner && haveSnmp && values.length) { this.toner.updateCharacteristic(C.BatteryLevel, clamp(Math.min(...values))); }
-      for (const s of ipp) { this.setTile(this.tiles[s.color], s.level, s.level <= this.lowToner); }
+      for (const s of ipp) { this.setTile(this.tiles[s.color], s.level); }
       if (low || covers) {
         this.toner?.updateCharacteristic(C.StatusLowBattery, low
           ? C.StatusLowBattery.BATTERY_LEVEL_LOW : C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
@@ -1044,7 +1036,7 @@ export class PrinterAccessory {
 
     this.ensureTiles(d);
     for (const s of d.supplies) {
-      this.setTile(this.tiles[s.color], s.level, isLow(s));
+      this.setTile(this.tiles[s.color], s.level);
     }
     this.logHistory(level);
 

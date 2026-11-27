@@ -130,34 +130,34 @@ function defineTests(hap: Hap): void {
     assert.deepEqual(again.calls.unregistered, [], 'the old one is not removed');
     assert.equal(platform.printers[0].accessory, cached);
     assert.equal(ctx(cached).name, 'Study');
-    // Names start with the printer's: renamed with it
-    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Study Problem');
+    // One printer: sensors are named for what they are, so a rename leaves them as they are
+    assert.equal(problem.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'Problem');
     assert.equal(toner.getCharacteristic(hap!.Characteristic.ConfiguredName).value, 'My cartridge', 'a name set in Home is kept');
     assert.ok(again.lines.some((l) => l.includes('Renamed from "Office"')), again.lines.join('\n'));
     assert.equal(calls.registered.length + lines.filter((l) => l.startsWith('error')).length, 0);
   });
 
-  test('sensor names start with the printer\'s; plain on request with one printer, never with several', () => {
+  test('sensor names are what they are; prefixed on request, and always with several printers', () => {
     const name = (p: PrinterAccessory) => p.problem!.getCharacteristic(hap!.Characteristic.ConfiguredName).value;
     const one = homebridge().start([{ name: 'Printer', host: '10.0.0.9' }], []);
-    assert.equal(name(one.printers[0]), 'Printer Problem', 'the default');
-    const plain = homebridge().start([{ name: 'Printer', host: '10.0.0.9', sensorNames: 'plain' }], []);
-    assert.equal(name(plain.printers[0]), 'Problem');
-    const two = homebridge().start([{ name: 'Office', host: '10.0.0.9', sensorNames: 'plain' }, { name: 'Study', host: '10.0.0.10' }], []);
+    assert.equal(name(one.printers[0]), 'Problem', 'the default');
+    const prefixed = homebridge().start([{ name: 'Printer', host: '10.0.0.9', sensorNames: 'prefixed' }], []);
+    assert.equal(name(prefixed.printers[0]), 'Printer Problem');
+    const two = homebridge().start([{ name: 'Office', host: '10.0.0.9' }, { name: 'Study', host: '10.0.0.10' }], []);
     assert.deepEqual(two.printers.map(name), ['Office Problem', 'Study Problem']);
   });
 
-  test('sensors named plainly by 0.10/0.11 get the printer\'s name; ones renamed in Home stay', () => {
+  test('sensors named "Printer Problem" by 0.12.0-beta.2/3 go back to "Problem"; ones renamed in Home stay', () => {
     const cached = homebridge().cachedAccessory('Printer', '10.0.0.9');
-    const old = homebridge().start([{ name: 'Printer', host: '10.0.0.9', sensorNames: 'plain', maintenanceSensor: true }], [cached]);
-    assert.equal(name2(old.printers[0].problem), 'Problem');
+    const old = homebridge().start([{ name: 'Printer', host: '10.0.0.9', sensorNames: 'prefixed', maintenanceSensor: true }], [cached]);
+    assert.equal(name2(old.printers[0].problem), 'Printer Problem');
     old.printers[0].maintenance!.setCharacteristic(hap!.Characteristic.ConfiguredName, 'Cartridge');
     const now = homebridge().start([{ name: 'Printer', host: '10.0.0.9', maintenanceSensor: true }], [cached]);
-    assert.equal(name2(now.printers[0].problem), 'Printer Problem');
+    assert.equal(name2(now.printers[0].problem), 'Problem');
     assert.equal(name2(now.printers[0].maintenance), 'Cartridge');
-    // Back to plain, and a rename at the same time
-    const back = homebridge().start([{ name: 'Office', host: '10.0.0.9', sensorNames: 'plain', maintenanceSensor: true }], [cached]);
-    assert.equal(name2(back.printers[0].problem), 'Problem');
+    // Prefixed again, with a rename at the same time
+    const back = homebridge().start([{ name: 'Office', host: '10.0.0.9', sensorNames: 'prefixed', maintenanceSensor: true }], [cached]);
+    assert.equal(name2(back.printers[0].problem), 'Office Problem');
     assert.equal(name2(back.printers[0].maintenance), 'Cartridge');
     function name2(svc: PrinterAccessory['problem']): unknown {
       return svc!.getCharacteristic(hap!.Characteristic.ConfiguredName).value;
