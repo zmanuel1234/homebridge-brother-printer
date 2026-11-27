@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/zmanuel1234/homebridge-brother-printer/security/advisories/new
+    about: Report it privately, not as an issue.
+  - name: Setup and settings
+    url: https://github.com/zmanuel1234/homebridge-brother-printer#readme
+    about: "Requirements, every setting, levels and alerts, going offline, SNMPv3."
