@@ -75,7 +75,12 @@ export const REQUESTED = [
   'printer-device-id', 'printer-serial-number', 'printer-info', 'marker-names', 'marker-levels',
   'marker-high-levels', 'marker-low-levels', 'marker-types', 'marker-colors', 'printer-impressions-completed',
   'printer-input-tray', 'printer-firmware-string-version',
+  // Page counts by kind (PWG 5100.11), where a printer gives them
+  'printer-impressions-completed-col',
 ];
+
+/** Collections whose integer members are kept, as "collection.member" */
+const COUNTED = new Set(['printer-impressions-completed-col']);
 
 export function getPrinterAttributes(uri: string, requestId: number, requested: string[] = REQUESTED): Buffer {
   return ippMessage(0x000b, requestId, [{
@@ -107,7 +112,9 @@ export function parseResponse(buf: Buffer): IppResponse {
   const printer: IppAttributes = {};
   let group = 0;
   let last = '';
-  let depth = 0; // inside a collection: values belong to its members, not kept
+  let depth = 0; // inside a collection: values belong to its members, not kept (but see COUNTED)
+  let counted = ''; // the COUNTED collection being read
+  let member = '';
   let i = 8;
   const need = (n: number): void => { if (i + n > buf.length) { throw new Error('IPP response cut short'); } };
   for (;;) {
@@ -124,9 +131,25 @@ export function parseResponse(buf: Buffer): IppResponse {
     need(valueLen);
     const data = buf.subarray(i, i + valueLen); i += valueLen;
 
-    if (tag === TAG.begCollection) { if (depth === 0 && name) { last = name; } depth++; continue; }
-    if (tag === TAG.endCollection) { depth = Math.max(0, depth - 1); continue; }
-    if (depth > 0 || tag === TAG.memberName) { continue; }
+    if (tag === TAG.begCollection) {
+      if (depth === 0 && name) { last = name; counted = group === TAG.printer && COUNTED.has(name) ? name : ''; member = ''; }
+      depth++;
+      continue;
+    }
+    if (tag === TAG.endCollection) { depth = Math.max(0, depth - 1); if (depth === 0) { counted = ''; } continue; }
+    if (depth > 0) {
+      // A counted collection's own members (not nested ones): keep the integers
+      if (counted && depth === 1) {
+        if (tag === TAG.memberName) {
+          member = data.toString('utf8');
+        } else if (member && tag === TAG.integer && data.length === 4) {
+          printer[`${counted}.${member}`] = [data.readInt32BE(0)];
+          member = '';
+        }
+      }
+      continue;
+    }
+    if (tag === TAG.memberName) { continue; }
     if (name) { last = name; }
     if (group !== TAG.printer || !last) { continue; }
 
@@ -233,8 +256,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     drums,
     parts,
     totalPages: num('printer-impressions-completed', 0),
-    colorPages: null,
-    duplexPages: null,
+    ...countsFor(countsByKind(a), supplies),
     tonerPercent: supplies.find((s) => s.color === 'black')?.level ?? null,
     tonerPercentFine: null,
     drumPercent: black.percent ?? null,
@@ -244,6 +266,43 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     ...(a['printer-input-tray'] ? { trays: traysFromIpp(a['printer-input-tray']) } : {}),
     firmware: str('printer-firmware-string-version') || null,
   };
+}
+
+/**
+ * Color, black-and-white and two-sided pages from printer-impressions-completed-col
+ * (PWG 5100.11: members such as monochrome, full-color, monochrome-two-sided,
+ * full-color-two-sided); null for each the printer doesn't give.
+ */
+/** A black-and-white printer's "0 color" says nothing: no breakdown, the total says it */
+function countsFor(c: ReturnType<typeof countsByKind>, supplies: { color: string }[]): ReturnType<typeof countsByKind> {
+  const colorPrinter = supplies.some((s) => s.color !== 'black');
+  return c.colorPages === 0 && !colorPrinter ? { ...c, colorPages: null, monoPages: null } : c;
+}
+
+export function countsByKind(a: IppAttributes): { colorPages: number | null; monoPages: number | null; duplexPages: number | null } {
+  const prefix = 'printer-impressions-completed-col.';
+  const members = Object.fromEntries(Object.entries(a)
+    .filter(([k, v]) => k.startsWith(prefix) && typeof v[0] === 'number' && (v[0] as number) >= 0)
+    .map(([k, v]) => [k.slice(prefix.length), v[0] as number]));
+  const get = (k: string): number | null => (k in members ? members[k] : null);
+  const sum = (values: (number | null)[]): number | null =>
+    (values.some((v) => v !== null) ? values.reduce<number>((t, v) => t + (v ?? 0), 0) : null);
+  const two = { mono: get('monochrome-two-sided'), color: get('full-color-two-sided'), highlight: get('highlight-color-two-sided') };
+  const duplexPages = sum([two.mono, two.color, two.highlight, get('blank-two-sided')]);
+  let mono = get('monochrome');
+  let color = get('full-color');
+  let highlight = get('highlight-color');
+  // Whether "monochrome" and "full-color" already include their two-sided impressions isn't
+  // spelled out; the total settles it. When they add up to it only with the two-sided ones,
+  // they were counted apart: add them in.
+  const total = typeof a['printer-impressions-completed']?.[0] === 'number' ? a['printer-impressions-completed'][0] as number : null;
+  const one = sum([mono, color, highlight, get('blank')]);
+  if (total !== null && one !== null && duplexPages && one !== total && one + duplexPages === total) {
+    mono = mono !== null ? mono + (two.mono ?? 0) : null;
+    color = color !== null ? color + (two.color ?? 0) : null;
+    highlight = highlight !== null ? highlight + (two.highlight ?? 0) : null;
+  }
+  return { colorPages: sum([color, highlight]), monoPages: mono, duplexPages };
 }
 
 /* ---------------------------------------------------------------- request */

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Pages by kind**: color, black-and-white and two-sided pages, where the printer counts
+  them (Brother's records over SNMP; `printer-impressions-completed-col` over IPP). They're
+  custom characteristics beside Pages Printed on the printer's tile (Eve, Controller), and in
+  the log when the printer connects, Test connection and the dashboards
+  ("4,944 pages (1,634 two-sided)"). Page counts are shown with thousands separators.
+
 ## 0.11.0 - 2026-11-27
 
 Tested as 0.11.0-beta.1 and beta.2 on an MFC-L2750DW: the Bonjour search, the report and both

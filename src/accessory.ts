@@ -15,6 +15,7 @@ import type { HistoryEntry, HistoryLog } from './history';
 import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './usage';
 import type { UsageSample } from './usage';
 import type { Tray } from './trays';
+import { monoPages, pageDetail } from './summary';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -111,16 +112,26 @@ type Kind = 'Toner' | 'Ink';
 type ServiceType = WithUUID<typeof Service>;
 
 const PAGES_UUID = 'B0E5A1C2-7D3E-4F1A-9C6B-2E8D4F7A1B30';
+/** Page counts beside the total, for apps that show custom characteristics (Eve, Controller) */
+const COUNTER_UUIDS = {
+  color: 'B0E5A1C2-7D3E-4F1A-9C6B-2E8D4F7A1B31',
+  mono: 'B0E5A1C2-7D3E-4F1A-9C6B-2E8D4F7A1B32',
+  duplex: 'B0E5A1C2-7D3E-4F1A-9C6B-2E8D4F7A1B33',
+} as const;
+const COUNTER_NAMES = { color: 'Color Pages', mono: 'Black-and-White Pages', duplex: 'Two-Sided Pages' } as const;
+type CounterKey = keyof typeof COUNTER_UUIDS;
 type CharacteristicType = WithUUID<new () => Characteristic>;
-let PagesPrinted: CharacteristicType | undefined;
+const counterTypes = new Map<string, CharacteristicType>();
 
-function pagesCharacteristic(hap: HAP): CharacteristicType {
-  if (PagesPrinted) { return PagesPrinted; }
+/** A read-only page count characteristic (one class per UUID, made once) */
+function counterCharacteristic(hap: HAP, name: string, uuid: string): CharacteristicType {
+  const have = counterTypes.get(uuid);
+  if (have) { return have; }
   const { Characteristic: Base, Formats, Perms } = hap;
-  class Pages extends Base {
-    static readonly UUID = PAGES_UUID;
+  class Counter extends Base {
+    static readonly UUID = uuid;
     constructor() {
-      super('Pages Printed', PAGES_UUID, {
+      super(name, uuid, {
         format: Formats.UINT32,
         perms: [Perms.PAIRED_READ, Perms.NOTIFY],
         minValue: 0,
@@ -130,8 +141,12 @@ function pagesCharacteristic(hap: HAP): CharacteristicType {
       this.value = this.getDefaultValue();
     }
   }
-  PagesPrinted = Pages;
-  return Pages;
+  counterTypes.set(uuid, Counter);
+  return Counter;
+}
+
+function pagesCharacteristic(hap: HAP): CharacteristicType {
+  return counterCharacteristic(hap, 'Pages Printed', PAGES_UUID);
 }
 
 const clamp = (v: number): number => Math.max(0, Math.min(100, Math.round(v)));
@@ -896,6 +911,7 @@ export class PrinterAccessory {
     }
 
     if (d.totalPages !== null) { this.pages.updateValue(d.totalPages); }
+    this.updateCounters(d);
     this.last.statusText = d.statusText;
 
     if (this.last.summary === undefined) {
@@ -905,7 +921,7 @@ export class PrinterAccessory {
         : `no ${kind} levels reported`;
       const drum = d.drumPercent !== null ? `, drum ${d.drumPercent}%` : '';
       this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (${readVia(d)}): ${levels}${drum}, `
-        + `${d.totalPages ?? '?'} pages, status "${d.statusText || 'unknown'}".`);
+        + `${d.totalPages?.toLocaleString('en-US') ?? '?'} pages${pageDetail(d) ? ` (${pageDetail(d)})` : ''}, status "${d.statusText || 'unknown'}".`);
       this.last.summary = true;
     }
   }
@@ -1225,6 +1241,26 @@ export class PrinterAccessory {
    */
   standIn(d: PrinterData): boolean {
     return this.options.protocol === 'auto' && (d as QueryResult).via === 'ipp' && this.snmpAnswered;
+  }
+
+  /**
+   * Color, black-and-white and two-sided page counts, when the printer gives them:
+   * characteristics on the printer's tile, added the first time each is reported
+   * (and kept). Eve and Controller show them; Apple's Home app doesn't.
+   */
+  updateCounters(d: PrinterData): void {
+    if (this.standIn(d)) { return; }
+    const values: Record<CounterKey, number | null | undefined> = {
+      color: d.colorPages, mono: monoPages(d), duplex: d.duplexPages,
+    };
+    for (const key of Object.keys(values) as CounterKey[]) {
+      const value = values[key];
+      if (typeof value !== 'number' || value < 0) { continue; }
+      const type = counterCharacteristic(this.hap, COUNTER_NAMES[key], COUNTER_UUIDS[key]);
+      const asBase = type as unknown as WithUUID<typeof Characteristic>;
+      if (!this.main.testCharacteristic(asBase)) { this.main.addCharacteristic(asBase); }
+      this.main.getCharacteristic(type).updateValue(Math.min(value, 4294967295));
+    }
   }
 
   updateInfo(d: PrinterData): void {
