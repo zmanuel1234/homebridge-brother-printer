@@ -102,6 +102,39 @@ test('trays: from IPP printer-input-tray', () => {
   assert.deepEqual(trays.map((t) => t.key), ['manual', 'tray-1']);
 });
 
+test('a printer that never answers bulk requests (MFC-L2750DW) is read row by row, and remembered', async () => {
+  // The MFC-L2750DW's input table, as snmpwalk shows it; it answers GETNEXT but never GETBULK
+  const table: [string, unknown][] = [
+    ...[['1.1', 'AUTO'], ['1.2', 'MANUAL TRAY'], ['1.3', 'TRAY1']].map(([i, v]) => [`${INPUT_TABLE}.13.${i}`, Buffer.from(v)] as [string, unknown]),
+    ...[['1.1', -3], ['1.2', -3], ['1.3', 0]].map(([i, v]) => [`${INPUT_TABLE}.10.${i}`, v] as [string, unknown]),
+    ...[['1.1', 250], ['1.2', 1], ['1.3', 250]].map(([i, v]) => [`${INPUT_TABLE}.9.${i}`, v] as [string, unknown]),
+    ...[['1.1', 1], ['1.2', 5], ['1.3', 4]].map(([i, v]) => [`${INPUT_TABLE}.2.${i}`, v] as [string, unknown]),
+    ...[['1.1', 0], ['1.2', 0], ['1.3', 19]].map(([i, v]) => [`${INPUT_TABLE}.11.${i}`, v] as [string, unknown]),
+  ];
+  const cmp = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] ?? -1) !== (y[i] ?? -1)) { return (x[i] ?? -1) - (y[i] ?? -1); } } return 0; };
+  table.sort(([a], [b]) => cmp(a, b));
+  let bulk = 0;
+  let next = 0;
+  const session = {
+    subtree(_o: string, _m: number, _f: unknown, done: (err?: Error) => void) { bulk++; done(new Error('Request timed out')); },
+    getNext(oids: string[], cb: (err: Error | null, vbs?: snmpLib.Varbind[]) => void) {
+      next++;
+      const hit = table.find(([oid]) => cmp(oid, oids[0]) > 0);
+      cb(null, [hit ? { oid: hit[0], type: 2, value: hit[1] } as snmpLib.Varbind : { oid: '1.3.6.1.2.1.43.9', type: 130, value: null } as unknown as snmpLib.Varbind]);
+    },
+  } as unknown as snmpLib.Session;
+  const state: { noBulk?: boolean } = {};
+  const trays = traysFromTable((await readTrays(session, state))!, INPUT_TABLE);
+  assert.equal(show(trays), 'Manual Tray* ok, Tray 1 empty 0');
+  assert.equal(state.noBulk, true);
+  assert.equal(bulk, 1, 'one bulk try, then row by row');
+  // The next poll goes row by row at once
+  await readTrays(session, state);
+  assert.equal(bulk, 1);
+  assert.ok(next > 0);
+});
+
 test('trays: a column the printer doesn\'t answer (type, status) loses only itself', async () => {
   // A session whose walks of the type (2) and status (11) columns fail, as on a printer without them
   const session = {
@@ -127,11 +160,14 @@ test('trays: a column the printer doesn\'t answer (type, status) loses only itse
   assert.equal(await readTrays(failing([13])), undefined);
   assert.equal(await readTrays(failing([10])), undefined);
   // A timeout stops the read at once rather than waiting on every column
+  // (a bulk walk that times out is tried once row by row; when that times out too, the read stops)
   let walks = 0;
-  const slow = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => { walks++; done(new Error('Request timed out')); } } as unknown as snmpLib.Session;
+  const slow = {
+    subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => { walks++; done(new Error('Request timed out')); },
+    getNext: (_o: string[], cb: (err: Error) => void) => { walks++; cb(new Error('Request timed out')); },
+  } as unknown as snmpLib.Session;
   assert.equal(await readTrays(slow), undefined);
-  assert.equal(walks, 1);
-  assert.equal(await readTrays(failing([2], 'Request timed out')), undefined);
+  assert.equal(walks, 2);
   // Nothing answers: undefined, never an error
   const none = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(new Error('timeout')) } as unknown as snmpLib.Session;
   assert.equal(await readTrays(none), undefined);

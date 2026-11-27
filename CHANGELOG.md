@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Paper trays over SNMP on printers that don't answer bulk requests** (GETBULK), such as
+  Brother's MFC-L2750DW: they answer the same table one row at a time, so a bulk walk that
+  gets no answer is tried again row by row, and that printer is then read row by row. This
+  was the real reason its trays didn't show in 0.10.0-beta.1 (not the tray columns). The
+  supplies table of other makes is read the same way.
+
 ## 0.10.0-beta.1 - 2026-11-26
 
 A beta, for testing on real printers before 0.10.0. The changes come from testing 0.9.0 on a
