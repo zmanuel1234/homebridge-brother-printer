@@ -1,61 +1,43 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-11-27
 
-### Added
-- `outputSensor`: an Output Full contact sensor that opens while the output tray is full
-  (the printer's error flag, or its display saying "Output Tray Full"), for its own
-  notification. The Problem sensor opens for it too, as before.
-- Test connection and the dashboards show how long the printer has been on ("On for 6
-  days"; SNMP's sysUpTime or IPP's printer-up-time) and the paper type each tray is set for
-  ("Tray 1 has paper (Regular)"; the Printer MIB's media name or IPP's medianame).
-
-## 0.12.0-beta.4 - 2026-11-27
-
-From checking 0.12.0-beta.3 in the Home app.
-
-### Removed
-- The filter-life tiles (`tileType: filter`) from beta.3: the Home app shows a filter on its
-  own nowhere. A filter tile becomes a light tile again. The toner level is in the Home app
-  as **Battery Level** under Status when you open one of the printer's sensors (Toner Low,
-  for example), so the tile isn't needed for it.
-
-## 0.12.0-beta.3 - 2026-11-27
-
-### Added
-- `tileType: filter` (a trial): the toner / ink tiles as filter life, the level in % with a
-  "change" alert while the supply is low, instead of lux or the room's humidity. Apple's Home
-  app shows the toner level nowhere else (it doesn't show the battery's level for this
-  accessory).
-- Test connection shows the printer's firmware; over SNMP, Brother's main firmware
-  ("ZE2505240255"). Home's Firmware row still shows the plugin's version unless the printer's
-  is a number like 1.14, which HomeKit needs.
-
-### Fixed
-- SNMP v1 printers: values a printer doesn't have are remembered, so each poll is one
-  request instead of one more per missing value.
-
-## 0.12.0-beta.2 - 2026-11-27
+The betas (0.12.0-beta.1 to beta.4) were tested on an MFC-L2750DW in Apple's Home app; the
+Output Full sensor, uptime and paper type came after them.
 
 ### Changed
-- **Sensor names start with the printer's name again** ("Printer Problem", "Printer Toner
-  Low", "Printer Tray 1"), which reads better on its own in Home than "Problem". Sensors
-  named by earlier versions are renamed; names you set in the Home app stay. Automations and
-  notifications are unaffected (the sensors are the same), but Siri goes by the new names.
-  Keep the printer's name short: Home cuts long tile names.
-
-### Added
-- `sensorNames`: `plain` for the names without the printer's name ("Problem", "Toner Low"),
-  as in 0.10 to 0.12.0-beta.1; with several printers they're always prefixed.
-
-## 0.12.0-beta.1 - 2026-11-27
+- **Sensor names start with the printer's name** ("Printer Problem", "Printer Toner Low",
+  "Printer Tray 1"), so they read clearly on their own. Sensors named by earlier versions are
+  renamed; names you set in the Home app stay. Automations and notifications are unaffected
+  (the sensors are the same), but Siri goes by the new names. Keep the printer's name short:
+  Home's tiles cut longer names. `sensorNames: plain` keeps the names as they were
+  ("Problem"); with several printers they're always prefixed.
+- Page counts are shown with thousands separators in the log, Test connection and the
+  dashboards.
 
 ### Added
 - **Pages by kind**: color, black-and-white and two-sided pages, where the printer counts
   them (Brother's records over SNMP; `printer-impressions-completed-col` over IPP). They're
   custom characteristics beside Pages Printed on the printer's tile (Eve, Controller), and in
   the log when the printer connects, Test connection and the dashboards
-  ("4,944 pages (1,634 two-sided)"). Page counts are shown with thousands separators.
+  ("4,944 pages (1,634 two-sided)"). A black-and-white printer gets only its two-sided count.
+- `outputSensor`: an Output Full contact sensor that opens while the output tray is full
+  (the printer's error flag, or its display saying "Output Tray Full"), for its own
+  notification. The Problem sensor opens for it too, as before.
+- Test connection and the dashboards show how long the printer has been on ("On for 6 days")
+  and the paper type each tray is set for ("Tray 1 has paper (Regular)").
+- Test connection shows the printer's firmware; over SNMP, Brother's main firmware
+  ("ZE2505240255"). Home's Firmware row still shows the plugin's version unless the printer's
+  is a number like 1.14, which HomeKit needs.
+
+### Documentation
+- Where the Home app shows the toner level: **Battery Level** under Status when you open one
+  of the printer's sensors (Toner Low, for example).
+
+### Fixed
+- SNMP v1 printers: values a printer doesn't have are remembered, so each poll is one
+  request instead of one more per missing value (learnt again when the printer or its
+  address changes).
 
 ## 0.11.0 - 2026-11-27
 

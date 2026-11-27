@@ -142,7 +142,9 @@ finds printers with SNMP off, which it adds to be read over IPP. It can't find p
 another network; enter those by hand.
 
 **Test connection** reads a printer with the settings as entered, before you save, and
-shows its model, status and levels. **Copy a report** reads everything the printer answers
+shows its model, status and levels, pages by kind, the paper in each tray, the
+firmware and how long the printer has been on (over SNMP, the uptime of its network
+side). **Copy a report** reads everything the printer answers
 over SNMP and IPP and copies it, for a [printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml)
 when a printer shows something wrong. Passwords, the community, the SNMPv3 user and the
 printer's location and contact details are left out; the serial number, MAC address

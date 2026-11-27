@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mediaName, traysFromIpp, traysFromTable } from '../src/trays';
 import { INPUT_TABLE, parse } from '../src/snmp';
 import { REQUESTED, toPrinterData } from '../src/ipp';
-import { describeUptime, testSummary } from '../src/summary';
+import { describeUptime, pageDetail, shownCounts, testSummary } from '../src/summary';
 import type * as snmp from '../src/snmp';
 import modelsJson from './fixtures/brother-models.json';
 
@@ -54,4 +54,22 @@ test('uptime: in words', () => {
   assert.equal(describeUptime(47 * 3600), '47 hours');
   assert.equal(describeUptime(5 * 86400 + 3600), '5 days');
   assert.equal(describeUptime(null), null);
+});
+
+test('black-and-white printers: no "0 color" or black-and-white count over SNMP or IPP; two-sided stays', () => {
+  const mono = parse(models['hl-l2340dw'].raw);
+  assert.equal(pageDetail({ ...mono, colorPages: 0, monoPages: 986, duplexPages: 12 }), '12 two-sided');
+  // IPP listing only "monochrome"
+  const ipp = toPrinterData({ 'printer-impressions-completed': [100], 'printer-impressions-completed-col.monochrome': [100],
+    'marker-names': ['Black'], 'marker-types': ['toner'], 'marker-colors': ['#000000'], 'marker-levels': [60], 'marker-high-levels': [100] });
+  assert.equal(pageDetail(ipp), null);
+  assert.deepEqual(shownCounts(ipp), { color: null, mono: null, duplex: null });
+  // A color printer keeps them
+  const color = parse(models['dcp-l3550cdw'].raw);
+  assert.deepEqual(shownCounts(color), { color: 902, mono: 709, duplex: 538 });
+});
+
+test('uptime: a clock time sent as uptime is left out', () => {
+  assert.equal(describeUptime(1.7e9), null);
+  assert.equal(describeUptime(9 * 365 * 86400), '3285 days');
 });
