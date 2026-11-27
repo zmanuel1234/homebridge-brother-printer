@@ -1152,6 +1152,31 @@ function defineTests(hap: Hap): void {
     }
   });
 
+  test('a new printer at the address (serial taken after a day) or a new address: what it lacks is learnt again', async () => {
+    const { acc, printer } = setup({ offlineAfter: 1 });
+    await pollWith(printer, reading(50, 50, { serial: 'MINE1' }));
+    printer.options.state!.missing = ['statusText'];
+    finder = () => Promise.resolve(null);
+    try {
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.deepEqual(printer.options.state!.missing, ['statusText'], 'not before it\'s taken as this printer');
+      acc.context.otherSerial!.since -= 25 * 3600 * 1000;
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'OTHER1');
+      assert.equal(printer.options.state!.missing, undefined);
+      printer.options.state!.missing = ['statusText'];
+      finder = () => Promise.resolve({ host: '10.0.0.9' });
+      respond = () => Promise.resolve(reading(90, 90, { serial: 'OTHER1' }));
+      printer.stopped = false;
+      await printer.findMoved();
+      printer.stop();
+      assert.equal(printer.options.state!.missing, undefined);
+    } finally {
+      finder = findNothing;
+      respond = never;
+    }
+  });
+
   test('moved printer: no search for a host name', async () => {
     let searches = 0;
     finder = () => { searches++; return Promise.resolve(null); };

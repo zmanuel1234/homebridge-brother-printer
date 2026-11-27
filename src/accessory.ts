@@ -15,7 +15,7 @@ import type { HistoryEntry, HistoryLog } from './history';
 import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './usage';
 import type { UsageSample } from './usage';
 import type { Tray } from './trays';
-import { monoPages, pageDetail } from './summary';
+import { pageDetail, shownCounts } from './summary';
 
 // Resolved from dist/ at runtime, like the published package
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -793,6 +793,8 @@ export class PrinterAccessory {
       const from = this.options.host;
       const hit = await this.find(serial, this.options, from, { model: this.accessory.context.model });
       if (!hit || this.stopped) { return { found: false }; }
+      // Another device (or the same one, readdressed): what it lacks is learnt again
+      if (this.options.state) { delete this.options.state.missing; }
       if (hit.host === this.configured.host) {
         // Back where the settings say
         this.options.host = this.configured.host;
@@ -1273,9 +1275,7 @@ export class PrinterAccessory {
    */
   updateCounters(d: PrinterData): void {
     if (this.standIn(d)) { return; }
-    const values: Record<CounterKey, number | null | undefined> = {
-      color: d.colorPages, mono: monoPages(d), duplex: d.duplexPages,
-    };
+    const values: Record<CounterKey, number | null | undefined> = shownCounts(d);
     for (const key of Object.keys(values) as CounterKey[]) {
       const value = values[key];
       if (typeof value !== 'number' || value < 0) { continue; }
@@ -1319,6 +1319,7 @@ export class PrinterAccessory {
           + 'If that\'s not what you want, remove it and add it again (or use Search in the settings).');
       }
       ctx.serial = d.serial;
+      if (this.options.state) { delete this.options.state.missing; }
       changed = true;
     }
     if (!changed) { return; }
