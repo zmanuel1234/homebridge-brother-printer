@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.11.0-beta.1 - 2026-11-27
+
+A pre-release for testing on real printers: Bonjour search and finding a printer at a new
+address have only been tested against simulated networks so far.
 
 ### Added
 - **Bonjour search**: the settings screen's search also asks for printers by Bonjour (as
