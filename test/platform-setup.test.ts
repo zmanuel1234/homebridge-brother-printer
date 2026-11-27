@@ -59,22 +59,22 @@ function defineTests(hap: Hap): void {
 
   test('a new printer is registered once, with its host saved', () => {
     const { calls, lines, start } = homebridge();
-    const platform = start([{ name: 'Office', host: ' 10.0.4.150 ' }]);
+    const platform = start([{ name: 'Office', host: ' 192.168.1.50 ' }]);
     assert.equal(platform.printers.length, 1);
     assert.equal(calls.registered.length, 1);
     assert.equal(calls.registered[0].displayName, 'Office');
-    assert.equal((calls.registered[0].context as { host: string }).host, '10.0.4.150', 'trimmed');
-    assert.ok(lines.includes('info: Added printer "Office" (10.0.4.150).'));
+    assert.equal((calls.registered[0].context as { host: string }).host, '192.168.1.50', 'trimmed');
+    assert.ok(lines.includes('info: Added printer "Office" (192.168.1.50).'));
     assert.ok(!lines.some((l) => l.startsWith('warn') || l.startsWith('error')), lines.join('\n'));
   });
 
   test('a printer Homebridge already had is reused and updated, not registered again', () => {
     const { calls, start, cachedAccessory } = homebridge();
     const cached = cachedAccessory('Office', '10.0.0.9');
-    start([{ name: 'Office', host: '10.0.4.150' }], [cached]);
+    start([{ name: 'Office', host: '192.168.1.50' }], [cached]);
     assert.deepEqual(calls.registered, []);
     assert.deepEqual(calls.updated, [cached]);
-    assert.equal((cached.context as { host: string }).host, '10.0.4.150', 'the new address is saved');
+    assert.equal((cached.context as { host: string }).host, '192.168.1.50', 'the new address is saved');
   });
 
   test('two printers with the same name: the second is skipped with a warning', () => {

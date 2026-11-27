@@ -27,7 +27,7 @@
             "host": {
               "title": "IP address or hostname",
               "type": "string",
-              "placeholder": "10.0.4.150",
+              "placeholder": "192.168.1.50",
               "description": "Required. Printers without an address are ignored."
             },
             "serial": {
@@ -49,7 +49,7 @@
             "ippUrl": {
               "title": "IPP address",
               "type": "string",
-              "placeholder": "ipp://10.0.4.150:631/ipp/print",
+              "placeholder": "ipp://192.168.1.50:631/ipp/print",
               "description": "Leave empty for ipp://(the printer address):631/ipp/print, which Brother printers use. ipps:// for an encrypted connection."
             },
             "ippAllowSelfSigned": {

@@ -33,7 +33,7 @@ body:
       label: Probe output
       description: |
         On the Homebridge machine, run (with your printer's address):
-        `npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150`
+        `npx -p homebridge-brother-printer brother-printer-probe 192.168.1.50`
         Add your community string after the address if it isn't `public`. For SNMPv3, see
         "Checking what your printer reports" in the README. Passwords aren't printed.
       render: json

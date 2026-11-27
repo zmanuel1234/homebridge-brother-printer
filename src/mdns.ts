@@ -25,7 +25,7 @@ export interface BonjourPrinter {
   name: string;
   /** Its model as the ty record gives it, when it does */
   model: string | null;
-  /** The IPP address from its _ipp/_ipps record, e.g. ipp://10.0.4.150:631/ipp/print; null when it has none */
+  /** The IPP address from its _ipp/_ipps record, e.g. ipp://192.168.1.50:631/ipp/print; null when it has none */
   ippUrl: string | null;
   /** The printer's UUID, when it gives one */
   uuid: string | null;
