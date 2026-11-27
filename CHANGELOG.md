@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0-beta.2 - 2026-11-27
 
 ### Changed
 - **Sensor names start with the printer's name again** ("Printer Problem", "Printer Toner
