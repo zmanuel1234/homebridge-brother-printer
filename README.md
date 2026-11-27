@@ -158,7 +158,7 @@ In `config.json`:
   "printers": [
     {
       "name": "Printer",
-      "host": "10.0.4.150"
+      "host": "192.168.1.50"
     }
   ]
 }
@@ -379,7 +379,7 @@ hand and check it with **Test connection**.
 Check what your printer reports over IPP with:
 
 ```bash
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --protocol ipp
+npx -p homebridge-brother-printer brother-printer-probe 192.168.1.50 --protocol ipp
 ```
 
 (A `:port` after the address is the SNMP port; for another IPP port use `--ipp-url`.)
@@ -403,7 +403,7 @@ says why.
 The package includes a command that prints what the plugin reads:
 
 ```bash
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150
+npx -p homebridge-brother-printer brother-printer-probe 192.168.1.50
 ```
 
 With SNMPv3, add the user and passwords. SHA and AES are the defaults; `--priv none`
@@ -413,7 +413,7 @@ come from the environment variables `BROTHER_SNMP_AUTH_PASS` and `BROTHER_SNMP_P
 ```bash
 read -rs BROTHER_SNMP_AUTH_PASS && export BROTHER_SNMP_AUTH_PASS   # type it, then Enter
 read -rs BROTHER_SNMP_PRIV_PASS && export BROTHER_SNMP_PRIV_PASS
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --v3 <user>
+npx -p homebridge-brother-printer brother-printer-probe 192.168.1.50 --v3 <user>
 unset BROTHER_SNMP_AUTH_PASS BROTHER_SNMP_PRIV_PASS
 ```
 
@@ -424,7 +424,7 @@ Add `--report` for everything the printer answers, ready to paste into an issue 
 as **Copy a report** in the settings screen):
 
 ```bash
-npx -p homebridge-brother-printer brother-printer-probe 10.0.4.150 --report
+npx -p homebridge-brother-printer brother-printer-probe 192.168.1.50 --report
 ```
 
 Compare `tonerPercent` with **Remaining Life** on the printer's web page. If it doesn't

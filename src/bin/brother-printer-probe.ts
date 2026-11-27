@@ -2,8 +2,8 @@
 
 /*
  * Quick check from the command line:
- *   npx brother-printer-probe 10.0.4.150 [community]
- *   npx brother-printer-probe 10.0.4.150 --v3 <user> [--auth sha] [--auth-pass <pw>] [--priv aes] [--priv-pass <pw>]
+ *   npx brother-printer-probe 192.168.1.50 [community]
+ *   npx brother-printer-probe 192.168.1.50 --v3 <user> [--auth sha] [--auth-pass <pw>] [--priv aes] [--priv-pass <pw>]
  * Prints what the plugin would read from the printer; with --report, a report of
  * everything it answers, to paste into a GitHub issue.
  */

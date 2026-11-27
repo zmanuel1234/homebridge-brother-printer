@@ -60,12 +60,12 @@ test('bonjour: the query asks for the printer services\' PTR records', () => {
 });
 
 test('bonjour: an answer gives the printer\'s address, name, model and IPP address', () => {
-  const msg = answer('_ipp._tcp.local', 'Brother MFC-L2750DW series', 'BRW1234.local', '10.0.4.150', 631,
+  const msg = answer('_ipp._tcp.local', 'Brother MFC-L2750DW series', 'BRW1234.local', '192.168.1.50', 631,
     { rp: 'ipp/print', ty: 'Brother MFC-L2750DW series', UUID: 'e3248000-80ce-11db-8000-30055c000001' });
   const printers = printersFrom(parseMessage(msg));
   assert.deepEqual(printers, [{
-    host: '10.0.4.150', name: 'Brother MFC-L2750DW series', model: 'Brother MFC-L2750DW series',
-    ippUrl: 'ipp://10.0.4.150:631/ipp/print', uuid: 'e3248000-80ce-11db-8000-30055c000001',
+    host: '192.168.1.50', name: 'Brother MFC-L2750DW series', model: 'Brother MFC-L2750DW series',
+    ippUrl: 'ipp://192.168.1.50:631/ipp/print', uuid: 'e3248000-80ce-11db-8000-30055c000001',
   }]);
 });
 
