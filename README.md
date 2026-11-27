@@ -44,10 +44,11 @@ Each printer gets these sensors:
   run automations on No Response, but it can on this, for example to turn off the
   printer's smart plug.
 
-Sensors are named for what they are ("Problem", "Toner Low", "Tray 1"): the Home app's
-tiles fit about 13 characters, so "Printer Toner Low" shows as "Printer Toner…". With
-`sensorNames` set to `prefixed` they start with the printer's name; with several printers
-they always do, so they can be told apart. Names you set in the Home app stay.
+Sensors are named with the printer's name in front ("Printer Problem", "Printer Toner Low",
+"Printer Tray 1"), so they read clearly on their own in Home's lists and tiles. Keep the
+printer's name short ("Printer", or "Brother"): Home cuts long tile names short, and shows
+the room anyway. With `sensorNames` set to `plain`, they're just what they are ("Problem",
+"Toner Low"), unless there are several printers. Names you set in the Home app stay.
 
 While the printer can't be reached, all of them except Offline show No Response.
 
@@ -185,7 +186,7 @@ In `config.json`:
 | `paperTraySensors` | `false` | Add one contact sensor per paper tray that opens when that tray is empty (bypass and manual trays, often empty on purpose, get none). The trays are then read on every poll. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
-| `sensorNames` | `plain` | `plain`: sensor names are what they are ("Problem"), which fit on Home's tiles; `prefixed`: they start with the printer's name ("Printer Problem"), which Home cuts on its tiles. With several printers they're always prefixed. Names you set in the Home app stay. |
+| `sensorNames` | `prefixed` | `prefixed`: sensor names start with the printer's name ("Printer Problem"); `plain`: just what they are ("Problem"; with several printers they're always prefixed). Home's tiles fit about 13 characters, so longer names are cut there ("Printer Probl…"); the full name shows when the sensor is opened. Names you set in the Home app stay. |
 | `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`; the tiles are then humidity sensors (unless `tileType` is set to `light`). |
 | `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's light level (or humidity, with `tileType` set to `humidity`). |

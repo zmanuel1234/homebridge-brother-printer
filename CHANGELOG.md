@@ -2,13 +2,7 @@
 
 ## Unreleased
 
-From checking 0.12.0-beta.2 and beta.3 in the Home app.
-
-### Changed
-- **Sensor names are what they are again by default** ("Problem", "Toner Low", "Tray 1"):
-  with the printer's name in front, the Home app's tiles cut them ("Printer Probl…",
-  "Printer Toner…"). Sensors named "Printer …" by beta.2/beta.3 are renamed back; names you
-  set in the Home app stay. `sensorNames: prefixed` keeps the printer's name in front.
+From checking 0.12.0-beta.3 in the Home app.
 
 ### Removed
 - The filter-life tiles (`tileType: filter`) from beta.3: the Home app shows a filter on its

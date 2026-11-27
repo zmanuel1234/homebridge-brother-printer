@@ -205,10 +205,10 @@
             "sensorNames": {
               "title": "Sensor names",
               "type": "string",
-              "default": "plain",
+              "default": "prefixed",
               "oneOf": [
-                { "title": "Just what they are (Problem, Toner Low): they fit on Home's tiles", "enum": ["plain"] },
-                { "title": "With the printer's name (Printer Problem, Printer Toner Low): Home cuts the longer ones", "enum": ["prefixed"] }
+                { "title": "With the printer's name (Printer Problem, Printer Toner Low)", "enum": ["prefixed"] },
+                { "title": "Just what they are (Problem, Toner Low)", "enum": ["plain"] }
               ],
               "description": "Names you set in the Home app stay. With several printers, names always start with the printer's name."
             },

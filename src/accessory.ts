@@ -89,7 +89,7 @@ export interface PrinterConfig {
   tileType?: unknown;
   /** 'occupancy' (default) or 'contact': how the printer's own tile shows printing */
   printingSensor?: unknown;
-  /** "plain" (default: "Problem"; one printer only) or "prefixed" ("Printer Problem") */
+  /** "prefixed" (default: "Printer Problem") or "plain" ("Problem"; one printer only) */
   sensorNames?: unknown;
   faultSensor?: unknown;
   maintenanceSensor?: unknown;
@@ -635,8 +635,8 @@ export class PrinterAccessory {
   }
 
   /**
-   * A sensor's name: what it is ("Toner Low"), or with the printer's name in front
-   * ("Printer Toner Low") with sensorNames prefixed or several printers.
+   * A sensor's name: what it is, with the printer's name in front ("Printer Toner Low"),
+   * or just what it is ("Toner Low") with sensorNames plain and one printer.
    */
   sensorName(what: string): string {
     return !what ? this.name : this.prefixNames ? `${this.name} ${what}` : what;
