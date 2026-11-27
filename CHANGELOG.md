@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0-beta.4 - 2026-11-27
 
 From checking 0.12.0-beta.3 in the Home app.
 
