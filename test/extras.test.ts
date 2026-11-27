@@ -73,3 +73,15 @@ test('uptime: a clock time sent as uptime is left out', () => {
   assert.equal(describeUptime(1.7e9), null);
   assert.equal(describeUptime(9 * 365 * 86400), '3285 days');
 });
+
+test('text(): config and device values as text, never "[object Object]"', async () => {
+  const { text } = await import('../src/text');
+  assert.equal(text('a'), 'a');
+  assert.equal(text(161), '161');
+  assert.equal(text(true), 'true');
+  assert.equal(text(Buffer.from('Tray 1')), 'Tray 1');
+  assert.equal(text({ host: 'x' }), '');
+  assert.equal(text(['a']), '');
+  assert.equal(text(null), '');
+  assert.equal(text(undefined), '');
+});
