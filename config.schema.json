@@ -230,7 +230,7 @@
               "title": "Eve history of the toner / ink level",
               "type": "boolean",
               "default": false,
-              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too, and show them as humidity sensors). On a color printer each tile shows the lowest color. The page count also shows only in Eve, not in Apple's Home app. The first time, Homebridge takes a few seconds longer to start."
+              "description": "Shows a graph of the level over about 60 days in the Eve app, on the toner / ink tiles (turn those on too; they're then humidity sensors, unless \"Show the tiles as\" is set to light sensors). On a color printer each tile shows the lowest color. The page count also shows only in Eve, not in Apple's Home app. The first time, Homebridge takes a few seconds longer to start."
             },
             "faultSensor": {
               "title": "Problem sensor",

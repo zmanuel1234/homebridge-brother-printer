@@ -381,7 +381,7 @@ export class PrinterAccessory {
     if (!this.main.testCharacteristic(PagesClass)) { this.main.addCharacteristic(PagesClass); }
     this.pages = this.main.getCharacteristic(Pages);
 
-    // Toner and drum as batteries so Home raises native "low" alerts. A printer
+    // Toner (or ink) as a battery so Home raises its native "low" alert. A printer
     // that reported no levels last time gets none until it reports some.
     if (acc.context.noLevels) {
       this.removeSubtype(S.Battery, 'toner');
@@ -929,7 +929,7 @@ export class PrinterAccessory {
     this.history.addEntry(this.lastEntry);
   }
 
-  /** Drum battery and maintenance sensor (optional), and log warnings for drums and other parts */
+  /** Maintenance sensor (optional) and log warnings for drums and other parts */
   applyDrumAndParts(d: PrinterData): void {
     const standIn = this.standIn(d);
     let due = false;
