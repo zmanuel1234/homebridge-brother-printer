@@ -7,8 +7,10 @@
   AirPrint does), so it finds printers with SNMP off; those are added to be read over IPP,
   at the address they advertise.
 - **Finding a printer again after its address changes**: once a printer shows as offline
-  (and every 15 minutes after that), or another printer answers at its address, the plugin
-  looks for its serial number on the network. When it's found, it's read at its new address
+  (and every 15 minutes after that), the plugin looks for its serial number on the network.
+  Another printer answering at its address is no longer taken as this one: it shows as
+  offline and is looked for (a printer with a new serial number is taken as this one after a
+  day, or once that serial number is in the settings). When it's found, it's read at its new address
   (kept after a restart until the address in the settings changes), and the log says so.
   Only for addresses entered as numbers. Devices are asked without the printer's SNMP
   community or SNMPv3 settings until one is identified.
@@ -21,9 +23,14 @@
 - `dashboardPort`: the same dashboard on a page of its own, at
   `http://<Homebridge address>:<port>/`, from the plugin's latest readings. Off unless a
   port is set; read-only, showing names, addresses and readings (no serial numbers or other
-  settings), and only when opened by the machine's address or name.
+  settings), and only when opened by an address or a home network name; `dashboardHosts`
+  adds others (a reverse proxy's or dynamic DNS name).
 
 ### Changed
+- When a printer with another serial number answers at a printer's address, it's no longer
+  taken as that printer straight away (with a warning): the printer shows as offline while
+  the plugin looks for it, and the new one is taken as it after a day, or at once when its
+  serial number is in the settings.
 - The package description, keywords and settings header now say any make, over SNMP or IPP.
 
 ## 0.10.0 - 2026-11-26

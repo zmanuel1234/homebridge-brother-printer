@@ -23,6 +23,8 @@ const { version } = require('../package.json') as { version: string };
 /** What the plugin keeps in Homebridge's accessory cache */
 /** While the printer is offline, how often to look for it at another address (ms) */
 const SEARCH_EVERY = 15 * 60 * 1000;
+/** How long another printer answers at the address before it's taken as this one (ms) */
+const ADOPT_AFTER = 24 * 60 * 60 * 1000;
 
 export interface PrinterContext {
   host?: string;
@@ -53,6 +55,8 @@ export interface PrinterContext {
    * settings still say `from`: it's read at `to` until the settings change
    */
   moved?: { from: string; to: string; ippUrl?: string };
+  /** Another printer has answered at the address since then (ms), not this one */
+  otherSerial?: { serial: string; since: number };
 }
 
 /** A printer's entry in config.json; values may be anything a user typed */
@@ -664,30 +668,9 @@ export class PrinterAccessory {
     try {
       data = await this.query(this.options);
     } catch (err) {
-      this.failures += 1;
-      const msg = errorText(err);
-      if (this.failures === this.offlineAfter) {
-        this.log.warn(`[${this.name}] Can't reach ${this.options.host} (${msg}). Showing it as offline.`);
-        this.setOnline(false);
-      } else if (this.debug || this.failures < this.offlineAfter) {
-        this.log.debug(`[${this.name}] Poll failed (${this.failures}/${this.offlineAfter}): ${msg}`);
-      }
-      // Offline: look for it at another address (a new one from the router), then every 15 minutes
-      const every = Math.max(1, Math.round(SEARCH_EVERY / this.interval));
-      if (this.failures >= this.offlineAfter && (this.failures - this.offlineAfter) % every === 0) {
-        data = (await this.findMoved()).data;
-      }
+      data = await this.failed(errorText(err));
     }
-    // Another printer answers at the address (the router gave it this printer's old one):
-    // look for this one by its serial number, at most every 15 minutes. Not found, the
-    // reading counts as this printer's (a replaced mainboard has a new serial number).
-    const known = (this.accessory.context.serial || this.configSerial).trim().toUpperCase();
-    if (data?.serial && known && data.serial.trim().toUpperCase() !== known && Date.now() - this.swapSearchAt >= SEARCH_EVERY) {
-      this.swapSearchAt = Date.now();
-      const elsewhere = await this.findMoved();
-      if (elsewhere.found) { data = elsewhere.data; }
-      if (!data) { this.failures += 1; }
-    }
+    if (data) { data = await this.checkSerial(data); }
     if (data) {
       this.failures = 0;
       try {
@@ -697,6 +680,68 @@ export class PrinterAccessory {
       }
     }
     if (!this.stopped) { this.timer = setTimeout(() => void this.poll(), this.interval); }
+  }
+
+  /**
+   * A poll that got no reading of this printer. Once offline (and every 15 minutes
+   * after), look for it at another address; resolves with its reading there.
+   */
+  async failed(msg: string): Promise<QueryResult | undefined> {
+    this.failures += 1;
+    if (this.failures === this.offlineAfter) {
+      this.log.warn(`[${this.name}] Can't reach ${this.options.host} (${msg}). Showing it as offline.`);
+      this.setOnline(false);
+    } else if (this.debug || this.failures < this.offlineAfter) {
+      this.log.debug(`[${this.name}] Poll failed (${this.failures}/${this.offlineAfter}): ${msg}`);
+    }
+    const every = Math.max(1, Math.round(SEARCH_EVERY / this.interval));
+    if (this.failures >= this.offlineAfter && (this.failures - this.offlineAfter) % every === 0) {
+      return (await this.findMoved()).data;
+    }
+    return undefined;
+  }
+
+  /**
+   * A reading from another printer (its serial number isn't the one this printer
+   * gave before): the router gave this printer's old address to another one. It
+   * isn't taken as this printer's; this one is looked for by its serial number
+   * (every 15 minutes) and shows as offline meanwhile. A printer with a new serial
+   * number (a replaced mainboard, or a replaced printer) is taken as this one after
+   * a day, or right away once that serial number is in the settings.
+   */
+  async checkSerial(d: QueryResult): Promise<QueryResult | undefined> {
+    const ctx = this.accessory.context;
+    const norm = (v: string | null | undefined): string => (v ?? '').trim().toUpperCase();
+    const seen = norm(d.serial);
+    const known = norm(ctx.serial);
+    if (!seen || !known || seen === known || this.standIn(d) || seen === norm(this.configSerial)) {
+      if (ctx.otherSerial && seen === known) { this.remember({ otherSerial: undefined }); }
+      return d;
+    }
+    const now = Date.now();
+    if (ctx.otherSerial?.serial !== seen) {
+      this.remember({ otherSerial: { serial: seen, since: now } });
+      this.log.warn(`[${this.name}] Another printer (serial number ${d.serial}) answers at ${this.options.host}, not this one `
+        + `(${ctx.serial}). Looking for this one on the network; it shows as offline meanwhile. If the printer was replaced `
+        + `or repaired and has a new serial number, it's taken as this one after a day, or right away once its serial `
+        + `number in the settings is ${d.serial}.`);
+    }
+    if (now - ctx.otherSerial!.since >= ADOPT_AFTER) {
+      this.remember({ otherSerial: undefined });
+      return d; // updateInfo takes the new serial number, and says so
+    }
+    if (now - this.swapSearchAt >= SEARCH_EVERY) {
+      this.swapSearchAt = now;
+      const elsewhere = await this.findMoved();
+      if (elsewhere.data) { return elsewhere.data; }
+    }
+    // Not counted again toward the offline search above: this check has its own pace
+    this.failures += 1;
+    if (this.failures === this.offlineAfter) {
+      this.log.warn(`[${this.name}] Showing it as offline while another printer answers at its address.`);
+      this.setOnline(false);
+    }
+    return undefined;
   }
 
   /**

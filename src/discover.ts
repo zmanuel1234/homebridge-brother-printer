@@ -214,7 +214,7 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
 }
 
 /** Model names compared loosely: "Brother MFC-L2750DW series" and "MFC-L2750DW" match */
-const modelKey = (m: string | null | undefined): string => cleanModel(m ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const modelKey = (m: string | null | undefined): string => cleanModel(m ?? '').toLowerCase().replace(/\bseries$/, '').replace(/[^a-z0-9]/g, '');
 
 /**
  * Look for the printer with this serial number at another address (`skip` is its old
@@ -263,9 +263,11 @@ export async function findBySerial(serial: string, settings: QueryOptions & { ho
 
   // With the printer's own SNMP settings, only where Bonjour names the same model
   const model = modelKey(options.model);
-  if (!model) { return null; }
+  if (model.length < 4) { return null; }
+  // Bonjour names often keep the maker ("EPSON XP-6000 Series"), the stored model not
+  const same = (m: string | null | undefined): boolean => { const k = modelKey(m); return k.length >= 4 && (k === model || k.endsWith(model) || model.endsWith(k)); };
   for (const { host, bonjour } of candidates) {
-    if (!bonjour || (modelKey(bonjour.model) !== model && modelKey(bonjour.name) !== model)) { continue; }
+    if (!bonjour || (!same(bonjour.model) && !same(bonjour.name))) { continue; }
     try {
       const d = await read({ ...settings, host, timeout: 2000, retries: 0, state: { ...settings.state }, trays: false });
       if (matches(d)) { return { host }; }

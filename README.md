@@ -194,7 +194,8 @@ One setting is for all printers (under **Dashboard** in the settings screen):
 
 | Option | Default | Description |
 |---|---|---|
-| `dashboardPort` | (none) | A port (1024–65535, for example `8587`) for a page showing all printers at `http://<Homebridge address>:<port>/`, for a browser or a wall tablet. It shows what the plugin last read, refreshes every 30 seconds and changes nothing. It has no password: anyone on your network can see the printers' names, addresses and readings (no serial numbers or other settings). Open it by the machine's address or name. Empty: no page. |
+| `dashboardPort` | (none) | A port (1024–65535, for example `8587`) for a page showing all printers at `http://<Homebridge address>:<port>/`, for a browser or a wall tablet. It shows what the plugin last read, refreshes every 30 seconds and changes nothing. It has no password: anyone on your network can see the printers' names, addresses and readings (no serial numbers or other settings). Empty: no page. |
+| `dashboardHosts` | | The page opens by an address, a one-word name, or a name ending `.local`, `.lan`, `.home`, `.home.arpa` or `.internal` (so a web page elsewhere can't read it through a domain of its own). List any other name you open it by, such as a reverse proxy's or dynamic DNS name. |
 
 ## What the Home app shows
 
@@ -295,8 +296,12 @@ Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 ### When the printer's address changes
 
 If the printer gets a new address from the router, the plugin looks for it once the
-printer shows as offline, and every 15 minutes after that; also when another printer
-answers at its address (at most every 15 minutes). It searches the network (SNMP and
+printer shows as offline, and every 15 minutes after that. If another printer answers at
+its address (its serial number isn't the one this printer gave), that printer's readings
+aren't used: this printer shows as offline and is looked for every 15 minutes. A printer
+that keeps answering there with a new serial number for a day (a replaced printer or
+mainboard) is taken as this one then, or right away once that serial number is in the
+settings. It searches the network (SNMP and
 Bonjour) for a printer with the same serial number. When it finds it, it reads it there,
 logs the new address, and keeps using it after a restart until you change the address in
 the settings (the settings screen's test and dashboard read it there too).
@@ -306,7 +311,8 @@ the settings (the settings screen's test and dashboard read it there too).
 - Only for an address entered as numbers: a host name follows the printer by itself.
 - The search asks each device without your SNMP settings (over IPP, and SNMP with
   `public`). With a private community or SNMPv3, those go only to a device whose
-  Bonjour name says it's the same model.
+  Bonjour name says it's the same model (so such a printer is found only if it
+  advertises by Bonjour).
 
 A reserved address for the printer in your router avoids the change altogether.
 

@@ -113,8 +113,17 @@ export const MAX_REPORT = 60000;
  */
 export function redact(text: string, serials: (string | null | undefined)[], secrets: string[] = []): string {
   let out = text;
-  for (const secret of new Set(secrets.filter((v) => v && v.length >= 4 && v !== 'public'))) {
-    out = out.split(secret).join('(not shown)');
+  // In the printer's raw values only (after " = "): elsewhere a community such as "brother"
+  // would be replaced in the plugin's own name, and so give itself away
+  const hidden = [...new Set(secrets.filter((v) => v && v.length >= 4 && v !== 'public'))];
+  if (hidden.length) {
+    out = out.split('\n').map((line) => {
+      const at = line.indexOf(' = ');
+      if (at < 0) { return line; }
+      let value = line.slice(at + 3);
+      for (const secret of hidden) { value = value.split(secret).join('(not shown)'); }
+      return line.slice(0, at + 3) + value;
+    }).join('\n');
   }
   for (const s of new Set(serials.map((v) => (v ?? '').trim()).filter((v) => v.length >= 5))) {
     const short = `…${s.slice(-4)}`;

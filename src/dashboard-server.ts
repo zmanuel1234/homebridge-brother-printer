@@ -30,25 +30,31 @@ const FILES: Record<string, [string, string]> = {
 /** The page's files: next to this file in dist/ (and src/ for tests) */
 export const PUBLIC_DIR = join(__dirname, 'homebridge-ui', 'public');
 
+/** Home network names public DNS doesn't serve: single labels and these endings */
+const LOCAL_NAMES = /\.(local|lan|home|home\.arpa|internal|localdomain)$/;
+
 /**
- * The page answers only when asked for by an address, this machine's name, or a
- * .local name: a web page elsewhere can't read it through a domain of its own
- * pointed at this machine (DNS rebinding).
+ * The page answers only when asked for by an address, a home network name (one word,
+ * or ending .local, .lan, .home, .home.arpa, .internal), this machine's name, or a
+ * name in `extra` (a reverse proxy's or dynamic DNS name): a web page elsewhere can't
+ * read it through a domain of its own pointed at this machine (DNS rebinding).
  */
-export function allowedHost(header: string | undefined): boolean {
+export function allowedHost(header: string | undefined, extra: string[] = []): boolean {
   if (!header) { return true; }
-  const name = header.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase().replace(/\.$/, '');
+  const name = header.trim().replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase().replace(/\.$/, '');
+  if (!name) { return false; }
   const me = os.hostname().toLowerCase();
-  return isIP(name) !== 0 || name === 'localhost' || name === me || name.endsWith('.local') || name === me.split('.')[0];
+  return isIP(name) !== 0 || !name.includes('.') || LOCAL_NAMES.test(name) || name === me
+    || extra.some((e) => e.trim().toLowerCase().replace(/\.$/, '') === name);
 }
 
-export function startDashboard(port: number, log: Logging, printers: () => DashboardPrinter[]): http.Server {
+export function startDashboard(port: number, log: Logging, printers: () => DashboardPrinter[], hosts: string[] = []): http.Server {
   const server = http.createServer((req, res) => {
     const path = (req.url || '/').split('?')[0];
     const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
-    if (!allowedHost(req.headers.host)) {
+    if (!allowedHost(req.headers.host, hosts)) {
       res.writeHead(403, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' })
-        .end('Open the dashboard by the Homebridge machine\'s address or name.');
+        .end('Open the dashboard by the Homebridge machine\'s address or name, or add this name under "Dashboard names" in the plugin\'s settings.');
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {

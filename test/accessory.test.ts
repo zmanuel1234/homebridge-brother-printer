@@ -1062,7 +1062,7 @@ function defineTests(hap: Hap): void {
       printer.stopped = false;
       await printer.poll();
       printer.stop();
-      assert.deepEqual(hosts, ['10.0.0.1', '10.0.0.9'], 'the other printer\'s reading is not used');
+      assert.deepEqual(hosts, ['10.0.0.1', '10.0.0.9'], 'read where it was found');
       assert.equal(acc.context.serial, serial, 'the serial number stays');
       assert.equal(printer.lastReading?.supplies[0].level, 40);
       assert.deepEqual(acc.context.moved, { from: '10.0.0.1', to: '10.0.0.9' });
@@ -1080,6 +1080,47 @@ function defineTests(hap: Hap): void {
     } finally {
       finder = findNothing;
       respond = never;
+    }
+  });
+
+  test('another printer at the address: not taken as this one; offline while it\'s looked for; taken after a day', async () => {
+    const lines: string[] = [];
+    const { acc, printer } = setup({ offlineAfter: 1 }, null, lines);
+    await pollWith(printer, reading(50, 50, { serial: 'MINE1' }));
+    let searches = 0;
+    finder = () => { searches++; return Promise.resolve(null); };
+    try {
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'MINE1');
+      assert.equal(printer.lastReading?.supplies[0].level, 50, 'the other printer\'s reading isn\'t used');
+      assert.equal(printer.online, false);
+      assert.equal(searches, 1);
+      assert.equal(acc.context.otherSerial?.serial, 'OTHER1');
+      assert.equal(lines.filter((l) => l.includes('Another printer (serial number OTHER1)')).length, 1);
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(searches, 1, 'searched again only after 15 minutes');
+      assert.equal(acc.context.serial, 'MINE1');
+
+      // A day later: a replaced printer, taken as this one
+      acc.context.otherSerial!.since -= 25 * 3600 * 1000;
+      await pollWith(printer, reading(90, 90, { serial: 'OTHER1' }));
+      assert.equal(acc.context.serial, 'OTHER1');
+      assert.equal(printer.online, true);
+      assert.equal(acc.context.otherSerial, undefined);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
+  test('another printer at the address: taken at once when its serial number is in the settings', async () => {
+    const { acc, printer } = setup({ serial: 'NEW1' });
+    acc.context.serial = 'OLD1';
+    finder = () => { throw new Error('no search expected'); };
+    try {
+      await pollWith(printer, reading(60, 60, { serial: 'NEW1' }));
+      assert.equal(acc.context.serial, 'NEW1');
+    } finally {
+      finder = findNothing;
     }
   });
 

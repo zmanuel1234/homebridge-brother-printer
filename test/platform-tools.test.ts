@@ -295,7 +295,33 @@ test('dashboard page: answers only to an address or this machine\'s name', () =>
   assert.ok(allowedHost('[fe80::1]:8587'));
   assert.ok(allowedHost('homebridge.local:8587'));
   assert.ok(allowedHost(undefined));
+  assert.ok(allowedHost('homebridge:8587'), 'one word');
+  assert.ok(allowedHost('pi.lan') && allowedHost('pi.home.arpa'));
   assert.ok(!allowedHost('evil.example.com:8587'));
+  assert.ok(!allowedHost('10.0.0.2.nip.io'));
+  assert.ok(allowedHost('hb.example.com:443', ['HB.example.com']), 'a name from the settings');
+});
+
+test('report: a community that\'s an ordinary word is hidden in values only', async () => {
+  const text = await buildReport({ host: '10.0.0.1', community: 'brother' }, { host: '10.0.0.1', community: 'brother', version: '2c' }, {
+    read: () => Promise.resolve(fromModel('hl-l2340dw')), bulk: () => Promise.resolve(true),
+    walk: (_o, _v, oid) => Promise.resolve(oid === '1.3.6.1.2.1.1' ? ['1.3.6.1.2.1.1.9.0 = "community brother"'] : []),
+    ipp: () => Promise.resolve({}),
+  });
+  assert.match(text, /homebridge-brother-printer/);
+  assert.match(text, /= "community \(not shown\)"/);
+});
+
+test('moved: a private community goes to a Bonjour printer whose name keeps the maker', async () => {
+  const sent: string[] = [];
+  const hit = await findBySerial('S1', { host: '10.0.0.1', community: 'secret' }, '10.0.0.1', {
+    targets: [], wait: 50, model: 'XP-6000 Series', readIpp: noSnmp,
+    bonjour: () => Promise.resolve([{ host: '10.0.0.4', name: 'EPSON XP-6000 Series', model: 'EPSON XP-6000 Series', ippUrl: null, uuid: null },
+      { host: '10.0.0.5', name: 'NAS', model: 'DS920', ippUrl: null, uuid: null }]),
+    read: (o) => { sent.push(`${o.host} ${o.community}`); return o.community === 'secret' && o.host === '10.0.0.4' ? Promise.resolve(fromModel('hl-l2340dw', { serial: 'S1' })) : noSnmp(); },
+  });
+  assert.deepEqual(hit, { host: '10.0.0.4' });
+  assert.ok(!sent.includes('10.0.0.5 secret'));
 });
 
 /* ------------------------------------------------------------- the dashboard */

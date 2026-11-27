@@ -81,7 +81,9 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       this.log.warn(`Dashboard port ${String(raw)} isn't a port from 1024 to 65535; the dashboard is off.`);
       return;
     }
-    this.dashboard = startDashboard(port, this.log, () => this.dashboardPrinters());
+    const names: unknown = this.config.dashboardHosts;
+    const hosts = Array.isArray(names) ? names.filter((n): n is string => typeof n === 'string' && !!n.trim()) : [];
+    this.dashboard = startDashboard(port, this.log, () => this.dashboardPrinters(), hosts);
   }
 
   /** Each printer's latest reading as the dashboard shows it (no serial numbers) */
