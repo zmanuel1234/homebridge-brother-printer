@@ -29,6 +29,8 @@ export interface TestResult {
   problem: boolean;
   /** Printing now */
   printing: boolean;
+  /** Read at this address, where the plugin found the printer, instead of the one in the settings */
+  movedTo?: string;
 }
 
 const TRAY_STATE = { empty: 'empty', low: 'low', ok: 'has paper', unknown: 'unknown' } as const;
@@ -76,6 +78,9 @@ function usageSummary(d: QueryResult, cached?: CachedUsage, protocol?: string): 
 
 export interface CachedUsage {
   samples: UsageSample[];
+  /** The plugin found the printer at this address instead of the one in the settings */
+  movedTo?: string;
+  movedIppUrl?: string;
   /** The plugin has read this printer over SNMP: its page counts are SNMP's */
   snmpAnswered: boolean;
 }

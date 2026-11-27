@@ -193,6 +193,7 @@
         ...(r.left ? [['Time left', r.left]] : []),
         ...(r.paper ? [['Paper', r.paper]] : []),
         ['Serial number', r.serial || 'unknown'],
+        ...(r.movedTo ? [['Address', `${r.movedTo}, where the plugin found it (the settings say ${printer.host})`]] : []),
         ['Read over', r.via],
       ];
       out.innerHTML = '<span class="text-success">Connected.</span><table class="table table-sm mb-0 mt-1"><tbody>'
@@ -235,9 +236,10 @@
     $('bp-report').disabled = true;
     try {
       const { text } = await homebridge.request('/report', printer);
-      out.innerHTML = '<p class="mb-1">The report is below. Passwords and the community are left out, and the serial number '
-        + 'is shortened. Paste it into a <a href="https://github.com/zmanuel1234/homebridge-brother-printer/issues/new" '
-        + 'target="_blank" rel="noopener">GitHub issue</a>.</p><textarea id="bp-report-text" readonly></textarea>';
+      out.innerHTML = '<p class="mb-1">The report is below. Passwords, the community and the printer\'s location are left out; '
+        + 'the serial number and MAC address are shortened. Paste it into a <a href="https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml" '
+        + 'target="_blank" rel="noopener">printer report</a>.</p><textarea id="bp-report-text" readonly></textarea>'
+        + '<p class="mb-0 bp-muted" id="bp-report-hint"></p>';
       $('bp-report-text').value = text;
       let copied = false;
       try { await navigator.clipboard.writeText(text); copied = true; } catch { /* not allowed in this frame */ }
@@ -245,7 +247,13 @@
         $('bp-report-text').select();
         try { copied = document.execCommand('copy'); } catch { /* select it by hand */ }
       }
-      if (copied) { homebridge.toast.success('Report copied.', 'Printer'); } else { $('bp-report-text').select(); }
+      if (copied) {
+        homebridge.toast.success('Report copied.', 'Printer');
+      } else {
+        // The browser allows copying only right after a click; the report took longer
+        $('bp-report-text').select();
+        $('bp-report-hint').textContent = 'It\'s selected: press Ctrl+C (Cmd+C on a Mac) to copy it.';
+      }
     } catch (err) {
       out.innerHTML = `<span class="text-danger">${esc(errorText(err))}</span>`;
     } finally {
@@ -265,7 +273,8 @@
       const list = await Promise.all(printers.map(async (p) => {
         const base = { name: p.name || 'Printer', host: String(p.host).trim() };
         try {
-          return { ...base, online: true, updated: Date.now(), result: await homebridge.request('/test', p) };
+          const result = await homebridge.request('/test', p);
+          return { ...base, host: result.movedTo || base.host, online: true, updated: Date.now(), result };
         } catch (err) {
           return { ...base, online: false, error: errorText(err).replace(/\. Check the address.*$/, '.') };
         }

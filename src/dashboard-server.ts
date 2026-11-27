@@ -2,11 +2,14 @@
  * The plugin's own dashboard page (the dashboardPort setting): the printers'
  * latest readings at http://<homebridge>:<port>/, for a browser or a wall
  * tablet. Read-only: it shows what the plugin last read, and changes nothing.
- * No serial numbers, settings or passwords are served.
+ * No serial numbers, passwords or other settings are served: each printer's
+ * name, address and readings.
  */
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isIP } from 'node:net';
+import os from 'node:os';
 import type { Logging } from 'homebridge';
 
 /** One printer as the page shows it */
@@ -27,10 +30,27 @@ const FILES: Record<string, [string, string]> = {
 /** The page's files: next to this file in dist/ (and src/ for tests) */
 export const PUBLIC_DIR = join(__dirname, 'homebridge-ui', 'public');
 
+/**
+ * The page answers only when asked for by an address, this machine's name, or a
+ * .local name: a web page elsewhere can't read it through a domain of its own
+ * pointed at this machine (DNS rebinding).
+ */
+export function allowedHost(header: string | undefined): boolean {
+  if (!header) { return true; }
+  const name = header.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase().replace(/\.$/, '');
+  const me = os.hostname().toLowerCase();
+  return isIP(name) !== 0 || name === 'localhost' || name === me || name.endsWith('.local') || name === me.split('.')[0];
+}
+
 export function startDashboard(port: number, log: Logging, printers: () => DashboardPrinter[]): http.Server {
   const server = http.createServer((req, res) => {
     const path = (req.url || '/').split('?')[0];
     const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+    if (!allowedHost(req.headers.host)) {
+      res.writeHead(403, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' })
+        .end('Open the dashboard by the Homebridge machine\'s address or name.');
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { ...headers, Allow: 'GET' }).end();
       return;

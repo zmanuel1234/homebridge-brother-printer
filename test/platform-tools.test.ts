@@ -5,11 +5,11 @@ import dgram from 'node:dgram';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Logging } from 'homebridge';
-import { browse, buildQuery, parseMessage, printersFrom, SERVICES } from '../src/mdns';
+import { browse, buildQuery, followUps, parseMessage, printersFrom, SERVICES } from '../src/mdns';
 import type { BonjourPrinter } from '../src/mdns';
 import { discover, findBySerial, movedIppUrl } from '../src/discover';
-import { buildReport, redact, safeSettings, valueText } from '../src/report';
-import { startDashboard } from '../src/dashboard-server';
+import { buildReport, fit, redact, safeSettings, valueText } from '../src/report';
+import { allowedHost, startDashboard } from '../src/dashboard-server';
 import { testSummary } from '../src/summary';
 import * as snmp from '../src/snmp';
 import type { QueryOptions, QueryResult } from '../src/snmp';
@@ -153,7 +153,7 @@ test('moved: found by its serial number among the devices, not at the old addres
     { host: '10.0.0.3', name: 'it', model: null, ippUrl: null, uuid: null },
   ];
   const read: string[] = [];
-  const settings: QueryOptions & { host: string } = { host: '10.0.0.1', community: 'secret', version: '2c', state: { noBulk: true } };
+  const settings: QueryOptions & { host: string } = { host: '10.0.0.1', community: 'public', version: '2c', state: { noBulk: true } };
   const hit = await findBySerial('e78123a4n123456', settings, '10.0.0.1', {
     targets: [], wait: 50, bonjour: () => Promise.resolve(bonjour),
     read: (o) => {
@@ -162,7 +162,7 @@ test('moved: found by its serial number among the devices, not at the old addres
     },
   });
   assert.deepEqual(hit, { host: '10.0.0.3' });
-  assert.deepEqual(read.sort(), ['10.0.0.2 secret', '10.0.0.3 secret'], 'with its own settings; never the old address');
+  assert.deepEqual(read.sort(), ['10.0.0.2 public', '10.0.0.3 public'], 'never the old address');
 });
 
 test('moved: an IPP printer gets its IPP address moved too; nothing found is null', async () => {
@@ -178,10 +178,51 @@ test('moved: an IPP printer gets its IPP address moved too; nothing found is nul
   assert.equal(await findBySerial('S1', settings, '10.0.0.1', { targets: [], wait: 50, bonjour: () => Promise.resolve([]) }), null);
 });
 
-test('moved: the IPP address follows only when it names the old host', () => {
+test('moved: the IPP address follows only when it names the old host, without user or password', () => {
   assert.equal(movedIppUrl(undefined, 'a', 'b'), undefined);
   assert.equal(movedIppUrl('ipp://10.0.0.1:631/ipp/print', '10.0.0.1', '10.0.0.9'), 'ipp://10.0.0.9:631/ipp/print');
-  assert.equal(movedIppUrl('ipp://printer.local/ipp/print', '10.0.0.1', '10.0.0.9'), 'ipp://printer.local/ipp/print');
+  assert.equal(movedIppUrl('ipp://u:p@10.0.0.1:631/ipp/print', '10.0.0.1', '10.0.0.9'), 'ipp://10.0.0.9:631/ipp/print');
+  assert.equal(movedIppUrl('ipp://printer.local/ipp/print', '10.0.0.1', '10.0.0.9'), undefined);
+});
+
+test('moved: an IPP address naming another host is never used for the candidates', async () => {
+  const urls: string[] = [];
+  const hit = await findBySerial('S1', { host: '10.0.0.5', protocol: 'ipp', ippUrl: 'ipp://printer.local:631/ipp/print' }, '10.0.0.5', {
+    targets: [], wait: 50, read: noSnmp,
+    bonjour: () => Promise.resolve([{ host: '10.0.0.1', name: 'router', model: null, ippUrl: null, uuid: null }]),
+    readIpp: (o) => { urls.push(`${o.host} ${o.ippUrl ?? 'default'}`); return Promise.resolve(fromModel('hl-l2340dw', { via: 'ipp', snmpVersion: null, serial: 'S1' })); },
+  });
+  assert.deepEqual(urls, ['10.0.0.1 default'], 'the candidate\'s own address');
+  assert.deepEqual(hit, { host: '10.0.0.1' });
+});
+
+test('moved: a private community or SNMPv3 goes only to a device Bonjour names as the same model', async () => {
+  const sent: string[] = [];
+  const bonjour: BonjourPrinter[] = [
+    { host: '10.0.0.2', name: 'NAS', model: 'Synology', ippUrl: null, uuid: null },
+    { host: '10.0.0.3', name: 'Brother MFC-L2750DW series', model: 'Brother MFC-L2750DW series', ippUrl: null, uuid: null },
+  ];
+  const settings: QueryOptions & { host: string } = { host: '10.0.0.1', version: '3', v3: { user: 'admin', authProtocol: 'sha', authPassword: 'x'.repeat(8), privProtocol: 'none', privPassword: '' } };
+  const hit = await findBySerial('S1', settings, '10.0.0.1', {
+    targets: [], wait: 50, model: 'MFC-L2750DW', bonjour: () => Promise.resolve(bonjour), readIpp: noSnmp,
+    read: (o) => {
+      sent.push(`${o.host} ${o.v3 ? 'v3' : o.community}`);
+      return o.v3 && o.host === '10.0.0.3' ? Promise.resolve(fromModel('hl-l2340dw', { serial: 'S1' })) : noSnmp();
+    },
+  });
+  assert.deepEqual(hit, { host: '10.0.0.3' });
+  assert.ok(!sent.includes('10.0.0.2 v3'), sent.join());
+  assert.ok(sent.includes('10.0.0.3 v3'));
+  assert.ok(sent.filter((x) => x.endsWith('v3')).length === 1);
+  assert.equal(await findBySerial('S1', settings, '10.0.0.1', { targets: [], wait: 50, bonjour: () => Promise.resolve(bonjour), read: noSnmp, readIpp: noSnmp }), null,
+    'without a known model, no settings sent at all');
+});
+
+test('bonjour: follow-up queries for what an answer left out', () => {
+  const ptrOnly = parseMessage(answer('_ipp._tcp.local', 'P', 'p.local', '10.0.0.7', 631, {})).filter((r) => r.type === 12);
+  assert.deepEqual(followUps(ptrOnly).map((q) => q.type), [33, 16], 'SRV and TXT for the instance');
+  const noAddress = parseMessage(answer('_ipp._tcp.local', 'P', 'p.local', '10.0.0.7', 631, {})).filter((r) => r.type !== 1);
+  assert.deepEqual(followUps(noAddress), [{ name: 'p.local', type: 1 }]);
 });
 
 /* ---------------------------------------------------------------- the report */
@@ -222,6 +263,39 @@ test('report helpers: values, settings and redaction', () => {
   assert.equal(valueText(42), '42');
   assert.deepEqual(safeSettings({ community: 'public', v3PrivPassword: 'x' }), { community: 'public', v3PrivPassword: '(set, not shown)' });
   assert.equal(redact('SN ABC', ['ABC']), 'SN ABC', 'too short to be a serial number');
+  assert.equal(safeSettings({ ippUrl: 'ipps://u:pw@10.0.0.1/ipp/print' }).ippUrl, 'ipps://10.0.0.1/ipp/print');
+});
+
+test('report: Brother node names, bare MACs, hex serials, location and secrets in raw values', async () => {
+  const serial = 'E78123A4N123456';
+  const text = await buildReport({ host: '10.0.0.1', community: 'h0me-net' }, { host: '10.0.0.1', community: 'h0me-net', version: '2c' }, {
+    read: () => Promise.resolve(fromModel('hl-l2340dw', { serial })),
+    bulk: () => Promise.resolve(true),
+    walk: (_o, _v, oid) => Promise.resolve(oid === '1.3.6.1.2.1.1' ? [
+      '1.3.6.1.2.1.1.5.0 = "BRN3C2AF41234AB"', '1.3.6.1.2.1.1.4.0 = "jane@example.com"', '1.3.6.1.2.1.1.6.0 = "12 Elm St, upstairs"',
+      `1.3.6.1.2.1.43.5.1.1.17.1 = hex ${Buffer.from(`${serial}\0`).toString('hex')}`, '1.3.6.1.4.1.1 = "community h0me-net"', '1.3.6.1.4.1.2 = hex 3c2af41234ab'] : []),
+    ipp: () => Promise.resolve({ 'printer-location': ['Office'], 'printer-more-info': ['http://BRW3C2AF41234AB.local./'], 'media-col-database': ['x'.repeat(100000)] }),
+  });
+  for (const leak of ['3C2AF41234AB', '3c2af41234ab', 'jane@', 'Elm St', '"Office"', 'h0me-net', Buffer.from(serial).toString('hex')]) {
+    assert.ok(!text.includes(leak), `${leak} leaked`);
+  }
+  assert.ok(text.includes('BRN…34AB') && text.includes('BRW…34AB'));
+  assert.ok(!text.includes('media-col-database'), 'bulky media lists left out');
+  assert.ok(text.length < 65536);
+});
+
+test('report: cut to fit a GitHub issue, closing the open block', () => {
+  const cut = fit(`<details>\n\n\`\`\`\n${'line\n'.repeat(100)}`, 100);
+  assert.ok(cut.length < 200);
+  assert.match(cut, /```\n<\/details>\n\n\(cut here/);
+});
+
+test('dashboard page: answers only to an address or this machine\'s name', () => {
+  assert.ok(allowedHost('192.168.1.5:8587'));
+  assert.ok(allowedHost('[fe80::1]:8587'));
+  assert.ok(allowedHost('homebridge.local:8587'));
+  assert.ok(allowedHost(undefined));
+  assert.ok(!allowedHost('evil.example.com:8587'));
 });
 
 /* ------------------------------------------------------------- the dashboard */

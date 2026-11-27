@@ -34,10 +34,17 @@ export function cachedUsage(storagePath: string | undefined, name: string, host:
   for (const file of files) {
     try {
       const list = JSON.parse(readFileSync(join(dir, file), 'utf8')) as {
-        platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[]; snmpAnswered?: boolean };
+        platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[]; snmpAnswered?: boolean;
+          moved?: { from?: string; to?: string; ippUrl?: string } };
       }[];
       const hit = list.find((a) => a.platform === 'BrotherPrinter' && a.context?.host === host && (a.context?.name ?? name) === name);
-      if (hit?.context?.usage) { return { samples: hit.context.usage, snmpAnswered: hit.context.snmpAnswered === true }; }
+      const moved = hit?.context?.moved;
+      if (hit?.context) {
+        return {
+          samples: hit.context.usage ?? [], snmpAnswered: hit.context.snmpAnswered === true,
+          ...(moved?.to && moved.from === host ? { movedTo: moved.to, movedIppUrl: moved.ippUrl } : {}),
+        };
+      }
     } catch { /* unreadable or being written: no history */ }
   }
   return undefined;
@@ -48,9 +55,15 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
   const config = (entry && typeof entry === 'object' ? entry : {}) as Partial<PrinterConfig> & Record<string, unknown>;
   if (!String(config.host ?? '').trim()) { throw new Error('Enter the printer\'s IP address or hostname first.'); }
   const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
+  const cached = cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host);
+  // The plugin found the printer at another address: read it there, and say so
+  if (cached?.movedTo) {
+    options.host = cached.movedTo;
+    if (cached.movedIppUrl) { options.ippUrl = cached.movedIppUrl; }
+  }
   try {
     const d = await read({ ...options, timeout: 3000, retries: 0, trays: true });
-    return testSummary(d, cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host), options.protocol);
+    return { ...testSummary(d, cached, options.protocol), ...(cached?.movedTo ? { movedTo: cached.movedTo } : {}) };
   } catch (err) {
     const what = options.protocol === 'ipp' ? 'IPP' : options.protocol === 'auto' ? 'SNMP or IPP' : 'SNMP';
     throw new Error(`Couldn't read ${options.host}: ${errorText(err)}. Check the address, that ${what} is on in the `

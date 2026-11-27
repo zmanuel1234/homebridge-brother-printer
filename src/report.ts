@@ -3,8 +3,10 @@
  * plugin reads from it, and the raw SNMP and IPP answers behind that. The
  * settings screen's "Copy a report" button and the probe's --report make it.
  *
- * Passwords and the community are left out; the serial number, MAC addresses
- * and UUIDs are shortened, so the report can be posted in public.
+ * Passwords, the community and the SNMPv3 user are left out, and so are the
+ * printer's location and contact details; the serial number, MAC addresses
+ * (also in Brother's BRN/BRW names) and UUIDs are shortened, so the report can be
+ * posted in public. It's cut to fit a GitHub issue.
  */
 import os from 'node:os';
 import { bulkWalk, nextWalk, openSession, query } from './snmp';
@@ -87,6 +89,8 @@ export function safeSettings(entry: Record<string, unknown>): Record<string, unk
   for (const [k, v] of Object.entries(entry)) {
     if (SECRET_SETTINGS.includes(k)) {
       out[k] = k === 'community' && (v === 'public' || v === '' || v === undefined) ? v : '(set, not shown)';
+    } else if (k === 'ippUrl' && typeof v === 'string') {
+      out[k] = v.replace(/^([a-z]+:\/\/)[^/@]*@/i, '$1');
     } else {
       out[k] = v;
     }
@@ -94,15 +98,54 @@ export function safeSettings(entry: Record<string, unknown>): Record<string, unk
   return out;
 }
 
-/** The report's text with the serial number, MAC addresses and UUIDs shortened */
-export function redact(text: string, serials: (string | null | undefined)[]): string {
+/** SNMP values and IPP attributes about where the printer is and who looks after it: not shown */
+const PRIVATE_OIDS = ['1.3.6.1.2.1.1.4.0', '1.3.6.1.2.1.1.6.0']; // sysContact, sysLocation
+const PRIVATE_IPP = /^printer-(location|geo-location|organization|organizational-unit|contact.*)$/;
+/** IPP attributes left out for size: media lists run to tens of kilobytes */
+const BULKY_IPP = /^media-(col-database|col-ready|supported|size-supported|type-supported|source-supported|col-supported)$|^printer-icons$|^printer-strings-uri$/;
+/** GitHub refuses issue bodies over 65,536 characters */
+export const MAX_REPORT = 60000;
+
+/**
+ * The report's text with secrets left out and identifiers shortened: the serial
+ * number (as text or hex), MAC addresses (with separators, bare, and in Brother's
+ * BRN/BRW names), UUIDs, and the given secrets (community, SNMPv3 user).
+ */
+export function redact(text: string, serials: (string | null | undefined)[], secrets: string[] = []): string {
   let out = text;
-  for (const s of new Set(serials.map((v) => (v ?? '').trim()).filter((v) => v.length >= 5))) {
-    out = out.split(s).join(`…${s.slice(-4)}`);
+  for (const secret of new Set(secrets.filter((v) => v && v.length >= 4 && v !== 'public'))) {
+    out = out.split(secret).join('(not shown)');
   }
-  return out
-    .replace(/\b([0-9a-f]{2})([:-])[0-9a-f]{2}\2[0-9a-f]{2}\2[0-9a-f]{2}\2([0-9a-f]{2})\2([0-9a-f]{2})\b/gi, '$1$2…$2$3$2$4')
-    .replace(/\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-([0-9a-f]{12})\b/gi, (_, a: string, b: string) => `${a.slice(0, 4)}…${b.slice(-4)}`);
+  for (const s of new Set(serials.map((v) => (v ?? '').trim()).filter((v) => v.length >= 5))) {
+    const short = `…${s.slice(-4)}`;
+    out = out.split(s).join(short);
+    const hex = Buffer.from(s, 'utf8').toString('hex');
+    out = out.replace(new RegExp(hex, 'gi'), short);
+  }
+  // UUIDs first, so a MAC inside one doesn't break its pattern
+  out = out.replace(/\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-([0-9a-f]{12})\b/gi, (_, a: string, b: string) => `${a.slice(0, 4)}…${b.slice(-4)}`);
+  // MACs seen with separators or in BRN/BRW names, then the same MACs written without
+  const macs = new Set<string>();
+  out = out.replace(/\b([0-9a-f]{2})([:-])([0-9a-f]{2})\2([0-9a-f]{2})\2([0-9a-f]{2})\2([0-9a-f]{2})\2([0-9a-f]{2})\b/gi,
+    (_m, a: string, sep: string, b: string, c: string, d: string, e: string, f: string) => {
+      macs.add(`${a}${b}${c}${d}${e}${f}`.toLowerCase());
+      return `${a}${sep}…${sep}${e}${sep}${f}`;
+    });
+  out = out.replace(/\b(BR[NW])([0-9a-f]{12})\b/gi, (_m, p: string, mac: string) => {
+    macs.add(mac.toLowerCase());
+    return `${p}…${mac.slice(-4)}`;
+  });
+  for (const mac of macs) { out = out.replace(new RegExp(`\\b${mac}\\b`, 'gi'), (m) => `…${m.slice(-4)}`); }
+  return out;
+}
+
+/** Cut to fit a GitHub issue, closing an open code block and details */
+export function fit(text: string, max = MAX_REPORT): string {
+  if (text.length <= max) { return text; }
+  let cut = text.slice(0, max);
+  cut = cut.slice(0, cut.lastIndexOf('\n'));
+  const fences = (cut.match(/^```/gm) || []).length;
+  return `${cut}${fences % 2 ? '\n```' : ''}${cut.lastIndexOf('<details>') > cut.lastIndexOf('</details>') ? '\n</details>' : ''}\n\n(cut here to fit a GitHub issue)`;
 }
 
 /**
@@ -157,6 +200,7 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
         } catch (err) {
           rows = [`(couldn't read: ${errorText(err)})`];
         }
+        rows = rows.map((r) => (PRIVATE_OIDS.some((o) => r.startsWith(`${o} = `)) ? `${r.split(' = ')[0]} = (not shown)` : r));
         if (!rows.length) { continue; }
         add(`<details><summary>${title} (${oid})</summary>`, '', '```', ...rows, '```', '</details>', '');
       }
@@ -166,11 +210,14 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
   // Raw IPP: every attribute the printer gives
   try {
     const attrs = await ipp(base);
-    const rows = Object.entries(attrs).map(([k, v]) => `${k} = ${v.map((x) => (typeof x === 'string' ? JSON.stringify(x) : String(x))).join(', ')}`);
+    const rows = Object.entries(attrs).filter(([k]) => !BULKY_IPP.test(k)).map(([k, v]) => (PRIVATE_IPP.test(k)
+      ? `${k} = (not shown)`
+      : `${k} = ${v.map((x) => (typeof x === 'string' ? JSON.stringify(x) : String(x))).join(', ')}`));
     add(`<details><summary>IPP (${base.ippUrl || defaultIppUrl(base.host)})</summary>`, '', '```', ...rows, '```', '</details>', '');
   } catch (err) {
     add('#### IPP', '', `No answer over IPP: ${errorText(err)}`, '');
   }
 
-  return redact(lines.join('\n'), [reading?.serial, String(entry.serial ?? '')]);
+  return fit(redact(lines.join('\n'), [reading?.serial, String(entry.serial ?? '')],
+    [String(options.community ?? ''), options.v3?.user ?? '', String(entry.community ?? ''), String(entry.v3User ?? '')]));
 }

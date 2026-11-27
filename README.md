@@ -138,9 +138,10 @@ another network; enter those by hand.
 
 **Test connection** reads a printer with the settings as entered, before you save, and
 shows its model, status and levels. **Copy a report** reads everything the printer answers
-over SNMP and IPP and copies it, for a [GitHub issue](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new)
-when a printer shows something wrong; passwords and the community are left out, and the
-serial number, MAC address and UUIDs are shortened.
+over SNMP and IPP and copies it, for a [printer report](https://github.com/zmanuel1234/homebridge-brother-printer/issues/new?template=printer-report.yml)
+when a printer shows something wrong. Passwords, the community, the SNMPv3 user and the
+printer's location and contact details are left out; the serial number, MAC address
+(also in Brother's `BRN…`/`BRW…` names) and UUIDs are shortened.
 
 In `config.json`:
 
@@ -193,7 +194,7 @@ One setting is for all printers (under **Dashboard** in the settings screen):
 
 | Option | Default | Description |
 |---|---|---|
-| `dashboardPort` | (none) | A port (1024–65535, for example `8587`) for a page showing all printers at `http://<Homebridge address>:<port>/`, for a browser or a wall tablet. It shows what the plugin last read, refreshes every 30 seconds and changes nothing. It has no password: anyone on your network can see it (but no serial numbers or settings). Empty: no page. |
+| `dashboardPort` | (none) | A port (1024–65535, for example `8587`) for a page showing all printers at `http://<Homebridge address>:<port>/`, for a browser or a wall tablet. It shows what the plugin last read, refreshes every 30 seconds and changes nothing. It has no password: anyone on your network can see the printers' names, addresses and readings (no serial numbers or other settings). Open it by the machine's address or name. Empty: no page. |
 
 ## What the Home app shows
 
@@ -294,12 +295,20 @@ Brother lasers normally still answer SNMP in Sleep and Deep Sleep.
 ### When the printer's address changes
 
 If the printer gets a new address from the router, the plugin looks for it once the
-printer shows as offline, and every 15 minutes after that: it searches the network (SNMP
-and Bonjour) for a printer with the same serial number. When it finds it, it reads it
-there, logs the new address, and keeps using it after a restart until you change the
-address in the settings. This needs the serial number, which the plugin learns from the
-printer's first reading (or the settings screen fills in). A reserved address for the
-printer in your router avoids the change altogether.
+printer shows as offline, and every 15 minutes after that; also when another printer
+answers at its address (at most every 15 minutes). It searches the network (SNMP and
+Bonjour) for a printer with the same serial number. When it finds it, it reads it there,
+logs the new address, and keeps using it after a restart until you change the address in
+the settings (the settings screen's test and dashboard read it there too).
+
+- It needs the serial number, which the plugin learns from the printer's first reading
+  (or the settings screen fills in).
+- Only for an address entered as numbers: a host name follows the printer by itself.
+- The search asks each device without your SNMP settings (over IPP, and SNMP with
+  `public`). With a private community or SNMPv3, those go only to a device whose
+  Bonjour name says it's the same model.
+
+A reserved address for the printer in your router avoids the change altogether.
 
 ## Reading over IPP (AirPrint)
 

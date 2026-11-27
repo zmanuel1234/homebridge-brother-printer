@@ -213,44 +213,83 @@ export async function discover(options: DiscoverOptions = {}): Promise<FoundPrin
   }
 }
 
+/** Model names compared loosely: "Brother MFC-L2750DW series" and "MFC-L2750DW" match */
+const modelKey = (m: string | null | undefined): string => cleanModel(m ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 /**
- * Look for the printer with this serial number at another address: every device
- * either search finds (but `skip`) is read with the printer's own settings, its
- * address changed. Resolves with the new address, or null.
+ * Look for the printer with this serial number at another address (`skip` is its old
+ * one). Resolves with the new address, or null.
+ *
+ * The printer's SNMP community and SNMPv3 settings go only to a device already
+ * identified as it: first every device either search finds is asked without them
+ * (IPP, which needs none, and SNMP with the "public" community, broadcast as the
+ * settings screen's search does). Only with a private community or SNMPv3, and nothing
+ * found that way, are the settings used, and then only with a device whose Bonjour
+ * model is this printer's (`model`).
  */
 export async function findBySerial(serial: string, settings: QueryOptions & { host: string }, skip: string,
-  options: DiscoverOptions = {}): Promise<{ host: string; ippUrl?: string } | null> {
+  options: DiscoverOptions & { model?: string | null } = {}): Promise<{ host: string; ippUrl?: string } | null> {
   const read = options.read ?? query;
   const overIpp = options.readIpp ?? readIpp;
   const want = serial.trim().toUpperCase();
-  const candidates = (await findCandidates({ ...options, community: options.community ?? settings.community, port: options.port ?? settings.port }))
+  const matches = (d: QueryResult | null): boolean => !!d?.serial && d.serial.trim().toUpperCase() === want;
+  const candidates = (await findCandidates({ ...options, community: 'public', port: options.port ?? settings.port }))
     .filter((c) => c.host !== skip);
+  // The IPP address to try at a candidate: the settings' one moved there, else what Bonjour says, else the default
+  const ippAt = (host: string, bonjour?: BonjourPrinter): string | undefined => movedIppUrl(settings.ippUrl, skip, host) ?? bonjour?.ippUrl ?? undefined;
+  const snmpWanted = settings.protocol !== 'ipp';
+    const publicSnmp = snmpWanted && settings.version !== '3' && (settings.community || 'public') === 'public';
+
   let hit: { host: string; ippUrl?: string } | null = null;
+  // Without credentials
   await inBatches(candidates, async ({ host, bonjour }) => {
     if (hit) { return; }
-    const ippUrl = movedIppUrl(settings.ippUrl, skip, host) ?? bonjour?.ippUrl ?? undefined;
-    const attempt = { ...settings, host, timeout: 2000, retries: 0, state: { ...settings.state }, trays: false, ...(ippUrl ? { ippUrl } : {}) };
+    const ippUrl = ippAt(host, bonjour);
     let d: QueryResult | null = null;
-    try {
-      d = settings.protocol === 'ipp' ? await overIpp(attempt) : await read(attempt);
-    } catch {
-      // A printer read over SNMP whose SNMP is now off, but has IPP
-      if (settings.protocol === 'auto' && ippUrl) { try { d = await overIpp(attempt); } catch { /* not this one */ } }
+    if (snmpWanted) {
+      try {
+        d = await read({ host, port: settings.port, community: 'public', version: publicSnmp ? settings.version : 'auto', timeout: 2000, retries: 0, state: {} });
+      } catch { /* no public SNMP */ }
     }
-    if (!hit && d?.serial && d.serial.trim().toUpperCase() === want) { hit = { host, ...(ippUrl ? { ippUrl } : {}) }; }
+    // IPP needs no credentials; tried where Bonjour advertises it, or where the printer is read over IPP anyway
+    if (!matches(d) && (bonjour?.ippUrl || settings.protocol !== 'snmp')) {
+      try {
+        d = await overIpp({ host, ippUrl, ippAllowSelfSigned: settings.ippAllowSelfSigned, timeout: 3000 });
+      } catch { /* no IPP */ }
+    }
+    if (!hit && matches(d)) { hit = { host, ...(ippUrl && settings.protocol !== 'snmp' ? { ippUrl } : {}) }; }
   });
-  return hit;
+  if (hit || publicSnmp || !snmpWanted) { return hit; }
+
+  // With the printer's own SNMP settings, only where Bonjour names the same model
+  const model = modelKey(options.model);
+  if (!model) { return null; }
+  for (const { host, bonjour } of candidates) {
+    if (!bonjour || (modelKey(bonjour.model) !== model && modelKey(bonjour.name) !== model)) { continue; }
+    try {
+      const d = await read({ ...settings, host, timeout: 2000, retries: 0, state: { ...settings.state }, trays: false });
+      if (matches(d)) { return { host }; }
+    } catch { /* not this one */ }
+  }
+  return null;
 }
 
-/** An IPP address set in the settings, with the printer's old address replaced by the new one; undefined when it isn't set */
+/**
+ * An IPP address from the settings for the printer at its new address: the same
+ * address with the old host replaced (and no user name or password in it).
+ * Undefined when there's none, or it doesn't name the old host (then it says
+ * nothing about where to find the printer at another address).
+ */
 export function movedIppUrl(url: string | undefined, from: string, to: string): string | undefined {
   if (!url) { return undefined; }
   try {
     const u = new URL(url);
-    if (u.hostname.replace(/^\[|\]$/g, '') !== from) { return url; }
+    if (u.hostname.replace(/^\[|\]$/g, '') !== from) { return undefined; }
     u.hostname = to.includes(':') ? `[${to}]` : to;
+    u.username = '';
+    u.password = '';
     return u.toString();
   } catch {
-    return url;
+    return undefined;
   }
 }

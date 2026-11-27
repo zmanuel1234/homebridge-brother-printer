@@ -1049,6 +1049,52 @@ function defineTests(hap: Hap): void {
     }
   });
 
+  test('moved printer: another printer at its address starts a search; back at the set address clears the note', async () => {
+    const serial = 'E78123A4N123456';
+    const lines: string[] = [];
+    const { acc, printer } = setup({ serial }, null, lines);
+    acc.context.host = '10.0.0.1';
+    await pollWith(printer, reading(50, 50, { serial }));
+    let hosts: string[] = [];
+    finder = () => Promise.resolve({ host: '10.0.0.9' });
+    try {
+      respond = (o) => { hosts.push(o.host); return Promise.resolve(reading(o.host === '10.0.0.9' ? 40 : 90, undefined, { serial: o.host === '10.0.0.9' ? serial : 'OTHER123' })); };
+      printer.stopped = false;
+      await printer.poll();
+      printer.stop();
+      assert.deepEqual(hosts, ['10.0.0.1', '10.0.0.9'], 'the other printer\'s reading is not used');
+      assert.equal(acc.context.serial, serial, 'the serial number stays');
+      assert.equal(printer.lastReading?.supplies[0].level, 40);
+      assert.deepEqual(acc.context.moved, { from: '10.0.0.1', to: '10.0.0.9' });
+
+      // Found back at the address in the settings
+      finder = () => Promise.resolve({ host: '10.0.0.1' });
+      printer.stopped = false;
+      const r = await printer.findMoved();
+      printer.stop();
+      assert.equal(r.found, true);
+      assert.equal(printer.options.host, '10.0.0.1');
+      assert.equal(acc.context.moved, undefined);
+      assert.ok(lines.some((l) => l.includes('back at 10.0.0.1')));
+      hosts = [];
+    } finally {
+      finder = findNothing;
+      respond = never;
+    }
+  });
+
+  test('moved printer: no search for a host name', async () => {
+    let searches = 0;
+    finder = () => { searches++; return Promise.resolve(null); };
+    try {
+      const { printer } = setup({ host: 'printer.local', offlineAfter: 1, serial: 'E78123A4N123456' });
+      await pollWith(printer, new Error('Request timed out'));
+      assert.equal(searches, 0);
+    } finally {
+      finder = findNothing;
+    }
+  });
+
   test('dashboard: the latest reading and its time are kept', async () => {
     const { printer } = setup({});
     assert.equal(printer.lastReading, null);

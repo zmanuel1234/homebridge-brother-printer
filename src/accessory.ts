@@ -2,6 +2,7 @@ import type {
   API, Characteristic, CharacteristicValue, HAP, HapStatusError, Logging, PlatformAccessory, Service, WithUUID,
 } from 'homebridge';
 import { format } from 'node:util';
+import { isIP } from 'node:net';
 import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp';
 import { readPrinter } from './read';
 import { findBySerial } from './discover';
@@ -274,6 +275,10 @@ export class PrinterAccessory {
   lastReadAt = 0;
   /** A search for the printer at another address is running */
   searching = false;
+  /** When another printer's serial number last started a search (ms) */
+  swapSearchAt = 0;
+  /** The address (and IPP address) in the settings */
+  readonly configured: { host: string; ippUrl?: string };
   /** Looks for the printer at another address; tests pass their own */
   private readonly find: typeof findBySerial;
   /** Starts the Eve history; tests pass their own */
@@ -294,6 +299,7 @@ export class PrinterAccessory {
     this.name = config.name;
 
     this.options = queryOptions(config);
+    this.configured = { host: this.options.host, ippUrl: this.options.ippUrl };
     // Found at another address before a restart, and the settings still have the old one
     const moved = accessory.context.moved;
     if (moved && moved.from === this.options.host) {
@@ -669,8 +675,18 @@ export class PrinterAccessory {
       // Offline: look for it at another address (a new one from the router), then every 15 minutes
       const every = Math.max(1, Math.round(SEARCH_EVERY / this.interval));
       if (this.failures >= this.offlineAfter && (this.failures - this.offlineAfter) % every === 0) {
-        data = await this.findMoved();
+        data = (await this.findMoved()).data;
       }
+    }
+    // Another printer answers at the address (the router gave it this printer's old one):
+    // look for this one by its serial number, at most every 15 minutes. Not found, the
+    // reading counts as this printer's (a replaced mainboard has a new serial number).
+    const known = (this.accessory.context.serial || this.configSerial).trim().toUpperCase();
+    if (data?.serial && known && data.serial.trim().toUpperCase() !== known && Date.now() - this.swapSearchAt >= SEARCH_EVERY) {
+      this.swapSearchAt = Date.now();
+      const elsewhere = await this.findMoved();
+      if (elsewhere.found) { data = elsewhere.data; }
+      if (!data) { this.failures += 1; }
     }
     if (data) {
       this.failures = 0;
@@ -685,27 +701,40 @@ export class PrinterAccessory {
 
   /**
    * Look for the printer by its serial number at another address. When it's
-   * there, read it there from now on and say so; resolves with its reading.
+   * there, read it there from now on and say so. Resolves with whether it was
+   * found, and its reading there when that read worked.
    */
-  async findMoved(): Promise<QueryResult | undefined> {
-    const serial = this.accessory.context.serial || this.configSerial;
-    if (!serial || this.searching || this.stopped) { return undefined; }
+  async findMoved(): Promise<{ found: boolean; data?: QueryResult }> {
+    const serial = (this.accessory.context.serial || this.configSerial).trim();
+    // A host name follows the printer by itself (and may just not resolve for a moment)
+    if (!serial || this.searching || this.stopped || !isIP(this.configured.host)) { return { found: false }; }
     this.searching = true;
     try {
       const from = this.options.host;
-      const hit = await this.find(serial, this.options, from);
-      if (!hit || this.stopped) { return undefined; }
-      const configured = this.accessory.context.host ?? from;
-      this.options.host = hit.host;
-      if (hit.ippUrl && this.options.protocol !== 'snmp') { this.options.ippUrl = hit.ippUrl; }
-      this.log.warn(`[${this.name}] Found the printer (serial number ${serial}) at ${hit.host} instead of ${from}. `
-        + `Reading it there now; change its address in the settings to ${hit.host} to keep it there. `
-        + 'A reserved address for the printer in your router stops this happening.');
-      this.remember({ moved: { from: configured, to: hit.host, ...(hit.ippUrl ? { ippUrl: hit.ippUrl } : {}) } });
-      return await this.query(this.options);
+      const hit = await this.find(serial, this.options, from, { model: this.accessory.context.model });
+      if (!hit || this.stopped) { return { found: false }; }
+      if (hit.host === this.configured.host) {
+        // Back where the settings say
+        this.options.host = this.configured.host;
+        this.options.ippUrl = this.configured.ippUrl;
+        this.log.info(`[${this.name}] The printer is back at ${hit.host}, its address in the settings.`);
+        this.remember({ moved: undefined });
+      } else {
+        this.options.host = hit.host;
+        if (this.options.protocol !== 'snmp') { this.options.ippUrl = hit.ippUrl; }
+        this.log.warn(`[${this.name}] Found the printer (serial number ${serial}) at ${hit.host} instead of ${from}. `
+          + `Reading it there now; change its address in the settings to ${hit.host} to keep it there. `
+          + 'A reserved address for the printer in your router stops this happening.');
+        this.remember({ moved: { from: this.configured.host, to: hit.host, ...(this.options.ippUrl ? { ippUrl: this.options.ippUrl } : {}) } });
+      }
+      try {
+        return { found: true, data: await this.query(this.options) };
+      } catch {
+        return { found: true };
+      }
     } catch (err) {
       this.log.debug(`[${this.name}] Looking for the printer at another address failed: ${errorText(err)}`);
-      return undefined;
+      return { found: false };
     } finally {
       this.searching = false;
     }
