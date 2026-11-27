@@ -32,6 +32,15 @@ export function pageDetail(d: PrinterData): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
+/** "40 minutes", "18 hours", "5 days": how long the printer has been on */
+export function describeUptime(seconds: number | null | undefined): string | null {
+  if (typeof seconds !== 'number' || seconds < 0) { return null; }
+  const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (seconds < 3600) { return plural(Math.max(1, Math.round(seconds / 60)), 'minute'); }
+  if (seconds < 48 * 3600) { return plural(Math.round(seconds / 3600), 'hour'); }
+  return plural(Math.round(seconds / 86400), 'day');
+}
+
 export interface TestResult {
   model: string | null;
   serial: string | null;
@@ -57,6 +66,8 @@ export interface TestResult {
   printing: boolean;
   /** The printer's firmware as it gives it, when it does */
   firmware: string | null;
+  /** How long the printer has been on ("5 days"), when it says */
+  uptime: string | null;
   /** Read at this address, where the plugin found the printer, instead of the one in the settings */
   movedTo?: string;
 }
@@ -78,7 +89,8 @@ export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: str
     pages: d.totalPages,
     pageDetail: pageDetail(d),
     paper: d.trays?.length
-      ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`).join(', ')
+      ? d.trays.map((t) => `${t.name}${t.secondary ? ' (bypass)' : ''} ${t.percent !== null && t.state !== 'empty' ? `${t.percent}%` : TRAY_STATE[t.state]}`
+        + (t.media ? ` (${t.media})` : '')).join(', ')
       : null,
     ...usageSummary(d, cached, protocol),
     bars: [
@@ -88,6 +100,7 @@ export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: str
     problem: d.fault === true,
     printing: d.printing === true,
     firmware: d.firmware?.trim() || null,
+    uptime: describeUptime(d.uptime),
   };
 }
 

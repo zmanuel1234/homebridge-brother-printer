@@ -207,6 +207,7 @@
         ...(r.paper ? [['Paper', r.paper]] : []),
         ['Serial number', r.serial || 'unknown'],
         ...(r.firmware ? [['Firmware', r.firmware]] : []),
+        ...(r.uptime ? [['On for', r.uptime]] : []),
         ...(r.movedTo ? [['Address', `${r.movedTo}, where the plugin found it (the settings say ${printer.host})`]] : []),
         ['Read over', r.via],
       ];

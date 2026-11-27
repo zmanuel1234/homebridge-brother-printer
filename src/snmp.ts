@@ -22,16 +22,17 @@ export const OID = {
   printerStatus: '1.3.6.1.2.1.25.3.5.1.1.1', // hrPrinterStatus
   errorState: '1.3.6.1.2.1.25.3.5.1.2.1', // hrPrinterDetectedErrorState
   sysDescr: '1.3.6.1.2.1.1.1.0', // the device's own description, a fallback for the model
+  uptime: '1.3.6.1.2.1.1.3.0', // sysUpTime, hundredths of a second since the printer's network side started
 } as const;
 
 /** Printer MIB (RFC 3805): every printer's supplies, read when there are no Brother records */
 export const SUPPLIES_TABLE = '1.3.6.1.2.1.43.11.1.1'; // prtMarkerSuppliesEntry
 export const COLORANT_VALUES = '1.3.6.1.2.1.43.12.1.1.4'; // prtMarkerColorantValue
 const COLUMN = { colorant: 3, type: 5, name: 6, max: 8, level: 9 } as const;
-/** Printer MIB input table (prtInputEntry): paper trays; type 2, max capacity 9, current level 10, status 11, name 13 */
+/** Printer MIB input table (prtInputEntry): paper trays; type 2, max capacity 9, current level 10, status 11, media name 12, name 13 */
 export const INPUT_TABLE = '1.3.6.1.2.1.43.8.2.1';
 // Name and level first: without them there's nothing to show
-const TRAY_COLUMNS = [13, 10, 9, 2, 11];
+const TRAY_COLUMNS = [13, 10, 9, 2, 11, 12];
 const REQUIRED_TRAY_COLUMNS = [10, 13];
 /** prtMarkerSuppliesTypeTC as keywords (the same words IPP uses) */
 const SUPPLY_TYPES: Record<number, string> = {
@@ -143,6 +144,8 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
+  /** Seconds since the printer started, when it says */
+  uptime?: number | null;
   /** The printer's firmware version as it gives it ("01.35", "ZE2505240255"), when it does */
   firmware?: string | null;
 }
@@ -512,6 +515,7 @@ export function parse(raw: RawReadings): PrinterData {
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
     ...(decode.decodeText(raw.brFirmware) ? { firmware: decode.decodeText(raw.brFirmware) } : {}),
+    ...(typeof raw.uptime === 'number' && raw.uptime >= 0 ? { uptime: Math.round(raw.uptime / 100) } : {}),
     ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
   };
 }

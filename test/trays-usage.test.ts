@@ -198,7 +198,7 @@ test('trays: a column the printer doesn\'t answer (type, status) loses only itse
     },
   } as unknown as snmpLib.Session;
   assert.equal(show(traysFromTable((await readTrays(v1))!, INPUT_TABLE)), 'Tray 1 ok');
-  assert.equal(calls, 10, 'two requests per column, no bulk try');
+  assert.equal(calls, 12, 'two requests per column, no bulk try');
   // Nothing answers: undefined, never an error
   const none = { subtree: (_o: string, _m: number, _f: unknown, done: (err?: Error) => void) => done(new Error('timeout')) } as unknown as snmpLib.Session;
   assert.equal(await readTrays(none), undefined);

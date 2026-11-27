@@ -22,6 +22,8 @@ export interface Tray {
    * gets no sensor and no warning
    */
   secondary: boolean;
+  /** The paper type the tray is set for ("Regular", "Thin"), when the printer says */
+  media?: string;
 }
 
 /**
@@ -59,6 +61,17 @@ export interface TrayInfo {
    * tray is available; 5 is unknown
    */
   status?: number | null;
+  /** prtInputMediaName / IPP medianame: the paper type set for the tray */
+  media?: string | null;
+}
+
+/** "REGULAR" → "Regular", "plain paper" → "Plain paper"; nothing for unknown or none */
+export function mediaName(raw: string | null | undefined): string | undefined {
+  // eslint-disable-next-line no-control-regex
+  const v = (raw ?? '').replace(/[\u0000-\u001f]+/g, ' ').replace(/[_-]+/g, ' ').trim();
+  if (!v || /^(unknown|none|other|auto|-?\d+)$/i.test(v)) { return undefined; }
+  const lower = v === v.toUpperCase() ? v.toLowerCase() : v;
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /** One tray from its name, current level and capacity; null for the "auto select" entry */
@@ -84,7 +97,8 @@ export function toTray(rawName: string, level: number | null, max: number | null
   // Only what doesn't change with the paper in it: name, size, a manual-feed type. (Not the
   // status: HP marks its bypass tray "on request", and a printer may mark an empty cassette so too.)
   const secondary = SECONDARY.test(name) || capacity === 1 || info.manual === true;
-  return { name, key: keyOf(name), percent, state, capacity, secondary };
+  const media = mediaName(info.media);
+  return { name, key: keyOf(name), percent, state, capacity, secondary, ...(media ? { media } : {}) };
 }
 
 /**
@@ -100,7 +114,7 @@ function markSecondary(trays: Tray[]): Tray[] {
 
 /** Trays from walked prtInputTable values: (column, index) → value */
 export function traysFromTable(rows: { oid: string; value: unknown }[], table: string): Tray[] {
-  const byIndex = new Map<string, { name?: string; level?: number; max?: number; type?: number; status?: number }>();
+  const byIndex = new Map<string, { name?: string; level?: number; max?: number; type?: number; status?: number; media?: string }>();
   for (const { oid, value } of rows) {
     if (!oid.startsWith(`${table}.`)) { continue; }
     const [col, ...index] = oid.slice(table.length + 1).split('.');
@@ -110,6 +124,7 @@ export function traysFromTable(rows: { oid: string; value: unknown }[], table: s
     if (col === '11' && typeof value === 'number') { row.status = value; }
     if (col === '9' && typeof value === 'number') { row.max = value; }
     if (col === '10' && typeof value === 'number') { row.level = value; }
+    if (col === '12') { row.media = Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''); }
     if (col === '13') { row.name = Buffer.isBuffer(value) ? value.toString('utf8') : String(value ?? ''); }
     byIndex.set(key, row);
   }
@@ -119,7 +134,7 @@ export function traysFromTable(rows: { oid: string; value: unknown }[], table: s
     // Names may end in NULs or other control characters
     // eslint-disable-next-line no-control-regex
     .map(([, row], i) => toTray((row.name ?? '').replace(/[\u0000-\u001f]+/g, ' '), row.level ?? null, row.max ?? null, i + 1,
-      { manual: row.type === 5, status: row.status ?? null }))
+      { manual: row.type === 5, status: row.status ?? null, media: row.media }))
     .filter((t): t is Tray => t !== null));
 }
 
@@ -136,7 +151,7 @@ export function traysFromIpp(values: unknown[]): Tray[] {
     }));
     const num = (k: string): number | null => (fields[k] !== undefined && fields[k] !== '' && Number.isFinite(Number(fields[k])) ? Number(fields[k]) : null);
     return toTray(fields.name ?? '', num('level'), num('maxcapacity'), i + 1,
-      { manual: /^sheetfeedmanual$/i.test(fields.type ?? ''), status: num('status') });
+      { manual: /^sheetfeedmanual$/i.test(fields.type ?? ''), status: num('status'), media: fields.medianame });
   }).filter((t): t is Tray => t !== null));
 }
 

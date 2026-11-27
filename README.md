@@ -36,6 +36,7 @@ Each printer gets these sensors:
   level as a number on its own tile, one per color on color printers. Home counts them as
   the room's light level (or humidity); see below.
 - **Out of Paper** (optional contact sensor): Opens when a tray is empty.
+- **Output Full** (optional contact sensor): Opens while the output tray is full.
 - **Paper trays** (optional contact sensors, one per tray: "Tray 1", "Tray 2"…):
   each opens when that tray is empty. Bypass and manual trays get none.
 - **Maintenance** (optional contact sensor): Opens when the drum, belt, fuser, laser unit,
@@ -183,6 +184,7 @@ In `config.json`:
 | `lowTonerSensor` | `false` | Add a Toner Low contact sensor (Ink Low on inkjets) that opens when any supply is low, by the same rule as the battery. |
 | `faultSensor` | `true` | Add the Problem contact sensor. |
 | `paperSensor` | `false` | Add an Out of Paper contact sensor that opens when a tray is empty. The Problem sensor opens for this too; this one gets its own notification. |
+| `outputSensor` | `false` | Add an Output Full contact sensor that opens while the output tray is full (from the printer's error flag, or its display saying so). The Problem sensor opens for this too; this one gets its own notification. |
 | `paperTraySensors` | `false` | Add one contact sensor per paper tray that opens when that tray is empty (bypass and manual trays, often empty on purpose, get none). The trays are then read on every poll. |
 | `maintenanceSensor` | `false` | Add a Maintenance contact sensor that opens when the drum or another part is at or below `lowDrumThreshold`. |
 | `onlineSensor` | `false` | Add an Offline contact sensor that opens once the printer shows as offline (closed while it answers). |
@@ -279,7 +281,8 @@ of readings after a change, and a few % of drop. Pages need a week (or 30 days) 
 Printers list their paper trays (over SNMP in the Printer MIB, over IPP in
 `printer-input-tray`). When one runs out, the log names it (`Tray 2 is out of paper.`),
 and **Test connection** shows each tray: how full in % when the printer counts sheets,
-"has paper" or "empty" otherwise. With `paperTraySensors` each tray gets its own sensor.
+"has paper" or "empty" otherwise, and the paper type it's set for when the printer says
+("Tray 1 has paper (Regular)"). With `paperTraySensors` each tray gets its own sensor.
 Bypass, manual and multipurpose trays (HP's "Tray 1" among them) are listed but get no
 sensor or warning, since they're often empty on purpose.
 
