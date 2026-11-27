@@ -34,7 +34,7 @@ export function cachedUsage(storagePath: string | undefined, name: string, host:
   for (const file of files) {
     try {
       const list = JSON.parse(readFileSync(join(dir, file), 'utf8')) as {
-        platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[]; snmpAnswered?: boolean;
+        platform?: string; context?: { name?: string; host?: string; usage?: UsageSample[]; snmpAnswered?: boolean; noBulk?: boolean;
           moved?: { from?: string; to?: string; ippUrl?: string } };
       }[];
       const hit = list.find((a) => a.platform === 'BrotherPrinter' && a.context?.host === host && (a.context?.name ?? name) === name);
@@ -42,6 +42,7 @@ export function cachedUsage(storagePath: string | undefined, name: string, host:
       if (hit?.context) {
         return {
           samples: hit.context.usage ?? [], snmpAnswered: hit.context.snmpAnswered === true,
+          ...(hit.context.noBulk ? { noBulk: true } : {}),
           ...(moved?.to && moved.from === host ? { movedTo: moved.to, movedIppUrl: moved.ippUrl } : {}),
         };
       }
@@ -61,6 +62,8 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
     options.host = cached.movedTo;
     if (cached.movedIppUrl) { options.ippUrl = cached.movedIppUrl; }
   }
+  // Known not to answer bulk requests: read row by row straight away
+  if (cached?.noBulk) { options.state = { ...options.state, noBulk: true }; }
   try {
     const d = await read({ ...options, timeout: 3000, retries: 0, trays: true });
     return { ...testSummary(d, cached, options.protocol), ...(cached?.movedTo ? { movedTo: cached.movedTo } : {}) };
@@ -72,10 +75,12 @@ export async function testPrinter(entry: unknown, read = readPrinter, storagePat
 }
 
 /** The report for "Copy a report", for the settings as entered */
-export async function printerReport(entry: unknown): Promise<string> {
+export async function printerReport(entry: unknown, storagePath?: string): Promise<string> {
   const config = (entry && typeof entry === 'object' ? entry : {}) as Partial<PrinterConfig> & Record<string, unknown>;
   if (!String(config.host ?? '').trim()) { throw new Error('Enter the printer\'s IP address or hostname first.'); }
   const options = queryOptions({ ...config, name: String(config.name || 'Printer'), host: String(config.host) });
+  const cached = cachedUsage(storagePath, String(config.name || 'Printer').trim(), options.host);
+  if (cached?.noBulk) { options.state = { ...options.state, noBulk: true }; }
   return buildReport(config, options);
 }
 
@@ -99,7 +104,7 @@ export class BrotherPrinterUiServer extends HomebridgePluginUiServer {
     });
     this.onRequest('/report', async (payload: unknown) => {
       try {
-        return { text: await printerReport(payload) };
+        return { text: await printerReport(payload, this.homebridgeStoragePath) };
       } catch (err) {
         throw new RequestError(errorText(err), {});
       }

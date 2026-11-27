@@ -365,3 +365,15 @@ test('summary: levels as bars for the dashboard, toner then drum', () => {
   assert.equal(s.bars[1].percent, 92);
   assert.equal(s.problem, false);
 });
+
+test('report: a printer known to read row by row is read that way', async () => {
+  const states: unknown[] = [];
+  let bulkChecks = 0;
+  const text = await buildReport({ host: '10.0.0.1' }, { host: '10.0.0.1', version: '2c', state: { noBulk: true, version: '2c' } }, {
+    read: (o) => { states.push(o.state); return Promise.resolve(fromModel('hl-l2340dw')); },
+    bulk: () => { bulkChecks++; return Promise.resolve(false); }, walk: () => Promise.resolve([]), ipp: () => Promise.reject(new Error('no')),
+  });
+  assert.deepEqual(states, [{ noBulk: true }]);
+  assert.equal(bulkChecks, 0, 'no bulk request to wait for');
+  assert.match(text, /Answers bulk requests: no \(known from the plugin/);
+});

@@ -171,7 +171,9 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
   }, ['all']));
   const lines: string[] = [];
   const add = (...l: string[]): void => { lines.push(...l); };
-  const base: QueryOptions & { host: string } = { ...options, timeout: 3000, retries: 0, trays: true, state: {} };
+  // Keep what's known of the printer (it doesn't answer bulk requests), not the rest of the plugin's state
+  const base: QueryOptions & { host: string } = { ...options, timeout: 3000, retries: 0, trays: true,
+    state: options.state?.noBulk ? { noBulk: true } : {} };
 
   add('### Printer report', '',
     `- Plugin: homebridge-brother-printer ${version}`,
@@ -200,7 +202,9 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
     if (!ver) {
       add('#### SNMP', '', 'No answer over SNMP.', '');
     } else {
-      const bulkText = ver === '1' ? 'not used with v1' : (await bulk(base, ver)) ? 'yes' : 'no (read row by row)';
+      const bulkText = ver === '1' ? 'not used with v1'
+        : base.state?.noBulk ? 'no (known from the plugin; read row by row)'
+          : (await bulk(base, ver)) ? 'yes' : 'no (read row by row)';
       add(`#### SNMP v${ver}`, '', `Answers bulk requests: ${bulkText}`, '');
       for (const [title, oid, limit] of SNMP_SECTIONS) {
         let rows: string[];
