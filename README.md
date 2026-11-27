@@ -188,7 +188,7 @@ In `config.json`:
 | `printingSensor` | `occupancy` | How the printer's own tile shows printing: `occupancy` (Detected while printing; the room then shows as occupied) or `contact` (open while printing). Changing it gives the printer a new tile: automations on the old one need setting up again. |
 | `eveHistory` | `false` | Keep a history of the toner or ink level for the Eve app (below). Needs `tonerTile`; the tiles are then humidity sensors (unless `tileType` is set to `light`). |
 | `tonerTile` | `false` | Add sensors showing the toner or ink %, one per color on color printers. Home counts them as the room's light level (or humidity, with `tileType` set to `humidity`). |
-| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor) or `humidity` (%, needed for Eve history, but Home counts it as the room's humidity). |
+| `tileType` | `light` (`humidity` with `eveHistory`) | What the tiles are: `light` (the level in lux; few rooms have another light sensor), `humidity` (%, needed for Eve history, but Home counts it as the room's humidity) or `filter` (filter life in %, with a "change" alert while the supply is low; a trial: how Apple's Home app shows a filter on its own varies). |
 | `lowDrumThreshold` | `10` | Drum and parts % (belt, fuser, laser unit, paper feed kit, waste ink or toner box, developer, maintenance kit) at or below which a warning is logged, and the Maintenance sensor opens. |
 | `offlineAfter` | `3` | Failed polls in a row before the printer shows No Response. |
 | `debug` | `false` | Log every poll at info level. |

@@ -862,6 +862,26 @@ function defineTests(hap: Hap): void {
     assert.ok(lines.some((l) => /Eve history needs the toner \/ ink tiles shown as humidity/.test(l)));
   });
 
+  test('toner tiles as filter life (tileType filter): the level in %, and "change" while low', () => {
+    const first = setup({ tonerTile: true });
+    first.printer.apply(reading(70));
+    const { acc, printer, lines } = setup({ tonerTile: true, tileType: 'filter', eveHistory: true, lowTonerThreshold: 10 }, first.acc);
+    assert.equal(acc.getServiceById(S.LightSensor, 'tonerTile'), undefined, 'the light tile goes');
+    printer.apply(reading(70));
+    const tile = acc.getServiceById(S.FilterMaintenance, 'tonerTile');
+    assert.equal(tile?.getCharacteristic(C.FilterLifeLevel).value, 70);
+    assert.equal(tile?.getCharacteristic(C.FilterChangeIndication).value, C.FilterChangeIndication.FILTER_OK);
+    printer.apply(reading(8));
+    assert.equal(tile?.getCharacteristic(C.FilterLifeLevel).value, 8);
+    assert.equal(tile?.getCharacteristic(C.FilterChangeIndication).value, C.FilterChangeIndication.CHANGE_FILTER);
+    printer.apply(reading(90));
+    assert.equal(tile?.getCharacteristic(C.FilterChangeIndication).value, C.FilterChangeIndication.FILTER_OK, 'a new cartridge');
+    assert.ok(lines.some((l) => /Eve history needs the toner \/ ink tiles shown as humidity/.test(l)));
+    // Kept across a restart
+    const again = setup({ tonerTile: true, tileType: 'filter' }, acc);
+    assert.equal(again.printer.tiles.black, tile);
+  });
+
   test('sensor names: what they are; names from before 0.10 move over, names set in Home stay', () => {
     const first = setup({ lowTonerSensor: true, tonerTile: true, tileType: 'humidity' });
     first.printer.apply(reading(50));

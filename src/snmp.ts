@@ -14,6 +14,7 @@ export const OID = {
   statusText: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.4.5.2.0', // LCD status line
   deviceId: '1.3.6.1.4.1.2435.2.3.9.1.1.7.0', // PJL device ID (MDL:...)
   brSerial: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.1.0', // brInfoSerialNumber
+  brFirmware: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.17.0', // main firmware ("ZE2505240255", as IPP's MAIN)
   model: '1.3.6.1.2.1.25.3.2.1.3.1', // hrDeviceDescr
   serial: '1.3.6.1.2.1.43.5.1.1.17.1', // prtGeneralSerialNumber
   charset: '1.3.6.1.2.1.43.7.1.1.4.1.1', // prtLocalizationCharacterSet
@@ -102,7 +103,7 @@ export interface QueryOptions {
   /** Needed for version '3' */
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
-  state?: { version?: SnmpVersion; suppliesRead?: boolean; noBulk?: boolean };
+  state?: { version?: SnmpVersion; suppliesRead?: boolean; noBulk?: boolean; missing?: OidName[] };
   /**
    * Read the paper trays on every poll (for tray sensors and the settings test).
    * Without it they're read only while the printer reports paper low or out, to say which tray.
@@ -142,7 +143,7 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
-  /** The printer's firmware version as it gives it over IPP ("01.35", "SWP1FN1514BR"), when it does */
+  /** The printer's firmware version as it gives it ("01.35", "ZE2505240255"), when it does */
   firmware?: string | null;
 }
 
@@ -364,7 +365,9 @@ export function openSession(options: QueryOptions, version: SnmpVersion): snmp.S
 async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawReadings> {
   const session = openSession(options, version);
 
-  const names = [...NAMES];
+  // Values an SNMP v1 printer said it doesn't have aren't asked for again (each costs a request)
+  const missing = new Set(options.state?.missing ?? []);
+  const names = NAMES.filter((n) => !missing.has(n));
   const raw: RawReadings = {};
   try {
     while (names.length) {
@@ -390,6 +393,7 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         const idx = missing ? names.findIndex((n) => OID[n] === missing[1]) : -1;
         if (idx < 0) { throw err; }
         raw[names[idx]] = null;
+        (options.state ||= {}).missing = [...(options.state.missing ?? []), names[idx]];
         names.splice(idx, 1);
       }
     }
@@ -507,6 +511,7 @@ export function parse(raw: RawReadings): PrinterData {
     drumPagesRemaining: black.pagesRemaining ?? null,
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
+    ...(decode.decodeText(raw.brFirmware) ? { firmware: decode.decodeText(raw.brFirmware) } : {}),
     ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
   };
 }
