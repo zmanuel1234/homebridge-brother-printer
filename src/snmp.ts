@@ -14,6 +14,7 @@ export const OID = {
   statusText: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.4.5.2.0', // LCD status line
   deviceId: '1.3.6.1.4.1.2435.2.3.9.1.1.7.0', // PJL device ID (MDL:...)
   brSerial: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.1.0', // brInfoSerialNumber
+  brFirmware: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.17.0', // main firmware ("ZE2505240255", as IPP's MAIN)
   model: '1.3.6.1.2.1.25.3.2.1.3.1', // hrDeviceDescr
   serial: '1.3.6.1.2.1.43.5.1.1.17.1', // prtGeneralSerialNumber
   charset: '1.3.6.1.2.1.43.7.1.1.4.1.1', // prtLocalizationCharacterSet
@@ -142,7 +143,7 @@ export interface PrinterData extends StatusSummary {
   suppliesUnread?: boolean;
   /** Paper trays, when read; undefined when not read this time */
   trays?: Tray[];
-  /** The printer's firmware version as it gives it over IPP ("01.35", "SWP1FN1514BR"), when it does */
+  /** The printer's firmware version as it gives it ("01.35", "ZE2505240255"), when it does */
   firmware?: string | null;
 }
 
@@ -507,6 +508,7 @@ export function parse(raw: RawReadings): PrinterData {
     drumPagesRemaining: black.pagesRemaining ?? null,
     unknown: maint.unknown,
     ...(raw.suppliesUnread ? { suppliesUnread: true } : {}),
+    ...(decode.decodeText(raw.brFirmware) ? { firmware: decode.decodeText(raw.brFirmware) } : {}),
     ...(raw.trays ? { trays: traysFromTable(raw.trays, INPUT_TABLE) } : {}),
   };
 }

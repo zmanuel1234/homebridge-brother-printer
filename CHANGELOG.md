@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `tileType: filter` (a trial): the toner / ink tiles as filter life, the level in % with a
+  "change" alert while the supply is low, instead of lux or the room's humidity. Apple's Home
+  app shows the toner level nowhere else (it doesn't show the battery's level for this
+  accessory).
+- Test connection shows the printer's firmware; over SNMP, Brother's main firmware
+  ("ZE2505240255"). Home's Firmware row still shows the plugin's version unless the printer's
+  is a number like 1.14, which HomeKit needs.
+
 ## 0.12.0-beta.2 - 2026-11-27
 
 ### Changed

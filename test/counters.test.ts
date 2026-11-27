@@ -98,3 +98,11 @@ test('IPP: a black-and-white printer\'s "0 color" gives no breakdown', () => {
   assert.equal(d.colorPages, null);
   assert.equal(pageDetail(d), null);
 });
+
+test('SNMP (Brother): the main firmware, shown in Test connection', () => {
+  const raw = { ...models['hl-l2340dw'].raw, brFirmware: Buffer.from('ZE2505240255') };
+  const d = { ...snmp.parse(raw), snmpVersion: '2c' as const };
+  assert.equal(d.firmware, 'ZE2505240255');
+  assert.equal(testSummary(d).firmware, 'ZE2505240255');
+  assert.equal(snmp.parse(models['hl-l2340dw'].raw).firmware, undefined, 'none without it');
+});

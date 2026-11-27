@@ -55,6 +55,8 @@ export interface TestResult {
   problem: boolean;
   /** Printing now */
   printing: boolean;
+  /** The printer's firmware as it gives it, when it does */
+  firmware: string | null;
   /** Read at this address, where the plugin found the printer, instead of the one in the settings */
   movedTo?: string;
 }
@@ -85,6 +87,7 @@ export function testSummary(d: QueryResult, cached?: CachedUsage, protocol?: str
     ],
     problem: d.fault === true,
     printing: d.printing === true,
+    firmware: d.firmware?.trim() || null,
   };
 }
 
