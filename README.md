@@ -4,8 +4,11 @@
 
 # homebridge-brother-printer
 
-[![npm](https://badgen.net/npm/v/homebridge-brother-printer)](https://www.npmjs.com/package/homebridge-brother-printer)
-[![license](https://badgen.net/github/license/zmanuel1234/homebridge-brother-printer)](LICENSE)
+[![npm](https://img.shields.io/npm/v/homebridge-brother-printer)](https://www.npmjs.com/package/homebridge-brother-printer)
+[![npm downloads](https://img.shields.io/npm/dt/homebridge-brother-printer)](https://www.npmjs.com/package/homebridge-brother-printer)
+[![verified-by-homebridge](https://img.shields.io/badge/homebridge-verified-491F59?logo=homebridge&logoColor=white)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
+[![CI](https://github.com/zmanuel1234/homebridge-brother-printer/actions/workflows/ci.yml/badge.svg)](https://github.com/zmanuel1234/homebridge-brother-printer/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/zmanuel1234/homebridge-brother-printer)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-zmanuel1234-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/zmanuel1234)
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-zmanuel-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/zmanuel)
 
