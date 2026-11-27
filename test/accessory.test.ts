@@ -921,6 +921,16 @@ function defineTests(hap: Hap): void {
     assert.equal(first.acc.context.previousName, undefined, 'not needed any more');
   });
 
+  test('a printer read row by row is remembered across restarts', () => {
+    const first = setup({});
+    assert.equal(first.printer.options.state!.noBulk, undefined);
+    first.printer.options.state!.noBulk = true; // learnt during a poll
+    first.printer.apply(reading(50));
+    assert.equal(first.acc.context.noBulk, true);
+    const again = setup({}, first.acc);
+    assert.equal(again.printer.options.state!.noBulk, true, 'no bulk try after the restart');
+  });
+
   test('an inkjet\'s Toner Low sensor becomes Ink Low', () => {
     const { acc, printer } = setup({ lowTonerSensor: true });
     printer.apply(reading(50));

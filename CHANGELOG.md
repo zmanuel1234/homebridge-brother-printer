@@ -7,7 +7,8 @@
   Brother's MFC-L2750DW: they answer the same table one row at a time, so a bulk walk that
   gets no answer is tried again row by row, and that printer is then read row by row. This
   was the real reason its trays didn't show in 0.10.0-beta.1 (not the tray columns). The
-  supplies table of other makes is read the same way.
+  supplies table of other makes is read the same way. The first poll waits one SNMP timeout
+  for the bulk try; after that (restarts included) such a printer is read row by row at once.
 
 ## 0.10.0-beta.1 - 2026-11-26
 

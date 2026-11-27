@@ -192,7 +192,8 @@ export function v3User(v3: V3User | undefined): snmp.User {
  */
 export async function subtree(session: snmp.Session, oid: string, limit: number,
   state: NonNullable<QueryOptions['state']> = {}): Promise<snmp.Varbind[]> {
-  if (state.noBulk) { return nextWalk(session, oid, limit); }
+  // v1 has no bulk requests (net-snmp walks it row by row anyway)
+  if (state.noBulk || (session as unknown as { version?: number }).version === snmp.Version1) { return nextWalk(session, oid, limit); }
   try {
     return await bulkWalk(session, oid, limit);
   } catch (err) {
@@ -230,7 +231,8 @@ async function nextWalk(session: snmp.Session, oid: string, limit: number): Prom
       if (/NoSuchName/i.test((err as Error)?.message ?? '')) { break; }
       throw err;
     }
-    if (!vb || snmp.isVarbindError(vb) || !vb.oid.startsWith(`${oid}.`)) { break; }
+    // The column's end, or an agent that doesn't move on (same OID again)
+    if (!vb || snmp.isVarbindError(vb) || !vb.oid.startsWith(`${oid}.`) || vb.oid === at) { break; }
     out.push(vb);
     at = vb.oid;
   }
