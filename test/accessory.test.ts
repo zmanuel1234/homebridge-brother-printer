@@ -865,8 +865,10 @@ function defineTests(hap: Hap): void {
   test('toner tiles: a filter-life tile from 0.12.0-beta.3 becomes a light tile', () => {
     const first = setup({ tonerTile: true });
     first.acc.addService(S.FilterMaintenance, 'Toner', 'tonerTile');
-    const { acc, printer } = setup({ tonerTile: true, tileType: 'filter' }, first.acc);
+    const lines: string[] = [];
+    const { acc, printer } = setup({ tonerTile: true, tileType: 'filter' }, first.acc, lines);
     assert.equal(acc.getServiceById(S.FilterMaintenance, 'tonerTile'), undefined, 'the filter tile goes');
+    assert.ok(lines.some((l) => l.includes('"Show the tiles as: Filter life" is no longer offered')), lines.join('\n'));
     printer.apply(reading(70));
     assert.equal(acc.getServiceById(S.LightSensor, 'tonerTile')?.getCharacteristic(C.CurrentAmbientLightLevel).value, 70);
   });

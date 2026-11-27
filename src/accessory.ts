@@ -347,7 +347,11 @@ export class PrinterAccessory {
     // Light by default: Home counts humidity tiles as the room's humidity. Eve history needs
     // humidity, so with it on and no tileType set, the tiles stay humidity sensors.
     const tileType = String(config.tileType ?? '').trim().toLowerCase();
-    // (0.12.0-beta.3 tried filter-life tiles: Apple's Home app doesn't show those; they're light now)
+    // 0.12.0-beta.3 tried filter-life tiles; Apple's Home app doesn't show those, so they're light now
+    if (tileType === 'filter' && config.tonerTile === true) {
+      platform.log.info(`[${config.name}] "Show the tiles as: Filter life" is no longer offered (the Home app doesn't `
+        + 'show it); the tiles are light sensors. Choose light or humidity in the settings to stop this note.');
+    }
     this.tileType = tileType === 'humidity' || (!tileType && config.eveHistory === true) ? 'humidity' : 'light';
     this.printingSensor = String(config.printingSensor ?? '').trim().toLowerCase() === 'contact' ? 'contact' : 'occupancy';
     this.prefixNames = deps.prefixNames === true;

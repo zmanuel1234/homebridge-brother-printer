@@ -91,6 +91,18 @@
     if ([...select.options].some((o) => o.value === previous)) { select.value = previous; }
   }
 
+  // "Filter life" tiles (tried in 0.12.0-beta.3) are no longer offered: the form would show an
+  // empty choice for them. Set light, which the plugin uses for them now, for the user to save.
+  {
+    const blocks = await platformConfig();
+    const tried = blocks[0].printers.filter((p) => p && p.tileType === 'filter');
+    if (tried.length) {
+      tried.forEach((p) => { p.tileType = 'light'; });
+      await homebridge.updatePluginConfig(blocks);
+      homebridge.toast.info('"Show the tiles as: Filter life" is no longer offered; it\'s back to light sensors. '
+        + 'Click Save to keep that.', 'Brother Printer');
+    }
+  }
   homebridge.showSchemaForm();
   // Changes in the form below (a new printer, a new address) update the list right away
   homebridge.addEventListener('configChanged', () => { refreshPrinterList().catch(() => {}); });
