@@ -202,7 +202,9 @@ export async function buildReport(entry: Record<string, unknown>, options: Query
     if (!ver) {
       add('#### SNMP', '', 'No answer over SNMP.', '');
     } else {
-      const bulkText = ver === '1' ? 'not used with v1' : (await bulk(base, ver)) ? 'yes' : 'no (read row by row)';
+      const bulkText = ver === '1' ? 'not used with v1'
+        : base.state?.noBulk ? 'no (known from the plugin; read row by row)'
+          : (await bulk(base, ver)) ? 'yes' : 'no (read row by row)';
       add(`#### SNMP v${ver}`, '', `Answers bulk requests: ${bulkText}`, '');
       for (const [title, oid, limit] of SNMP_SECTIONS) {
         let rows: string[];
