@@ -1,0 +1,122 @@
+# Shared by homebridge-brother-printer, homebridge-comelit-doorbell, homebridge-ir-patio-heater,
+# homebridge-lg-thinq-connect, homebridge-ring-secure-video and matterbridge-wyze-robovac-plus: the same
+# file in all six. System packages a repository's tests need (ffmpeg for the camera plugins) are
+# listed in its .github/apt-packages, one per line, and installed only where that file exists. What a
+# repository checks is in its package.json: "verify" (everything, on Node 24) and "test:matrix"
+# (the tests, on every supported Node version).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays: catches breakage from new releases of what the plugins use
+
+# CI only reads the repository.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Downloaded system packages from earlier runs (cache)
+        if: hashFiles('.github/apt-packages') != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives/*.deb
+          key: apt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/apt-packages') }}-${{ github.run_id }}
+          restore-keys: apt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/apt-packages') }}-
+      - name: System packages this repository's tests need (.github/apt-packages)
+        id: apt
+        if: hashFiles('.github/apt-packages') != ''
+        # A slow mirror can take minutes when nothing is cached (.github/scripts/apt-install.sh)
+        timeout-minutes: 25
+        run: .github/scripts/apt-install.sh
+      - name: Save newly downloaded system packages (cache)
+        if: steps.apt.outputs.downloaded == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives/*.deb
+          key: apt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/apt-packages') }}-${{ github.run_id }}
+      - run: npm ci
+      - name: Every installed package is signed by the npm registry
+        # npm's registry sometimes answers a signature lookup with a bare "OK" instead of JSON
+        # ("invalid json response body"); for oxlint's platform packages, some of its servers keep
+        # doing so for many minutes. Only such a failed lookup is retried, up to 6 times over about
+        # 8 minutes (15 s, 30 s, 1, 2, 4 min); a missing or bad signature fails at once. If every
+        # failure is still such a lookup, and only for development-only packages (never published
+        # with the plugin; npm ci has already checked their contents against package-lock.json),
+        # the plugin's own dependencies are checked in full and the step passes with a warning.
+        run: |
+          network='FETCH_ERROR|invalid json response body|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up'
+          for try in 1 2 3 4 5 6; do
+            out="$(npm audit signatures 2>&1)" && { echo "$out"; exit 0; }
+            echo "$out"
+            grep -qE "$network" <<<"$out" || exit 1
+            if [ "$try" -lt 6 ]; then
+              wait=$((15 * 2 ** (try - 1)))
+              echo "::warning::npm's registry didn't answer a signature lookup properly (try $try of 6); retrying in $wait s"
+              sleep "$wait"
+            fi
+          done
+          # Still failing: which packages couldn't be looked up, and are they all development-only?
+          failed="$(grep -oE 'registry\.npmjs\.org/-/npm/v1/attestations/[^ ]+' <<<"$out" | sed -E 's#.*/attestations/##; s#%2[fF]#/#g; s#@[^@]+$##' | sort -u)"
+          [ -n "$failed" ] || exit 1
+          node -e '
+            const lock = require("./package-lock.json");
+            const runtime = process.argv.slice(1).filter((n) => lock.packages[`node_modules/${n}`]?.dev !== true);
+            if (runtime.length) { console.log(`Not development-only: ${runtime.join(", ")}`); process.exit(1); }
+          ' $failed || exit 1
+          # The plugin's own dependencies, if it has any (npm refuses to check an empty list).
+          if node -e 'const l = require("./package-lock.json"); process.exit(Object.entries(l.packages).some(([k, p]) => k && p.dev !== true) ? 0 : 1)'; then
+            npm audit signatures --omit=dev || exit 1
+          fi
+          echo "::warning::npm's registry kept failing to answer for development-only package(s) $(echo $failed | tr ' ' ','); the plugin's own dependencies were checked in full"
+      - name: This repository's checks (package.json "verify")
+        run: npm run verify
+        env:
+          REQUIRE_FFMPEG: '1'   # tests that use ffmpeg fail, not skip, without it; others ignore it
+      - name: The package
+        run: npm pack --dry-run --ignore-scripts
+      - name: The release tag check works for this version
+        run: .github/scripts/check-release-tag.sh "v$(node -p "require('./package.json').version")"
+
+  # Every Node version the plugins support, one after another in a single check. Not a required
+  # check. Each version runs even if an earlier one failed; the check fails if any of them did.
+  node-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Node 22 (package.json "test:matrix")
+        run: npm ci && npm run test:matrix
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ !cancelled() }}
+        with:
+          node-version: 24
+      - name: Node 24 (package.json "test:matrix")
+        if: ${{ !cancelled() }}
+        run: npm ci && npm run test:matrix
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ !cancelled() }}
+        with:
+          node-version: 26
+      - name: Node 26 (package.json "test:matrix")
+        if: ${{ !cancelled() }}
+        run: npm ci && npm run test:matrix
