@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.1 - 2026-11-27
+
+No change to how printers are read.
+
+### Changed
+- The README, the settings form's example address, the issue template and the probe tool's
+  examples use a generic address (192.168.1.50) instead of a real one.
+- A setting written as a list or object in config.json (a hand-editing slip) is now treated as
+  empty, instead of being read as "[object Object]". Ordinary settings work as before.
+- Development only: CI caches the packages it installs; a GitHub release without notes takes
+  them from this changelog; the linter checks for values that would show as "[object Object]"
+  (no-base-to-string), as in the other plugins.
+
 ## 0.12.0 - 2026-11-27
 
 The betas (0.12.0-beta.1 to beta.4) were tested on an MFC-L2750DW in Apple's Home app; the
