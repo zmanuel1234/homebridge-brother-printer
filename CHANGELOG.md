@@ -9,21 +9,10 @@
   the log when the printer connects, Test connection and the dashboards
   ("4,944 pages (1,634 two-sided)"). Page counts are shown with thousands separators.
 
-## 0.11.0-beta.2 - 2026-11-27
+## 0.11.0 - 2026-11-27
 
-### Fixed
-- Settings screen: the Dashboard port showed as a slider that started at 1024; it's a number
-  box again, empty for off. Dashboard names get an "Add name" button.
-- Settings screen: descriptions showed "http://:/" and "ipp://:631/ipp/print", since the
-  form drops text in angle brackets.
-- Test connection and Copy a report read a printer known not to answer bulk SNMP requests
-  (the MFC-L2750DW) row by row straight away, instead of waiting for a bulk request to time
-  out first (about 3 seconds).
-
-## 0.11.0-beta.1 - 2026-11-27
-
-A pre-release for testing on real printers: Bonjour search and finding a printer at a new
-address have only been tested against simulated networks so far.
+Tested as 0.11.0-beta.1 and beta.2 on an MFC-L2750DW: the Bonjour search, the report and both
+dashboards.
 
 ### Added
 - **Bonjour search**: the settings screen's search also asks for printers by Bonjour (as
@@ -55,6 +44,13 @@ address have only been tested against simulated networks so far.
   (never while the settings name another serial number), or at once when its serial number
   is in the settings.
 - The package description, keywords and settings header now say any make, over SNMP or IPP.
+
+### Fixed
+- Settings screen: the IPP address description showed "ipp://:631/ipp/print", since the
+  form drops text in angle brackets.
+- Test connection reads a printer known not to answer bulk SNMP requests (the MFC-L2750DW)
+  row by row straight away, instead of waiting for a bulk request to time out first (about
+  3 seconds).
 
 ## 0.10.0 - 2026-11-26
 
