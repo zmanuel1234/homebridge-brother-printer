@@ -78,3 +78,23 @@ test('black-and-white pages are the total less color ones when not given', () =>
 test('Test connection and the dashboards get the breakdown', () => {
   assert.equal(testSummary(fromModel('dcp-t735dw')).pageDetail, '279 black-and-white, 1,031 color, 734 two-sided');
 });
+
+test('IPP: two-sided impressions counted apart from the one-sided ones are added in (the total says so)', () => {
+  const a = { 'printer-impressions-completed': [1500], 'printer-impressions-completed-col.monochrome': [900],
+    'printer-impressions-completed-col.full-color': [280], 'printer-impressions-completed-col.monochrome-two-sided': [300],
+    'printer-impressions-completed-col.full-color-two-sided': [20] };
+  assert.deepEqual(countsByKind(a), { colorPages: 300, monoPages: 1200, duplexPages: 320 });
+});
+
+test('IPP: a black-and-white printer\'s "0 color" gives no breakdown', () => {
+  const buf = response(
+    value(0x21, 'printer-impressions-completed', int(50)),
+    value(0x34, 'printer-impressions-completed-col', Buffer.alloc(0)), ...member('monochrome', 50), ...member('full-color', 0),
+    value(0x37, '', Buffer.alloc(0)),
+    value(0x42, 'marker-names', Buffer.from('Black')), value(0x44, 'marker-types', Buffer.from('toner')),
+    value(0x42, 'marker-colors', Buffer.from('#000000')), value(0x21, 'marker-levels', int(60)), value(0x21, 'marker-high-levels', int(100)),
+  );
+  const d = toPrinterData(parseResponse(buf).printer);
+  assert.equal(d.colorPages, null);
+  assert.equal(pageDetail(d), null);
+});

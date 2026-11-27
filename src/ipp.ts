@@ -256,7 +256,7 @@ export function toPrinterData(a: IppAttributes): PrinterData {
     drums,
     parts,
     totalPages: num('printer-impressions-completed', 0),
-    ...countsByKind(a),
+    ...countsFor(countsByKind(a), supplies),
     tonerPercent: supplies.find((s) => s.color === 'black')?.level ?? null,
     tonerPercentFine: null,
     drumPercent: black.percent ?? null,
@@ -273,20 +273,36 @@ export function toPrinterData(a: IppAttributes): PrinterData {
  * (PWG 5100.11: members such as monochrome, full-color, monochrome-two-sided,
  * full-color-two-sided); null for each the printer doesn't give.
  */
+/** A black-and-white printer's "0 color" says nothing: no breakdown, the total says it */
+function countsFor(c: ReturnType<typeof countsByKind>, supplies: { color: string }[]): ReturnType<typeof countsByKind> {
+  const colorPrinter = supplies.some((s) => s.color !== 'black');
+  return c.colorPages === 0 && !colorPrinter ? { ...c, colorPages: null, monoPages: null } : c;
+}
+
 export function countsByKind(a: IppAttributes): { colorPages: number | null; monoPages: number | null; duplexPages: number | null } {
   const prefix = 'printer-impressions-completed-col.';
   const members = Object.fromEntries(Object.entries(a)
     .filter(([k, v]) => k.startsWith(prefix) && typeof v[0] === 'number' && (v[0] as number) >= 0)
     .map(([k, v]) => [k.slice(prefix.length), v[0] as number]));
-  const sum = (keys: string[]): number | null => {
-    const have = keys.filter((k) => k in members);
-    return have.length ? have.reduce((t, k) => t + members[k], 0) : null;
-  };
-  return {
-    colorPages: sum(['full-color', 'highlight-color']),
-    monoPages: sum(['monochrome']),
-    duplexPages: sum(['monochrome-two-sided', 'full-color-two-sided', 'highlight-color-two-sided', 'blank-two-sided']),
-  };
+  const get = (k: string): number | null => (k in members ? members[k] : null);
+  const sum = (values: (number | null)[]): number | null =>
+    (values.some((v) => v !== null) ? values.reduce<number>((t, v) => t + (v ?? 0), 0) : null);
+  const two = { mono: get('monochrome-two-sided'), color: get('full-color-two-sided'), highlight: get('highlight-color-two-sided') };
+  const duplexPages = sum([two.mono, two.color, two.highlight, get('blank-two-sided')]);
+  let mono = get('monochrome');
+  let color = get('full-color');
+  let highlight = get('highlight-color');
+  // Whether "monochrome" and "full-color" already include their two-sided impressions isn't
+  // spelled out; the total settles it. When they add up to it only with the two-sided ones,
+  // they were counted apart: add them in.
+  const total = typeof a['printer-impressions-completed']?.[0] === 'number' ? a['printer-impressions-completed'][0] as number : null;
+  const one = sum([mono, color, highlight, get('blank')]);
+  if (total !== null && one !== null && duplexPages && one !== total && one + duplexPages === total) {
+    mono = mono !== null ? mono + (two.mono ?? 0) : null;
+    color = color !== null ? color + (two.color ?? 0) : null;
+    highlight = highlight !== null ? highlight + (two.highlight ?? 0) : null;
+  }
+  return { colorPages: sum([color, highlight]), monoPages: mono, duplexPages };
 }
 
 /* ---------------------------------------------------------------- request */

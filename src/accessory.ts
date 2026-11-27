@@ -921,7 +921,7 @@ export class PrinterAccessory {
         : `no ${kind} levels reported`;
       const drum = d.drumPercent !== null ? `, drum ${d.drumPercent}%` : '';
       this.log.info(`[${this.name}] Connected to ${d.model || 'printer'} (${readVia(d)}): ${levels}${drum}, `
-        + `${d.totalPages ?? '?'} pages${pageDetail(d) ? ` (${pageDetail(d)})` : ''}, status "${d.statusText || 'unknown'}".`);
+        + `${d.totalPages?.toLocaleString('en-US') ?? '?'} pages${pageDetail(d) ? ` (${pageDetail(d)})` : ''}, status "${d.statusText || 'unknown'}".`);
       this.last.summary = true;
     }
   }

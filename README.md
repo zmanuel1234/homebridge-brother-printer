@@ -222,7 +222,7 @@ words them its own way:
 - The page count is a custom characteristic, visible in Eve, Controller and the Homebridge
   UI, not in Apple Home. Printers that count them also get **Color Pages**,
   **Black-and-White Pages** and **Two-Sided Pages** beside it (a black-and-white printer
-  gets no black-and-white count: that's the total). The same counts are in the log when
+  gets no color or black-and-white count: the total says it). The same counts are in the log when
   the printer connects, in **Test connection** and on the dashboards.
 
 ## Eve history
