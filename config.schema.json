@@ -202,6 +202,16 @@
               ],
               "description": "The printer's own tile. Changing it gives the printer a new tile in Home: automations on the old one need setting up again."
             },
+            "sensorNames": {
+              "title": "Sensor names",
+              "type": "string",
+              "default": "prefixed",
+              "oneOf": [
+                { "title": "With the printer's name (Printer Problem, Printer Toner Low)", "enum": ["prefixed"] },
+                { "title": "Just what they are (Problem, Toner Low)", "enum": ["plain"] }
+              ],
+              "description": "Names you set in the Home app stay. With several printers, names always start with the printer's name."
+            },
             "maintenanceSensor": {
               "title": "Maintenance sensor",
               "type": "boolean",
@@ -298,7 +308,8 @@
                 "printers[].paperTraySensors",
                 "printers[].maintenanceSensor",
                 "printers[].onlineSensor",
-                "printers[].printingSensor"
+                "printers[].printingSensor",
+                "printers[].sensorNames"
               ]
             },
             {

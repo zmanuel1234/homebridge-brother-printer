@@ -174,9 +174,11 @@ export class BrotherPrinterPlatform implements DynamicPlatformPlugin {
       accessory.context.host = e.host;
 
       try {
-        // With several printers, their sensors' names start with the printer's name
+        // Sensors' names start with the printer's name ("Printer Problem"), unless set to plain
+        // ("Problem"); with several printers always, so they can be told apart
+        const plain = String(e.raw.sensorNames ?? '').trim().toLowerCase() === 'plain';
         this.printers.push(new PrinterAccessory(this, accessory, { ...e.raw, host: e.host, name: e.name },
-          { prefixNames: entries.length > 1 }));
+          { prefixNames: !plain || entries.length > 1 }));
       } catch (err) {
         const msg = (err as { message?: string } | null)?.message || String(err);
         this.log.error(`[${e.name}] Couldn't set up this printer: ${msg}`);
