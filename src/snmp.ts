@@ -102,7 +102,7 @@ export interface QueryOptions {
   /** Needed for version '3' */
   v3?: V3User;
   /** Remembers which SNMP version worked, across polls */
-  state?: { version?: SnmpVersion; suppliesRead?: boolean };
+  state?: { version?: SnmpVersion; suppliesRead?: boolean; noBulk?: boolean };
   /**
    * Read the paper trays on every poll (for tray sensors and the settings test).
    * Without it they're read only while the printer reports paper low or out, to say which tray.
@@ -184,7 +184,28 @@ export function v3User(v3: V3User | undefined): snmp.User {
 }
 
 /** All values under an OID (GETBULK on v2c/v3, GETNEXT on v1), up to a limit */
-function subtree(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+/**
+ * Walk a table column. With v2c and v3, net-snmp asks for many rows at once (GETBULK);
+ * some printers never answer that (Brother's MFC-L2750DW), though they answer one row at
+ * a time. So a bulk walk that times out is tried again row by row, and once that works,
+ * the printer is read row by row from then on (state.noBulk).
+ */
+export async function subtree(session: snmp.Session, oid: string, limit: number,
+  state: NonNullable<QueryOptions['state']> = {}): Promise<snmp.Varbind[]> {
+  if (state.noBulk) { return nextWalk(session, oid, limit); }
+  try {
+    return await bulkWalk(session, oid, limit);
+  } catch (err) {
+    if (!isTimeout(err)) { throw err; }
+    const rows = await nextWalk(session, oid, limit);
+    state.noBulk = true;
+    return rows;
+  }
+}
+
+const isTimeout = (err: unknown): boolean => /time(d)? ?out/i.test((err as Error)?.message ?? '');
+
+function bulkWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     const out: snmp.Varbind[] = [];
     session.subtree(oid, 20, (varbinds) => {
@@ -192,6 +213,28 @@ function subtree(session: snmp.Session, oid: string, limit: number): Promise<snm
       return out.length >= limit; // true stops the walk
     }, (err) => (err ? reject(err) : resolve(out)));
   });
+}
+
+/** Row by row (GETNEXT), until the column ends or `limit` rows */
+async function nextWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+  const out: snmp.Varbind[] = [];
+  let at = oid;
+  while (out.length < limit) {
+    let vb: snmp.Varbind | undefined;
+    try {
+      vb = (await new Promise<snmp.Varbind[]>((resolve, reject) => {
+        session.getNext([at], (err, varbinds) => (err ? reject(err) : resolve(varbinds ?? [])));
+      }))[0];
+    } catch (err) {
+      // v1 ends a walk with noSuchName
+      if (/NoSuchName/i.test((err as Error)?.message ?? '')) { break; }
+      throw err;
+    }
+    if (!vb || snmp.isVarbindError(vb) || !vb.oid.startsWith(`${oid}.`)) { break; }
+    out.push(vb);
+    at = vb.oid;
+  }
+  return out;
 }
 
 const clean = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8') : v === null || v === undefined ? '' : String(v))
@@ -254,12 +297,12 @@ export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], co
 export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[] | null> {
   try {
     const rows: snmp.Varbind[] = [];
-    for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS)); }
+    for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS, state)); }
     const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
     // Colors may come only from here (supplies named by part number), so once supplies have been
     // read a failure counts like the walk's; before that, carry on without the colorant names
     const colorants = !wantsColorant ? []
-      : await subtree(session, COLORANT_VALUES, MAX_ROWS).catch((err: unknown) => { if (state.suppliesRead) { throw err; } return []; });
+      : await subtree(session, COLORANT_VALUES, MAX_ROWS, state).catch((err: unknown) => { if (state.suppliesRead) { throw err; } return []; });
     const markers = suppliesFromVarbinds(rows.map((vb) => ({ oid: vb.oid, value: vb.value })),
       colorants.map((vb) => ({ oid: vb.oid, value: vb.value })), charset).slice(0, MAX_ROWS);
     if (markers.length) { state.suppliesRead = true; }
@@ -275,13 +318,13 @@ export async function readSupplies(session: snmp.Session, charset: number | null
  * or the levels there's nothing reliable to show, and a timeout stops the read (rather
  * than waiting on every column): both give undefined. Never fails the poll.
  */
-export async function readTrays(session: snmp.Session): Promise<{ oid: string; value: unknown }[] | undefined> {
+export async function readTrays(session: snmp.Session, state: NonNullable<QueryOptions['state']> = {}): Promise<{ oid: string; value: unknown }[] | undefined> {
   const rows: { oid: string; value: unknown }[] = [];
   for (const col of TRAY_COLUMNS) {
     try {
-      rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32)).map((vb) => ({ oid: vb.oid, value: vb.value })));
+      rows.push(...(await subtree(session, `${INPUT_TABLE}.${col}`, 32, state)).map((vb) => ({ oid: vb.oid, value: vb.value })));
     } catch (err) {
-      if (REQUIRED_TRAY_COLUMNS.includes(col) || /time(d)? ?out/i.test((err as Error)?.message ?? '')) { return undefined; }
+      if (REQUIRED_TRAY_COLUMNS.includes(col) || isTimeout(err)) { return undefined; }
     }
   }
   return rows;
@@ -329,7 +372,7 @@ async function getAll(options: QueryOptions, version: SnmpVersion): Promise<RawR
         }
         // Paper trays: when asked, or to say which tray is empty or low
         const paper = decode.decodeErrorState(raw.errorState).some((e) => e === 'noPaper' || e === 'lowPaper' || e === 'inputTrayEmpty');
-        if (options.trays || paper) { raw.trays = await readTrays(session); }
+        if (options.trays || paper) { raw.trays = await readTrays(session, options.state ||= {}); }
         return raw;
       } catch (err) {
         const e = err as Error | null;
