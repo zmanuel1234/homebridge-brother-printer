@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Sensor names start with the printer's name again** ("Printer Problem", "Printer Toner
+  Low", "Printer Tray 1"), which reads better on its own in Home than "Problem". Sensors
+  named by 0.10 or 0.11 are renamed; names you set in the Home app stay. Automations and
+  notifications are unaffected (the sensors are the same). Keep the printer's name short:
+  Home cuts long tile names.
+
+### Added
+- `sensorNames`: `plain` for the names without the printer's name ("Problem", "Toner Low"),
+  as in 0.10 and 0.11; with several printers they're always prefixed.
+
 ## 0.12.0-beta.1 - 2026-11-27
 
 ### Added
