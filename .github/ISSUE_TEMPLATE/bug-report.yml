@@ -1,45 +1,62 @@
 name: Bug report
-description: Something in the plugin doesn't work as described.
-title: "[Bug] "
-labels: ["bug"]
+description: Something doesn't work as the README describes.
+labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please **never paste your SNMP **community string** (if it isn't `public`) or SNMPv3 passwords**: replace them with `xxx` in anything you paste or attach.
   - type: textarea
     id: what
     attributes:
-      label: What happened, and what you expected
-    validations:
-      required: true
-  - type: input
-    id: model
-    attributes:
-      label: Printer model
-      placeholder: MFC-L2750DW
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: Plugin version
-      placeholder: 0.6.0
-    validations:
-      required: true
-  - type: input
-    id: homebridge
-    attributes:
-      label: Homebridge and Node.js versions
-      description: Shown on the Homebridge UI's status page.
-      placeholder: Homebridge 2.5.0, Node.js 24.11.0
+      label: What happened, and what did you expect?
     validations:
       required: true
   - type: textarea
-    id: config
+    id: steps
     attributes:
-      label: Your printer's settings
-      description: The printer's entry from `config.json`. Remove the community string and any SNMPv3 passwords.
+      label: How to make it happen
+      description: What you did, step by step, and whether it happens every time.
+      placeholder: |
+        1. ...
+        2. ...
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: This plugin, Homebridge and Node.js.
+      placeholder: "1.0.0, Homebridge 2.5.0, Node.js 24.11.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Printer model
+      placeholder: "MFC-L2750DW"
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Plugin settings
+      description: "The printer's entry from config.json (Homebridge UI → the plugin → JSON config). **Replace the community string and any SNMPv3 passwords with xxx.**"
       render: json
   - type: textarea
     id: log
     attributes:
       label: Log
-      description: The plugin's lines from the Homebridge log, ideally with **Log every poll** (`debug`) turned on.
+      description: "The plugin's lines from the Homebridge log, ideally with **Log every poll** (`debug`) turned on. Remove anything private."
       render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I'm on the latest version of the plugin.
+          required: true
+        - label: I searched the existing issues.
+          required: true
+        - label: There are no secrets in what I pasted.
+          required: true
