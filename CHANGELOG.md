@@ -1,21 +1,9 @@
 # Changelog
 
-## 0.10.0-beta.2 - 2026-11-26
+## 0.10.0 - 2026-11-26
 
-The second beta of 0.10.0: everything in 0.10.0-beta.1 below, and this fix.
-
-### Fixed
-- **Paper trays over SNMP on printers that don't answer bulk requests** (GETBULK), such as
-  Brother's MFC-L2750DW: they answer the same table one row at a time, so a bulk walk that
-  gets no answer is tried again row by row, and that printer is then read row by row. This
-  was the real reason its trays didn't show in 0.10.0-beta.1 (not the tray columns). The
-  supplies table of other makes is read the same way. The first poll waits one SNMP timeout
-  for the bulk try; after that (restarts included) such a printer is read row by row at once.
-
-## 0.10.0-beta.1 - 2026-11-26
-
-A beta, for testing on real printers before 0.10.0. The changes come from testing 0.9.0 on a
-real printer in Apple's Home app.
+From testing 0.9.0 on a real printer (an MFC-L2750DW) in Apple's Home app; tested there as
+0.10.0-beta.1 and beta.2.
 
 ### Breaking
 - **The Online sensor is now an Offline contact sensor** (`onlineSensor`): it opens when the
@@ -48,11 +36,17 @@ real printer in Apple's Home app.
 
 ### Changed
 - Paper trays over SNMP: each column of the tray table is read on its own, so a printer that
-  doesn't answer the tray type or status still gives its trays. This is the likely reason the
-  trays didn't show over SNMP on an MFC-L2750DW (still to be confirmed on that printer). A
-  tray table without names or levels counts as not read.
+  doesn't answer the tray type or status still gives its trays. A tray table without names
+  or levels counts as not read.
 - Settings and README: what IPP (AirPrint) reads and doesn't; that the tiles count as the
   room's light level (or humidity); that the page count shows only in Eve and Controller.
+
+### Fixed
+- **Paper trays over SNMP on printers that don't answer bulk requests** (GETBULK), such as
+  Brother's MFC-L2750DW: they answer the same table one row at a time, so a bulk walk that
+  gets no answer is tried again row by row, and that printer is then read row by row. The
+  supplies table of other makes is read the same way. The first poll waits one SNMP timeout
+  for the bulk try; after that (restarts included) such a printer is read row by row at once.
 
 ## 0.9.0 - 2026-11-26
 
