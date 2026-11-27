@@ -81,6 +81,8 @@ export interface CachedUsage {
   /** The plugin found the printer at this address instead of the one in the settings */
   movedTo?: string;
   movedIppUrl?: string;
+  /** The printer doesn't answer bulk SNMP requests (read row by row) */
+  noBulk?: boolean;
   /** The plugin has read this printer over SNMP: its page counts are SNMP's */
   snmpAnswered: boolean;
 }

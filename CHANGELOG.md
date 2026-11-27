@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0-beta.2 - 2026-11-27
+
+### Fixed
+- Settings screen: the Dashboard port showed as a slider that started at 1024; it's a number
+  box again, empty for off. Dashboard names get an "Add name" button.
+- Settings screen: descriptions showed "http://:/" and "ipp://:631/ipp/print", since the
+  form drops text in angle brackets.
+- Test connection and Copy a report read a printer known not to answer bulk SNMP requests
+  (the MFC-L2750DW) row by row straight away, instead of waiting for a bulk request to time
+  out first (about 3 seconds).
+
 ## 0.11.0-beta.1 - 2026-11-27
 
 A pre-release for testing on real printers: Bonjour search and finding a printer at a new
