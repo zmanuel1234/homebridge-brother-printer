@@ -84,7 +84,7 @@
     "@types/net-snmp": "^3.23.0",
     "@types/node": "^22.20.5",
     "homebridge": "^2.5.0",
-    "oxlint": "1.94.0",
+    "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2008",
     "tsx": "^4.23.15",
     "typescript": "7.0.2"
