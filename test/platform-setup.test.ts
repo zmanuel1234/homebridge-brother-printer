@@ -155,6 +155,10 @@ function defineTests(hap: Hap): void {
     const now = homebridge().start([{ name: 'Printer', host: '10.0.0.9', maintenanceSensor: true }], [cached]);
     assert.equal(name2(now.printers[0].problem), 'Printer Problem');
     assert.equal(name2(now.printers[0].maintenance), 'Cartridge');
+    // Back to plain, and a rename at the same time
+    const back = homebridge().start([{ name: 'Office', host: '10.0.0.9', sensorNames: 'plain', maintenanceSensor: true }], [cached]);
+    assert.equal(name2(back.printers[0].problem), 'Problem');
+    assert.equal(name2(back.printers[0].maintenance), 'Cartridge');
     function name2(svc: PrinterAccessory['problem']): unknown {
       return svc!.getCharacteristic(hap!.Characteristic.ConfiguredName).value;
     }
