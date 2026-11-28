@@ -3,10 +3,12 @@
 //
 //   node tools/new-plugin.mjs homebridge-my-device MyDevicePlatform "My Device"
 //
+// The template is homebridge/homebridge-plugin-template with a stricter setup on top (see the README).
+//
 // Renames the npm package (and the GitHub links, the repository having the same name), the
 // platform (config.schema.json's pluginAlias, what users write as "platform" in config.json) and
 // the display name in every tracked file; sets the version to 0.1.0 with a fresh changelog;
-// removes the README's "Starting a new plugin" section; then deletes this script. The shared
+// removes the README's "Using this template" section; then deletes this script. The shared
 // files (.github/ apart from the issue forms, .oxlintrc.json) don't name the template and are
 // left alone, so they stay the same as in the other plugins. Commit the result, after `npm install` and `npm run verify`.
 import { execFileSync } from 'node:child_process'
@@ -33,10 +35,12 @@ const files = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
   .split('\n')
   // The shared files stay as they are; the issue forms (.github/ISSUE_TEMPLATE) are this plugin's own.
   .filter((f) => f && f !== self && f !== 'package-lock.json' && f !== '.oxlintrc.json' && !(f.startsWith('.github/') && !f.startsWith('.github/ISSUE_TEMPLATE/')))
+// The template's own name, but not the official template it is built on
+// (homebridge/homebridge-plugin-template), which the README and comments name.
 const replacements = [
-  ['homebridge-plugin-template', name],
-  ['ExamplePlatform', platform],
-  ['Plugin Template', displayName],
+  [/(?<!homebridge\/)homebridge-plugin-template/g, name],
+  [/ExampleHomebridgePlugin/g, platform],
+  [/Plugin Template/g, displayName],
 ]
 for (const file of files) {
   let text
@@ -46,7 +50,7 @@ for (const file of files) {
     continue
   }
   let out = text
-  for (const [from, to] of replacements) out = out.split(from).join(to)
+  for (const [from, to] of replacements) out = out.replace(from, to)
   if (out !== text) {
     writeFileSync(file, out)
     console.log(`updated ${file}`)
@@ -61,7 +65,7 @@ writeFileSync('CHANGELOG.md', '# Changelog\n\n## 0.1.0 - unreleased\n\n- First v
 
 // The README's instructions for using the template.
 const readme = readFileSync('README.md', 'utf8')
-const start = readme.indexOf('## Starting a new plugin')
+const start = readme.indexOf('## Using this template')
 const end = readme.indexOf('\n## ', start + 1)
 if (start >= 0 && end > start) writeFileSync('README.md', readme.slice(0, start) + readme.slice(end + 1))
 
@@ -71,6 +75,10 @@ lock.name = name
 lock.version = '0.1.0'
 if (lock.packages?.['']) Object.assign(lock.packages[''], { name, version: '0.1.0' })
 writeFileSync('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`)
+// The weekly sync with the official template is for the template only.
+rmSync('.github/workflows/upstream-sync.yml', { force: true })
 rmSync(self)
 if (readdirSync('tools').length === 0) rmdirSync('tools')
+// Staged, so that the checks (which list the files with git) don't look for the removed ones.
+execFileSync('git', ['add', '-A'])
 console.log(`\n${name} is ready: run npm install, npm run verify, then commit.`)

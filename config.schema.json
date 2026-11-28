@@ -1,36 +1,18 @@
 {
-  "pluginAlias": "ExamplePlatform",
+  "pluginAlias": "ExampleHomebridgePlugin",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "An example switch: the starting point for a new plugin.",
-  "footerDisplay": "See the [README](https://github.com/zmanuel1234/homebridge-plugin-template#readme) for every setting.",
+  "strictValidation": false,
   "schema": {
     "type": "object",
+    "required": ["name"],
+    "additionalProperties": false,
     "properties": {
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "Plugin Template",
-        "description": "Shown in the Homebridge log."
-      },
-      "switchName": {
-        "title": "Switch name",
-        "type": "string",
-        "default": "Example Switch",
-        "description": "The switch's name in the Home app."
-      },
-      "resetSeconds": {
-        "title": "Turn off again after (seconds)",
-        "type": "integer",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 3600,
-        "description": "0 leaves the switch on until it's turned off."
+        "default": "Example Dynamic Platform"
       }
     }
-  },
-  "layout": [
-    "switchName",
-    "resetSeconds"
-  ]
+  }
 }

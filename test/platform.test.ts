@@ -1,33 +1,23 @@
-// The platform on Homebridge's own HAP library: registering the switch, reusing the cached one,
-// removing stale accessories, the switch's state and its reset timer.
+// Strict layer: tests for homebridge/homebridge-plugin-template's example, on Homebridge's own
+// HAP library. The official template has none; replace them with the plugin's own as it grows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import type { API, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
 import type * as HapNodejs from '@homebridge/hap-nodejs';
-import { ExamplePlatform } from '../src/platform';
-import { DEFAULT_SWITCH_NAME, PLUGIN_NAME, readSettings } from '../src/settings';
+import { ExampleHomebridgePlatform } from '../src/platform.js';
+import { PLATFORM_NAME, PLUGIN_NAME } from '../src/settings.js';
 
 type Hap = typeof HapNodejs;
+const require = createRequire(import.meta.url);
 let hap: Hap | null = null;
 let loadError = '';
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   hap = require('@homebridge/hap-nodejs') as Hap;
 } catch (err) {
   loadError = (err as Error).message.split('\n')[0];
 }
-
-test('settings: defaults, trimming and limits', () => {
-  assert.deepEqual(readSettings({}), { switchName: DEFAULT_SWITCH_NAME, resetSeconds: 0 });
-  assert.deepEqual(readSettings({ switchName: '  Porch  ', resetSeconds: 30 }), { switchName: 'Porch', resetSeconds: 30 });
-  assert.equal(readSettings({ switchName: '   ' }).switchName, DEFAULT_SWITCH_NAME);
-  assert.equal(readSettings({ switchName: ['not', 'text'] }).switchName, DEFAULT_SWITCH_NAME, 'a hand-edited list is ignored');
-  assert.equal(readSettings({ resetSeconds: -1 }).resetSeconds, 0);
-  assert.equal(readSettings({ resetSeconds: 3601 }).resetSeconds, 0);
-  assert.equal(readSettings({ resetSeconds: '30' }).resetSeconds, 0, 'only a number counts');
-  assert.equal(readSettings({ resetSeconds: 2.6 }).resetSeconds, 3);
-});
 
 if (!hap) {
   test('platform tests', { skip: `HAP library doesn't load on Node ${process.version}: ${loadError}` }, () => {});
@@ -43,65 +33,77 @@ function defineTests(hap: Hap): void {
     api.platformAccessory = function (name: string, uuid: string): PlatformAccessory {
       return Object.assign(new hap!.Accessory(name, uuid), { context: {} }) as unknown as PlatformAccessory;
     };
-    api.registerPlatformAccessories = (_p: string, _n: string, list: PlatformAccessory[]) => calls.registered.push(...list);
+    api.registerPlatformAccessories = (plugin: string, platform: string, list: PlatformAccessory[]) => {
+      assert.equal(plugin, PLUGIN_NAME);
+      assert.equal(platform, PLATFORM_NAME);
+      calls.registered.push(...list);
+    };
     api.updatePlatformAccessories = (list: PlatformAccessory[]) => calls.updated.push(...list);
     api.unregisterPlatformAccessories = (_p: string, _n: string, list: PlatformAccessory[]) => calls.unregistered.push(...list);
-    const lines: string[] = [];
-    const log = Object.fromEntries(['info', 'warn', 'error', 'debug'].map((l) => [l, (m: string) => lines.push(`${l}: ${m}`)])) as unknown as Logging;
-    const start = (config: Record<string, unknown> = {}, cached: PlatformAccessory[] = []) => {
-      const platform = new ExamplePlatform(log, { platform: 'ExamplePlatform', ...config } as PlatformConfig, api as unknown as API);
+    const log = Object.fromEntries(['info', 'warn', 'error', 'debug'].map((l) => [l, () => {}])) as unknown as Logging;
+    const start = (cached: PlatformAccessory[] = []) => {
+      const platform = new ExampleHomebridgePlatform(log, { platform: PLATFORM_NAME, name: 'Test' } as PlatformConfig, api as unknown as API);
       cached.forEach((a) => platform.configureAccessory(a));
       api.emit('didFinishLaunching');
       return platform;
     };
-    const cachedAccessory = (seed: string, name: string): PlatformAccessory =>
-      Object.assign(new hap!.Accessory(name, hap!.uuid.generate(seed)), { context: {} }) as unknown as PlatformAccessory;
-    return { api, calls, lines, start, cachedAccessory };
+    const cachedAccessory = (seed: string, name: string, context: Record<string, unknown> = {}): PlatformAccessory =>
+      Object.assign(new hap.Accessory(name, hap.uuid.generate(seed)), { context }) as unknown as PlatformAccessory;
+    return { api, calls, start, cachedAccessory };
   }
 
-  test('a new switch is registered once, with its name', () => {
-    const { calls, lines, start } = homebridge();
-    const platform = start({ switchName: 'Porch' });
-    assert.equal(calls.registered.length, 1);
-    assert.equal(calls.registered[0].displayName, 'Porch');
-    assert.equal(platform.switches.length, 1);
-    assert.ok(lines.includes('info: Added "Porch".'));
-  });
-
-  test('a cached switch is reused and renamed, and stale accessories are removed', () => {
-    const { calls, start, cachedAccessory } = homebridge();
-    const mine = cachedAccessory(`${PLUGIN_NAME}:switch`, 'Old name');
-    const stale = cachedAccessory(`${PLUGIN_NAME}:something-else`, 'Gone');
-    start({ switchName: 'New name' }, [mine, stale]);
-    assert.equal(calls.registered.length, 0);
-    assert.deepEqual(calls.updated, [mine]);
-    assert.equal(mine.displayName, 'New name');
-    assert.deepEqual(calls.unregistered, [stale]);
-  });
-
-  test('the switch keeps its state, and resets itself when set to', (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const { api, start } = homebridge();
-    const sw = start({ resetSeconds: 5 }).switches[0];
-    const on = sw.service.getCharacteristic(hap.Characteristic.On);
-    sw.set(true);
-    assert.equal(sw.isOn, true);
-    t.mock.timers.tick(4999);
-    assert.equal(sw.isOn, true);
-    t.mock.timers.tick(1);
-    assert.equal(sw.isOn, false);
-    assert.equal(on.value, false, 'HomeKit is told it turned off');
-    sw.set(true);
+  test('the example devices are registered: two lights and an Eve air pressure sensor', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { api, calls, start } = homebridge();
+    start();
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Bedroom', 'Kitchen', 'Backyard']);
+    const kitchen = calls.registered[1] as unknown as HapNodejs.Accessory;
+    assert.ok(kitchen.getService(hap.Service.Lightbulb), 'a light');
+    assert.equal(kitchen.getService(hap.Service.AccessoryInformation)?.getCharacteristic(hap.Characteristic.Manufacturer).value, 'Default-Manufacturer');
+    const backyard = calls.registered[2] as unknown as HapNodejs.Accessory;
+    assert.ok(!backyard.getService(hap.Service.Lightbulb), 'the custom service instead of a light');
+    assert.ok(backyard.services.length > 1, 'the Eve service was added');
     api.emit('shutdown');
-    t.mock.timers.tick(10_000);
-    assert.equal(sw.isOn, true, 'the timer stops at shutdown');
   });
 
-  test('without a reset time the switch stays on', (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const sw = homebridge().start().switches[0];
-    sw.set(true);
-    t.mock.timers.tick(3_600_000);
-    assert.equal(sw.isOn, true);
+  test('a cached accessory is restored with its context refreshed; one no longer found is removed', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { api, calls, start, cachedAccessory } = homebridge();
+    const bedroom = cachedAccessory('ABCD', 'Bedroom', { device: 'saved by an older version' });
+    const gone = cachedAccessory('ZZZZ', 'Old device');
+    start([bedroom, gone]);
+    assert.deepEqual(calls.registered.map((a) => a.displayName), ['Kitchen', 'Backyard'], 'not registered twice');
+    assert.deepEqual(calls.updated, [bedroom]);
+    assert.deepEqual(bedroom.context, { device: { exampleUniqueId: 'ABCD', exampleDisplayName: 'Bedroom' } });
+    assert.deepEqual(calls.unregistered, [gone]);
+    api.emit('shutdown');
+  });
+
+  test('the light remembers On and Brightness', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { api, calls, start } = homebridge();
+    start();
+    const light = (calls.registered[0] as unknown as HapNodejs.Accessory).getService(hap.Service.Lightbulb)!;
+    await light.getCharacteristic(hap.Characteristic.On).handleSetRequest(true);
+    assert.equal(await light.getCharacteristic(hap.Characteristic.On).handleGetRequest(), true);
+    await light.getCharacteristic(hap.Characteristic.Brightness).handleSetRequest(40);
+    assert.equal(light.getCharacteristic(hap.Characteristic.Brightness).value, 40);
+    api.emit('shutdown');
+  });
+
+  test('the motion sensors take turns every 10 s, and stop at shutdown', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { api, calls, start } = homebridge();
+    start();
+    const bedroom = calls.registered[0] as unknown as HapNodejs.Accessory;
+    const one = bedroom.getService('Motion Sensor One Name')!.getCharacteristic(hap.Characteristic.MotionDetected);
+    const two = bedroom.getService('Motion Sensor Two Name')!.getCharacteristic(hap.Characteristic.MotionDetected);
+    t.mock.timers.tick(10_000);
+    assert.deepEqual([one.value, two.value], [true, false]);
+    t.mock.timers.tick(10_000);
+    assert.deepEqual([one.value, two.value], [false, true]);
+    api.emit('shutdown');
+    t.mock.timers.tick(30_000);
+    assert.deepEqual([one.value, two.value], [false, true], 'no more updates after shutdown');
   });
 }

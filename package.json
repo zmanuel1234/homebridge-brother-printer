@@ -3,22 +3,9 @@
   "displayName": "Plugin Template",
   "version": "0.1.0",
   "description": "A starting point for a Homebridge plugin, with the same checks, workflows and release process as the author's other plugins.",
-  "license": "MIT",
   "author": "Manuel Zamfir",
-  "main": "dist/index.js",
-  "files": [
-    "dist/",
-    "config.schema.json",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "keywords": [
-    "homebridge-plugin",
-    "homebridge",
-    "supports-hap",
-    "homekit"
-  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/zmanuel1234/homebridge-plugin-template#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zmanuel1234/homebridge-plugin-template.git"
@@ -26,7 +13,6 @@
   "bugs": {
     "url": "https://github.com/zmanuel1234/homebridge-plugin-template/issues"
   },
-  "homepage": "https://github.com/zmanuel1234/homebridge-plugin-template#readme",
   "funding": [
     {
       "type": "github",
@@ -37,10 +23,15 @@
       "url": "https://www.buymeacoffee.com/zmanuel"
     }
   ],
-  "engines": {
-    "node": "^22.19.0 || ^24.0.0 || ^26.0.0",
-    "homebridge": "^2.0.0"
-  },
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "config.schema.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "check": "tsc -p .",
@@ -50,12 +41,27 @@
     "prepublishOnly": "npm run verify",
     "verify": "npm run check && npm run lint && npm run build && npm test && node .github/scripts/check-homebridge.mjs && node .github/scripts/check-config-schema.mjs",
     "test:matrix": "npm run build && npm test",
-    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release"
+    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release",
+    "watch": "npm run build && npm link && nodemon"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "supports-hap",
+    "homekit"
+  ],
+  "engines": {
+    "node": "^22.19.0 || ^24.0.0 || ^26.0.0",
+    "homebridge": "^2.0.0"
+  },
+  "dependencies": {
+    "homebridge-lib": "^8.1.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "ajv": "8.20.0",
     "homebridge": "^2.5.0",
+    "nodemon": "^3.1.14",
     "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2008",
     "tsx": "^4.23.15",

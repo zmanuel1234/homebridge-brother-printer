@@ -1,0 +1,10 @@
+{
+  "files.eol": "\n",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "explicit"
+  },
+  "editor.rulers": [
+    140
+  ],
+  "oxc.enable": true
+}

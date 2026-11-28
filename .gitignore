@@ -1,10 +1,11 @@
+# Shared by the author's plugins (the same block in all of them).
 node_modules/
+dist/
+*.tgz
 *.log
 .DS_Store
-*.tgz
-dist/
 
-# Shared by the author's plugins: never commit secrets, tokens or keys.
+# Never commit secrets, tokens or keys.
 .env
 .env.*
 .npmrc
@@ -12,3 +13,12 @@ dist/
 *.key
 *.p12
 *.pfx
+
+# ---- This repository ----
+# The local Homebridge that `npm run watch` starts (from homebridge/homebridge-plugin-template):
+# only its settings are kept.
+/test/hbConfig/*
+!/test/hbConfig/config.json
+!/test/hbConfig/auth.json
+coverage/
+*.tsbuildinfo
