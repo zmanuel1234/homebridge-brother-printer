@@ -79,4 +79,6 @@ writeFileSync('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`)
 rmSync('.github/workflows/upstream-sync.yml', { force: true })
 rmSync(self)
 if (readdirSync('tools').length === 0) rmdirSync('tools')
+// Staged, so that the checks (which list the files with git) don't look for the removed ones.
+execFileSync('git', ['add', '-A'])
 console.log(`\n${name} is ready: run npm install, npm run verify, then commit.`)
