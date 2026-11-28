@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0 - 2026-11-28
+
+No change to how printers are read: the same accessories, dashboard, settings page and `brother-printer-probe` output as 0.13.0.
+
+- Published as an ES module, on the author's Homebridge plugin template (which is built on Homebridge's own), like the author's other plugins.
+- Development only: the template's TypeScript and lint setup; `npm run watch` runs a local Homebridge that restarts on every change.
+
 ## 0.13.0 - 2026-11-27
 
 Requires Homebridge 2; no change to how printers are read.
