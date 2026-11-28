@@ -28,7 +28,7 @@
     "brother-printer-probe": "dist/bin/brother-printer-probe.js"
   },
   "files": [
-    "dist/",
+    "dist",
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
