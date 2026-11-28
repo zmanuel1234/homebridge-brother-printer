@@ -25,7 +25,7 @@ test('package: main entry registers the platform under the schema alias', { skip
 });
 
 test('package: published files include the build', () => {
-  assert.ok(pkg.files.includes('dist/'));
+  assert.ok(pkg.files.includes('dist'));
   assert.ok(pkg.files.includes('config.schema.json'));
   assert.match(pkg.main, /^dist\//);
   assert.ok(pkg.scripts.prepare.includes('build'), 'npm must build on git installs and npm ci');
