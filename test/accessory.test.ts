@@ -1,17 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { API, Characteristic, Logging, PlatformAccessory, Service } from 'homebridge';
-import { PrinterAccessory } from '../src/accessory';
-import type { PrinterConfig, PrinterContext, QueryFn } from '../src/accessory';
-import * as snmp from '../src/snmp';
-import { startHistory } from '../src/history';
-import { parseResponse, toPrinterData } from '../src/ipp';
+import { PrinterAccessory } from '../src/accessory.js';
+import type { PrinterConfig, PrinterContext, QueryFn } from '../src/accessory.js';
+import * as snmp from '../src/snmp.js';
+import { startHistory } from '../src/history.js';
+import { parseResponse, toPrinterData } from '../src/ipp.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { HistoryEntry } from '../src/history';
-import type { QueryResult } from '../src/snmp';
+import type { HistoryEntry } from '../src/history.js';
+import type { QueryResult } from '../src/snmp.js';
 import type * as HapNodejs from '@homebridge/hap-nodejs';
-import modelsJson from './fixtures/brother-models.json';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 type Hap = typeof HapNodejs;
 const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }>;
@@ -22,7 +25,6 @@ const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }
 let hap: Hap | null = null;
 let loadError = '';
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   hap = require('@homebridge/hap-nodejs') as Hap;
 } catch (err) {
   loadError = (err as Error).message.split('\n')[0];
@@ -289,7 +291,7 @@ function defineTests(hap: Hap): void {
   });
 
   test('IPP from a real Epson XP-6000: photo black gets its own tile; the maker and model show in Home', () => {
-    const epson = toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', 'epson-xp-6000.bin'))).printer);
+    const epson = toPrinterData(parseResponse(readFileSync(join(import.meta.dirname, 'fixtures', 'ipp', 'epson-xp-6000.bin'))).printer);
     const { acc, printer } = setup({ protocol: 'ipp', tonerTile: true, tileType: 'humidity' });
     printer.apply(viaIpp({ ...epson, snmpVersion: null }));
     const photo = acc.getServiceById(S.HumiditySensor, 'tile-photoBlack');

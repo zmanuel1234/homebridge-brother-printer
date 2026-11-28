@@ -4,12 +4,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TAG, ippMessage, manufacturerOf, markerColor, parseResponse, toPrinterData } from '../src/ipp';
-import type { IppAttribute } from '../src/ipp';
-import type { PrinterData } from '../src/snmp';
+import { TAG, ippMessage, manufacturerOf, markerColor, parseResponse, toPrinterData } from '../src/ipp.js';
+import type { IppAttribute } from '../src/ipp.js';
+import type { PrinterData } from '../src/snmp.js';
 
 const read = (file: string): PrinterData =>
-  toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', `${file}.bin`))).printer);
+  toPrinterData(parseResponse(readFileSync(join(import.meta.dirname, 'fixtures', 'ipp', `${file}.bin`))).printer);
 const levels = (d: PrinterData): string => d.supplies.map((s) => `${s.color} ${s.level}`).join(', ');
 
 /** What each printer should read as: supplies in display order, type, problems */

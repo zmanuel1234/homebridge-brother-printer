@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as snmpLib from 'net-snmp';
-import { AUTH_PROTOCOLS, OID, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp';
-import type { QueryOptions } from '../src/snmp';
-import { startFakePrinter } from './fake-agent';
+import { AUTH_PROTOCOLS, OID, PRIV_PROTOCOLS, protocolSetting, query, v3User } from '../src/snmp.js';
+import type { QueryOptions } from '../src/snmp.js';
+import { startFakePrinter } from './fake-agent.js';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const PORT = 16161;
 
@@ -53,7 +56,6 @@ test('SNMP v1: drops OIDs the printer lacks and still reads the rest', async (t)
 
 test('SNMP v1: OIDs a printer refuses with noSuchName aren\'t asked for again', async (t) => {
   // A v1 agent that refuses the whole request for an OID it lacks (net-snmp's own agent doesn't)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lib = require('net-snmp') as { createSession: typeof snmpLib.createSession };
   const real = lib.createSession;
   t.after(() => { lib.createSession = real; });

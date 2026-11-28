@@ -1,12 +1,12 @@
 // Paper type per tray, printer uptime, and the output tray full sensor's reading.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mediaName, traysFromIpp, traysFromTable } from '../src/trays';
-import { INPUT_TABLE, parse } from '../src/snmp';
-import { REQUESTED, toPrinterData } from '../src/ipp';
-import { describeUptime, pageDetail, shownCounts, testSummary } from '../src/summary';
-import type * as snmp from '../src/snmp';
-import modelsJson from './fixtures/brother-models.json';
+import { mediaName, traysFromIpp, traysFromTable } from '../src/trays.js';
+import { INPUT_TABLE, parse } from '../src/snmp.js';
+import { REQUESTED, toPrinterData } from '../src/ipp.js';
+import { describeUptime, pageDetail, shownCounts, testSummary } from '../src/summary.js';
+import type * as snmp from '../src/snmp.js';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
 
 const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }>;
 
@@ -75,7 +75,7 @@ test('uptime: a clock time sent as uptime is left out', () => {
 });
 
 test('text(): config and device values as text, never "[object Object]"', async () => {
-  const { text } = await import('../src/text');
+  const { text } = await import('../src/text.js');
   assert.equal(text('a'), 'a');
   assert.equal(text(161), '161');
   assert.equal(text(true), 'true');

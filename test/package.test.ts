@@ -5,15 +5,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import pkg from '../package.json';
+import { pathToFileURL } from 'node:url';
+import pkg from '../package.json' with { type: 'json' };
 
-const root = join(__dirname, '..');
+const root = join(import.meta.dirname, '..');
 const built = existsSync(join(root, pkg.main));
 const skip = built ? false : 'dist/ not built; run npm run build';
 
-test('package: main entry registers the platform', { skip }, () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const register = require(join(root, pkg.main)) as (api: unknown) => void;
+test('package: main entry registers the platform', { skip }, async () => {
+  const register = ((await import(pathToFileURL(join(root, pkg.main)).href)) as { default: (api: unknown) => void }).default;
   assert.equal(typeof register, 'function');
   const calls: unknown[][] = [];
   register({ registerPlatform: (...args: unknown[]) => calls.push(args) });
@@ -29,7 +29,8 @@ test('package: probe command is built and runnable', { skip }, () => {
   assert.match(readFileSync(bin, 'utf8'), /^#!\/usr\/bin\/env node/);
 });
 
-test('package: published files include the build', () => {
+test('package: an ES module, published with its build', () => {
+  assert.equal(pkg.type, 'module');
   assert.ok(pkg.files.includes('dist'));
   assert.ok(pkg.files.includes('config.schema.json'));
   assert.match(pkg.main, /^dist\//);

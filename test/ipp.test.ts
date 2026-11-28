@@ -9,12 +9,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { TAG, getPrinterAttributes, ippEndpoint, ippMessage, ippQuery, parseResponse, reasonErrors, toPrinterData } from '../src/ipp';
-import type { IppAttribute, IppAttributes } from '../src/ipp';
-import { defaultIppUrl, readPrinter, readers } from '../src/read';
-import { parse } from '../src/snmp';
-import { queryOptions } from '../src/accessory';
-import { startFakePrinter } from './fake-agent';
+import { TAG, getPrinterAttributes, ippEndpoint, ippMessage, ippQuery, parseResponse, reasonErrors, toPrinterData } from '../src/ipp.js';
+import type { IppAttribute, IppAttributes } from '../src/ipp.js';
+import { defaultIppUrl, readPrinter, readers } from '../src/read.js';
+import { parse } from '../src/snmp.js';
+import { queryOptions } from '../src/accessory.js';
+import { startFakePrinter } from './fake-agent.js';
 
 const int = (name: string, ...values: number[]): IppAttribute => ({ tag: TAG.integer, name, values });
 const enm = (name: string, ...values: number[]): IppAttribute => ({ tag: TAG.enum, name, values });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { API, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
-import { BrotherPrinterPlatform } from '../src/platform';
+import { BrotherPrinterPlatform } from '../src/platform.js';
 
 interface FakeApi extends EventEmitter {
   hap: { uuid: { generate: (s: string) => string } };

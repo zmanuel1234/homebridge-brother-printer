@@ -1,9 +1,9 @@
 // A tiny SNMP agent that answers like an MFC-L2750DW, for tests.
 import * as snmp from 'net-snmp';
-import { OID } from '../src/snmp';
-import type { OidName } from '../src/snmp';
-import { toBuffer } from '../src/decode';
-import fx from './fixtures';
+import { OID } from '../src/snmp.js';
+import type { OidName } from '../src/snmp.js';
+import { toBuffer } from '../src/decode.js';
+import fx from './fixtures.js';
 
 type AgentValue = Buffer | number;
 

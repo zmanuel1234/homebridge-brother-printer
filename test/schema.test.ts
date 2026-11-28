@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import config from '../config.schema.json';
+import config from '../config.schema.json' with { type: 'json' };
 
 interface SchemaNode {
   type?: string;
