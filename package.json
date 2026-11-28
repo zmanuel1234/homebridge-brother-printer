@@ -1,64 +1,47 @@
 {
-  "name": "homebridge-plugin-template",
-  "displayName": "Plugin Template",
-  "version": "0.1.0",
-  "description": "A starting point for a Homebridge plugin, with the same checks, workflows and release process as the author's other plugins.",
-  "author": "Manuel Zamfir",
-  "license": "MIT",
-  "homepage": "https://github.com/zmanuel1234/homebridge-plugin-template#readme",
+  "name": "homebridge-plugin-name",
+  "displayName": "Plugin Name",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A short description about what your plugin does.",
+  "author": "Your Name",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/USERNAME/GITHUB_PROJECT_NAME#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zmanuel1234/homebridge-plugin-template.git"
+    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
   },
   "bugs": {
-    "url": "https://github.com/zmanuel1234/homebridge-plugin-template/issues"
-  },
-  "funding": [
-    {
-      "type": "github",
-      "url": "https://github.com/sponsors/zmanuel1234"
-    },
-    {
-      "type": "buymeacoffee",
-      "url": "https://www.buymeacoffee.com/zmanuel"
-    }
-  ],
-  "main": "dist/index.js",
-  "files": [
-    "dist",
-    "config.schema.json",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
-    "check": "tsc -p .",
-    "lint": "oxlint",
-    "test": "node --import tsx --test test/*.test.ts",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run verify",
-    "verify": "npm run check && npm run lint && npm run build && npm test && node .github/scripts/check-homebridge.mjs && node .github/scripts/check-config-schema.mjs",
-    "test:matrix": "npm run build && npm test",
-    "release:check": "npm run verify && node .github/scripts/check-homebridge.mjs --release"
+    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
   },
   "keywords": [
     "homebridge-plugin",
-    "homebridge",
-    "supports-hap",
-    "homekit"
+    "supports-hap"
   ],
+  "main": "dist/index.js",
   "engines": {
-    "node": "^22.19.0 || ^24.0.0 || ^26.0.0",
-    "homebridge": "^2.0.0"
+    "node": "^22.12.0 || ^24.0.0 || ^26.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
+  },
+  "scripts": {
+    "build": "rimraf ./dist && tsc",
+    "lint": "eslint . --max-warnings=0",
+    "prepublishOnly": "npm run lint && npm run build",
+    "watch": "npm run build && npm link && nodemon"
+  },
+  "dependencies": {
+    "homebridge-lib": "^8.1.4"
   },
   "devDependencies": {
-    "@types/node": "^22.20.5",
-    "ajv": "8.20.0",
-    "homebridge": "^2.5.0",
-    "oxlint": "1.95.0",
-    "oxlint-tsgolint": "7.0.2008",
-    "tsx": "^4.23.15",
-    "typescript": "7.0.2"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.9.0",
+    "homebridge": "^2.4.0",
+    "nodemon": "^3.1.14",
+    "rimraf": "^6.1.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0"
   }
 }
