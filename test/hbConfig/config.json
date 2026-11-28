@@ -1,11 +1,11 @@
 {
   "bridge": {
-    "name": "PluginTemplate",
+    "name": "Plugin Template",
     "username": "AA:BB:CC:DD:EE:FF",
     "port": 51826,
     "pin": "031-45-154"
   },
-  "description": "HomeBridge HTTP Status Control",
+  "description": "Local Homebridge for npm run watch",
   "plugins": [
     "homebridge-plugin-template",
     "homebridge-config-ui-x"
