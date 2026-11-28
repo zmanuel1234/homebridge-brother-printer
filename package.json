@@ -1,7 +1,7 @@
 {
   "name": "homebridge-brother-printer",
   "displayName": "Brother Printer",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "Printers in HomeKit, any make (Brother in most detail): printing state, problem alerts, toner or ink levels and paper trays, read locally over SNMP or IPP (AirPrint).",
   "author": "Manuel Zamfir",
   "license": "MIT",
