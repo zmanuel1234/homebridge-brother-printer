@@ -1,16 +1,16 @@
 import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { PrinterAccessory } from './accessory';
-import type { PrinterConfig, PrinterContext } from './accessory';
-import { startDashboard } from './dashboard-server';
-import type { DashboardPrinter } from './dashboard-server';
-import { testSummary } from './summary';
+import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { PrinterAccessory } from './accessory.js';
+import type { PrinterConfig, PrinterContext } from './accessory.js';
+import { startDashboard } from './dashboard-server.js';
+import type { DashboardPrinter } from './dashboard-server.js';
+import { testSummary } from './summary.js';
 import type { Server } from 'node:http';
-import { text } from './text';
+import { text } from './text.js';
+import { createRequire } from 'node:module';
 
 // Resolved from dist/ at runtime, like the published package
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const schema = require('../config.schema.json') as {
+const schema = createRequire(import.meta.url)('../config.schema.json') as {
   schema: { properties: { printers: { items: { properties: Record<string, { default?: unknown }> } } } };
 };
 

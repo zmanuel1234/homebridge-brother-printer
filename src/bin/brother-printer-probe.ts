@@ -8,11 +8,11 @@
  * everything it answers, to paste into a GitHub issue.
  */
 
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from '../snmp';
-import { readPrinter } from '../read';
-import { ippEndpoint } from '../ipp';
-import type { QueryOptions } from '../snmp';
-import { buildReport } from '../report';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, v3User } from '../snmp.js';
+import { readPrinter } from '../read.js';
+import { ippEndpoint } from '../ipp.js';
+import type { QueryOptions } from '../snmp.js';
+import { buildReport } from '../report.js';
 
 const USAGE = `Usage: brother-printer-probe <printer-ip-or-hostname[:port]> [community]
        brother-printer-probe <printer[:port]> --v3 <user> [--auth ${AUTH_PROTOCOLS.join('|')}] [--auth-pass <password>]

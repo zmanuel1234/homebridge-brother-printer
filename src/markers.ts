@@ -5,8 +5,8 @@
  * hint and a level against a maximum; this turns them into the plugin's
  * readings: supply levels per color, drums and other parts.
  */
-import { ALL_COLORS } from './decode';
-import type { Color, Drum, Part, PartKey, Supply } from './decode';
+import { ALL_COLORS } from './decode.js';
+import type { Color, Drum, Part, PartKey, Supply } from './decode.js';
 
 export interface Marker {
   name: string;

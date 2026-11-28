@@ -9,15 +9,15 @@
  * posted in public. It's cut to fit a GitHub issue.
  */
 import os from 'node:os';
-import { bulkWalk, nextWalk, openSession, query } from './snmp';
-import type { QueryOptions, QueryResult, SnmpVersion } from './snmp';
-import { ippAttributes } from './ipp';
-import type { IppAttributes } from './ipp';
-import { defaultIppUrl, readPrinter } from './read';
-import { text } from './text';
+import { bulkWalk, nextWalk, openSession, query } from './snmp.js';
+import type { QueryOptions, QueryResult, SnmpVersion } from './snmp.js';
+import { ippAttributes } from './ipp.js';
+import type { IppAttributes } from './ipp.js';
+import { defaultIppUrl, readPrinter } from './read.js';
+import { text } from './text.js';
+import { createRequire } from 'node:module';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { version } = require('../package.json') as { version: string };
+const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
 /** The parts of the printer's SNMP tree a report shows, with at most this many values each */
 export const SNMP_SECTIONS: [string, string, number][] = [

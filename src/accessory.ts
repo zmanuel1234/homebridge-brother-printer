@@ -3,24 +3,24 @@ import type {
 } from 'homebridge';
 import { format } from 'node:util';
 import { isIP } from 'node:net';
-import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp';
-import { readPrinter } from './read';
-import { findBySerial } from './discover';
-import { ippEndpoint } from './ipp';
-import type { PrinterData, QueryOptions, QueryResult } from './snmp';
-import { ALL_COLORS, COLOR_NAMES } from './decode';
-import type { Color, PartKey, PrinterError, Supply } from './decode';
-import { entryDue, startHistory } from './history';
-import type { HistoryEntry, HistoryLog } from './history';
-import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './usage';
-import type { UsageSample } from './usage';
-import type { Tray } from './trays';
-import { pageDetail, shownCounts } from './summary';
-import { text } from './text';
+import { AUTH_PROTOCOLS, PRIV_PROTOCOLS, protocolSetting, readVia, v3User } from './snmp.js';
+import { readPrinter } from './read.js';
+import { findBySerial } from './discover.js';
+import { ippEndpoint } from './ipp.js';
+import type { PrinterData, QueryOptions, QueryResult } from './snmp.js';
+import { ALL_COLORS, COLOR_NAMES } from './decode.js';
+import type { Color, PartKey, PrinterError, Supply } from './decode.js';
+import { entryDue, startHistory } from './history.js';
+import type { HistoryEntry, HistoryLog } from './history.js';
+import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from './usage.js';
+import type { UsageSample } from './usage.js';
+import type { Tray } from './trays.js';
+import { pageDetail, shownCounts } from './summary.js';
+import { text } from './text.js';
+import { createRequire } from 'node:module';
 
 // Resolved from dist/ at runtime, like the published package
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { version } = require('../package.json') as { version: string };
+const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
 /** What the plugin keeps in Homebridge's accessory cache */
 /** While the printer is offline, how often to look for it at another address (ms) */

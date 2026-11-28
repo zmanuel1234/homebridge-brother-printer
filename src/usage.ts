@@ -3,8 +3,8 @@
  * printed in the last 7 and 30 days, and when each toner or ink is likely to run
  * out at the rate it has been going down since it was last replaced.
  */
-import { COLOR_NAMES } from './decode';
-import type { Color } from './decode';
+import { COLOR_NAMES } from './decode.js';
+import type { Color } from './decode.js';
 
 export interface UsageSample {
   /** Unix time, seconds */

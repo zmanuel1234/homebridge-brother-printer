@@ -13,12 +13,12 @@
  */
 import dgram from 'node:dgram';
 import os from 'node:os';
-import { query } from './snmp';
-import type { QueryOptions, QueryResult } from './snmp';
-import type { PrinterType } from './decode';
-import { browse } from './mdns';
-import type { BonjourPrinter } from './mdns';
-import { readIpp } from './read';
+import { query } from './snmp.js';
+import type { QueryOptions, QueryResult } from './snmp.js';
+import type { PrinterType } from './decode.js';
+import { browse } from './mdns.js';
+import type { BonjourPrinter } from './mdns.js';
+import { readIpp } from './read.js';
 
 const SYS_DESCR = '1.3.6.1.2.1.1.1.0';
 
