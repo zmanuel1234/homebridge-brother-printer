@@ -21,7 +21,7 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
   public readonly discoveredCacheUUIDs: string[] = [];
 
   // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // Strict layer: typed (src/types/homebridge-lib.d.ts) instead of `any`.
+  // Strict layer: typed (src/@types/homebridge-lib.d.ts) instead of `any`.
   public readonly CustomServices: Record<string, EveService>;
   public readonly CustomCharacteristics: Record<string, WithUUID<new () => Characteristic>>;
 
