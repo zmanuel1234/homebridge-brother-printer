@@ -100,7 +100,7 @@ printers of other makes too ([Other makes of printer](#other-makes-of-printer)).
   ([below](#reading-over-ipp-airprint)).
 - A fixed address for the printer: reserve its IP in your router, or use its mDNS
   hostname (for example `brn3c2af4919dfc.local`).
-- Homebridge 1.6 or later (including 2.x), Node.js 22 (22.19 or later), 24 or 26.
+- Homebridge 2 (2.0.0 or later), Node.js 22 (22.19 or later), 24 or 26.
 
 ## Installation
 
