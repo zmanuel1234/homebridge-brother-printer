@@ -2,6 +2,13 @@ import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge
 
 import type { ExampleHomebridgePlatform } from './platform.js';
 
+/** Strict layer: what `discoverDevices` stores in `accessory.context.device`. */
+export interface ExampleDevice {
+  exampleUniqueId: string;
+  exampleDisplayName: string;
+  CustomService?: string;
+}
+
 /**
  * Platform Accessory
  * An instance of this class is created for each accessory your platform registers
@@ -9,6 +16,8 @@ import type { ExampleHomebridgePlatform } from './platform.js';
  */
 export class ExamplePlatformAccessory {
   private service: Service;
+  /** Strict layer: the example's timer, stopped when Homebridge shuts down. */
+  private readonly motionTimer: NodeJS.Timeout;
 
   /**
    * These are just used to create a working example
@@ -21,28 +30,30 @@ export class ExamplePlatformAccessory {
 
   constructor(
     private readonly platform: ExampleHomebridgePlatform,
-    private readonly accessory: PlatformAccessory,
+    private readonly accessory: PlatformAccessory<{ device: ExampleDevice }>,
   ) {
+    const device = accessory.context.device;
     // set accessory information
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
+    this.accessory.getService(this.platform.Service.AccessoryInformation)
+      ?.setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
       .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
 
     // get the LightBulb service if it exists, otherwise create a new LightBulb service
     // you can create multiple services for each accessory
 
-    if (accessory.context.device.CustomService) {
+    const customService = device.CustomService ? this.platform.CustomServices[device.CustomService] : undefined;
+    if (customService) {
       // This is only required when using Custom Services and Characteristics not support by HomeKit
-      this.service = this.accessory.getService(this.platform.CustomServices[accessory.context.device.CustomService]) ||
-        this.accessory.addService(this.platform.CustomServices[accessory.context.device.CustomService]);
+      this.service = this.accessory.getService(customService) ||
+        this.accessory.addService(new customService());
     } else {
       this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
     }
 
     // set the service name, this is what is displayed as the default name on the Home app
     // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
+    this.service.setCharacteristic(this.platform.Characteristic.Name, device.exampleDisplayName);
 
     // each service must implement at-minimum the "required characteristics" for the given service type
     // see https://developers.homebridge.io/#/service/Lightbulb
@@ -84,7 +95,7 @@ export class ExamplePlatformAccessory {
      *
      */
     let motionDetected = false;
-    setInterval(() => {
+    this.motionTimer = setInterval(() => {
       // EXAMPLE - inverse the trigger
       motionDetected = !motionDetected;
 
@@ -95,6 +106,7 @@ export class ExamplePlatformAccessory {
       this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
       this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
     }, 10000);
+    this.platform.api.on('shutdown', () => clearInterval(this.motionTimer));
   }
 
   /**

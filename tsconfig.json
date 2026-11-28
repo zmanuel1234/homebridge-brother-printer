@@ -5,21 +5,21 @@
       "DOM",
       "ES2022"
     ],
-    "rootDir": "src",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
-    "declaration": true,
     "skipLibCheck": true,
-    "outDir": "dist",
-    "sourceMap": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
+    "noEmit": true,
+    "newLine": "lf"
   },
   "include": [
-    "eslint.config.js",
-    "homebridge-ui",
-    "src"
+    "src",
+    "test"
   ]
 }

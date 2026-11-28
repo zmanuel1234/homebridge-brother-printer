@@ -1,6 +1,7 @@
-import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
+import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service, WithUUID } from 'homebridge';
+import type { EveService } from 'homebridge-lib/EveHomeKitTypes';
 
-import { ExamplePlatformAccessory } from './platformAccessory.js';
+import { ExamplePlatformAccessory, type ExampleDevice } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 // This is only required when using Custom Services and Characteristics not support by HomeKit
@@ -20,10 +21,9 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
   public readonly discoveredCacheUUIDs: string[] = [];
 
   // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomServices: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomCharacteristics: any;
+  // Strict layer: typed (src/types/homebridge-lib.d.ts) instead of `any`.
+  public readonly CustomServices: Record<string, EveService>;
+  public readonly CustomCharacteristics: Record<string, WithUUID<new () => Characteristic>>;
 
   constructor(
     public readonly log: Logging,
@@ -106,9 +106,14 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
         // existingAccessory.context.device = device;
         // this.api.updatePlatformAccessories([existingAccessory]);
 
+        // Strict layer: the cached context was read from disk, so it is set from the current
+        // device before use, instead of trusting whatever was saved.
+        existingAccessory.context.device = device;
+        this.api.updatePlatformAccessories([existingAccessory]);
+
         // create the accessory handler for the restored accessory
         // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
+        new ExamplePlatformAccessory(this, existingAccessory as PlatformAccessory<{ device: ExampleDevice }>);
 
         // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
         // remove platform accessories when no longer present
@@ -119,7 +124,7 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
         this.log.info('Adding new accessory:', device.exampleDisplayName);
 
         // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
+        const accessory = new this.api.platformAccessory<{ device: ExampleDevice }>(device.exampleDisplayName, uuid);
 
         // store a copy of the device object in the `accessory.context`
         // the `context` property can be used to store any data about the accessory you may need
