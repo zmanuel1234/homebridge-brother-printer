@@ -1,185 +1,142 @@
-<p align="center">
+# Plugin Template
 
-<img src="https://github.com/homebridge/branding/raw/latest/logos/homebridge-wordmark-logo-vertical.png" width="150">
+A Homebridge dynamic platform plugin: the example from Homebridge's own plugin template, with
+three light bulbs (one also an Eve accessory) and a motion sensor on each.
 
-</p>
+## Using this template
 
-<span align="center">
+This repository is [homebridge/homebridge-plugin-template](https://github.com/homebridge/homebridge-plugin-template)
+with a stricter setup on top. It shares that template's git history, so Homebridge's changes can be
+merged in rather than copied.
 
-# Homebridge Platform Plugin Template
+### Starting a new plugin
 
-</span>
+1. On GitHub, **Use this template → Create a new repository**, named like the npm package
+   (`homebridge-…`), public.
+2. In a clone of it, run the setup once, then commit:
 
-This is a template Homebridge dynamic platform plugin and can be used as a base to help you get started developing your own plugin.
+   ```
+   node tools/new-plugin.mjs homebridge-my-device MyDevicePlatform "My Device"
+   npm install
+   npm run verify
+   ```
 
-This template should be used in conjunction with the [developer documentation](https://developers.homebridge.io/). A full list of all supported service types, and their characteristics is available on this site.
+   It renames the package, the platform (the `platform` users write in config.json) and the
+   display name everywhere, resets the version to 0.1.0 and the changelog, removes this section
+   and the weekly sync job, and deletes itself.
+3. Repository settings, as in the other plugins:
+   - **Rulesets** (Settings → Rules → Rulesets): `main` on the default branch (restrict deletions,
+     block force pushes, require a pull request with 0 approvals, require the status checks
+     `check` and `dependency-review` from GitHub Actions) and `version` on tags `refs/tags/v*`
+     (restrict creations is off; restrict updates and deletions, block force pushes).
+   - **Advanced Security** (Settings → Advanced Security): Dependabot alerts and security updates,
+     CodeQL default setup, secret scanning with push protection, private vulnerability reporting.
+   - **General**: automatically delete head branches; no wiki or projects.
+4. On npmjs.com: the first version is published once from your computer (`npm publish`, which
+   runs `npm run verify` first), because a trusted publisher can only be set up on a package
+   that exists. Then, in the package's **Settings**: **Trusted Publisher** → GitHub Actions, this
+   repository, workflow `publish.yml`, with **npm dist-tag** allowed; **Publishing access** →
+   require two-factor authentication and disallow tokens. Every later version is published by
+   creating a GitHub release.
+5. Add the new repository's name to the header comments of the shared files (ci.yml,
+   publish.yml, dependency-review.yml, dependabot.yml, .oxlintrc.json and the two check
+   scripts) in every plugin, so they stay the same everywhere.
 
-### Clone As Template
+Then replace the example in `src/` with the real accessories (Homebridge's
+[developer documentation](https://developers.homebridge.io/) lists the services and
+characteristics), the settings in `config.schema.json`, and this README's text with the plugin's own.
 
-Click the link below to create a new GitHub Repository using this template, or click the *Use This Template* button above.
+### What differs from Homebridge's template
 
-<span align="center">
+Everything Homebridge's template has is kept (the example platform and accessory, `nodemon.json`
+and `npm run watch`, `test/hbConfig`, the homebridge-lib Eve types, `.vscode`, Apache-2.0), except:
 
-### [Create New Repository From Template](https://github.com/homebridge/homebridge-plugin-template/generate)
+- **Linting:** oxlint (`.oxlintrc.json`, and the oxc extension in `.vscode`) instead of ESLint, the same rules as the other plugins.
+  ESLint's TypeScript plugin doesn't support TypeScript 7 yet.
+- **TypeScript 7**, with type checking (`tsconfig.json`, which also covers the tests) kept apart
+  from the build (`tsconfig.build.json`, `src/` to `dist/`), and stricter options
+  (`noImplicitOverride`, `noFallthroughCasesInSwitch`).
+- **Homebridge 2 only**, on Node.js 22, 24 or 26.
+- **Tests** with Node's test runner: the example runs against real HAP services (accessories
+  registered, restored from the cache and removed, values remembered, the motion sensors stopped
+  at shutdown), and the package loads and registers its platform.
+- **The example is fully typed:** no `any` or `!`; the accessory's context has a type
+  (`ExampleDevice`), a restored accessory gets the current device in its context before use,
+  homebridge-lib's Eve types have declarations (`src/types/homebridge-lib.d.ts`), and the motion
+  timer is cleared when Homebridge shuts down.
+- **Workflows:** `ci.yml` (verify, the Node matrix, npm signature audit), `publish.yml`
+  (trusted publishing on a GitHub release) and `dependency-review.yml`, shared byte for byte with
+  the other plugins, instead of `build.yml`; Dependabot, issue forms instead of issue templates,
+  `SECURITY.md` and `CHANGELOG.md`.
+- **Checks** run by `npm run verify`: the package layout Homebridge needs
+  (`.github/scripts/check-homebridge.mjs`) and the settings schema and this README's JSON examples
+  (`.github/scripts/check-config-schema.mjs`).
+- `npm run watch` builds to `dist/` with `npm run build` before each restart, since `tsc` alone
+  only type checks here.
 
-</span>
+### Keeping up with Homebridge's template
 
-### Setup Development Environment
+Every Monday `.github/workflows/upstream-sync.yml` checks Homebridge's template (branch `latest`)
+and, when it has changed, opens a pull request from the `upstream-sync` branch. It needs
+**Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**.
+Resolve any conflicts in favour of the stricter setup above, run `npm run verify`, and merge with
+**Create a merge commit** (not squash), so the shared history continues. To do it by hand:
 
-To develop Homebridge plugins you must have Node.js 22 or later installed, and a modern code editor such as [VS Code](https://code.visualstudio.com/). This plugin template uses [TypeScript](https://www.typescriptlang.org/) to make development easier and comes with pre-configured settings for [VS Code](https://code.visualstudio.com/) and ESLint. If you are using VS Code install these extensions:
-
-- [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
-
-### Install Development Dependencies
-
-Using a terminal, navigate to the project folder and run this command to install the development dependencies:
-
-```shell
-npm install
+```
+git remote add upstream https://github.com/homebridge/homebridge-plugin-template.git
+git fetch upstream
+git merge upstream/latest
 ```
 
-### Update package.json
+## Requirements
 
-Open the [`package.json`](./package.json) and change the following attributes:
+- Homebridge 2 (2.0.0 or later).
+- Node.js 22, 24 or 26.
 
-- `name` - this should be prefixed with `homebridge-` or `@username/homebridge-`, is case-sensitive, and contains no spaces nor special characters apart from a dash `-`
-- `displayName` - this is the "nice" name displayed in the Homebridge UI
-- `homepage` - link to your GitHub repo's `README.md`
-- `repository.url` - link to your GitHub repo
-- `bugs.url` - link to your GitHub repo issues page
-- `keywords` - the template ships with `homebridge-plugin` (required) and `supports-hap` (the plugin publishes accessories over HAP, which template-based plugins do). Add `supports-matter` if your plugin also registers Matter accessories itself — see the [Matter Plugins](https://github.com/homebridge/homebridge/wiki/Matter-Plugins) wiki page
+## Installation
 
-When you are ready to publish the plugin you should set `private` to false, or remove the attribute entirely.
+In the Homebridge UI, search the **Plugins** page for `homebridge-plugin-template`, or run:
 
-### Update Plugin Defaults
-
-Open the [`src/settings.ts`](./src/settings.ts) file and change the default values:
-
-- `PLATFORM_NAME` - Set this to be the name of your platform. This is the name of the platform that users will use to register the plugin in the Homebridge `config.json`.
-- `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file.
-
-Open the [`config.schema.json`](./config.schema.json) file and change the following attribute:
-
-- `pluginAlias` - set this to match the `PLATFORM_NAME` you defined in the previous step.
-
-See the [Homebridge API docs](https://developers.homebridge.io/#/config-screen/schema#default-values) for more details on the other attributes you can set in the `config.schema.json` file.
-
-### Build Plugin
-
-TypeScript needs to be compiled into JavaScript before it can run. The following command will compile the contents of your [`src`](./src) directory and put the resulting code into the `dist` folder.
-
-```shell
-npm run build
+```
+npm install -g homebridge-plugin-template
 ```
 
-### Link To Homebridge
+## Configuration
 
-Run this command so your global installation of Homebridge can discover the plugin in your development environment:
+Set it up in the plugin's settings in the Homebridge UI, or add a platform block to config.json:
 
-```shell
-npm link
-```
-
-You can now start Homebridge, use the `-D` flag, so you can see debug log messages in your plugin:
-
-```shell
-homebridge -D
-```
-
-### Watch For Changes and Build Automatically
-
-If you want to have your code compile automatically as you make changes, and restart Homebridge automatically between changes, you first need to add your plugin as a platform in `./test/hbConfig/config.json`:
-```
+```json
 {
-...
-    "platforms": [
-        {
-            "name": "Config",
-            "port": 8581,
-            "platform": "config"
-        },
-        {
-            "name": "<PLUGIN_NAME>",
-            //... any other options, as listed in config.schema.json ...
-            "platform": "<PLATFORM_NAME>"
-        }
-    ]
+  "platform": "ExampleHomebridgePlugin",
+  "name": "Example Dynamic Platform"
 }
 ```
 
-and then you can run:
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `name` | `Example Dynamic Platform` | The platform's name in the Homebridge log. |
 
-```shell
-npm run watch
+## Development
+
+The plugin and its tests are written in TypeScript (`src/`, `test/`). It's published as
+compiled JavaScript (`dist/`), which npm builds on `npm ci`, `npm pack` and `npm publish`.
+
+```
+npm ci          # installs and builds
+npm test        # runs the tests against the TypeScript sources
+npm run check   # type checking
+npm run lint    # oxlint
+npm run build   # build only
+npm run verify  # everything CI checks, including the settings schema and README examples
+npm run watch   # rebuilds and restarts a local Homebridge (test/hbConfig) on every change
 ```
 
-This will launch an instance of Homebridge in debug mode which will restart every time you make a change to the source code. It will load the config stored in the default location under `~/.homebridge`. You may need to stop other running instances of Homebridge while using this command to prevent conflicts. You can adjust the Homebridge startup command in the [`nodemon.json`](./nodemon.json) file.
+`npm publish` runs `npm run verify` first.
 
-### Customise Plugin
+Releases are published to npm by GitHub Actions (`.github/workflows/publish.yml`, the same in the author's other plugins) when a GitHub release is published. The tag must be `v` followed by the version in `package.json`, and **Set as a pre-release** must be ticked exactly for a version with a `-`; a release without notes gets the CHANGELOG section for the version. The workflow runs `npm run release:check`, adds the package and its `SHA256SUMS` to the release, and publishes that package with npm's trusted publishing: a `-dev-` version to npm's `dev` tag, any other pre-release to `beta`, a stable version to `latest` (and then removes an older `beta`). **Run workflow** with a release's tag publishes a release that already exists. CI (`.github/workflows/ci.yml`, also shared) runs `npm run verify` on Node 24 and `npm run test:matrix` on Node 22, 24 and 26.
 
-You can now start customising the plugin template to suit your requirements.
+Each version has a section in `CHANGELOG.md`: `## 1.2.3 - date`, an optional one-line summary, then bullets (no Added/Changed/Fixed headings). A release published without notes takes that section as its notes.
 
-- [`src/platform.ts`](./src/platform.ts) - this is where your device setup and discovery should go.
-- [`src/platformAccessory.ts`](./src/platformAccessory.ts) - this is where your accessory control logic should go, you can rename or create multiple instances of this file for each accessory type you need to implement as part of your platform plugin. You can refer to the [developer documentation](https://developers.homebridge.io/) to see what characteristics you need to implement for each service type.
-- [`config.schema.json`](./config.schema.json) - update the config schema to match the config you expect from the user. See the [Plugin Config Schema Documentation](https://developers.homebridge.io/#/config-screen/schema).
+## License
 
-### Versioning Your Plugin
-
-Given a version number `MAJOR`.`MINOR`.`PATCH`, such as `1.4.3`, increment the:
-
-1. **MAJOR** version when you make breaking changes to your plugin,
-2. **MINOR** version when you add functionality in a backwards compatible manner, and
-3. **PATCH** version when you make backwards compatible bug fixes.
-
-You can use the `npm version` command to help you with this:
-
-```shell
-# major update / breaking changes
-npm version major
-
-# minor update / new features
-npm version update
-
-# patch / bugfixes
-npm version patch
-```
-
-### Publish Package
-
-When you are ready to publish your plugin to [npm](https://www.npmjs.com/), make sure you have removed the `private` attribute from the [`package.json`](./package.json) file then run:
-
-```shell
-npm publish
-```
-
-If you are publishing a scoped plugin, i.e. `@username/homebridge-xxx` you will need to add `--access=public` to command the first time you publish.
-
-#### Publishing Beta Versions
-
-You can publish *beta* versions of your plugin for other users to test before you release it to everyone.
-
-```shell
-# create a new pre-release version (eg. 2.1.0-beta.1)
-npm version prepatch --preid beta
-
-# publish to @beta
-npm publish --tag beta
-```
-
-Users can then install the  *beta* version by appending `@beta` to the install command, for example:
-
-```shell
-sudo npm install -g homebridge-example-plugin@beta
-```
-
-### Best Practices
-
-Consider creating your plugin with the [Homebridge Verified](https://github.com/homebridge/plugins) criteria in mind. This will help you to create a plugin that is easy to use and works well with Homebridge.
-You can then submit your plugin to the Homebridge Verified list for review.
-The most up-to-date criteria can be found on the [Verified Plugins](https://github.com/homebridge/plugins/wiki/Verified-Plugins) wiki page.
-
-### Useful Links
-
-Note these links are here for help but are not supported/verified by the Homebridge team
-
-- [Custom Characteristics](https://github.com/homebridge/homebridge-plugin-template/issues/20)
+Apache-2.0, as Homebridge's template.

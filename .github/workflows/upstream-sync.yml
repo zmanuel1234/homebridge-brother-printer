@@ -1,0 +1,52 @@
+# This repository only (not shared with the plugins): keeps the template in step with
+# homebridge/homebridge-plugin-template, whose history it shares. Every week (or on "Run workflow")
+# it checks whether the official template has new commits; if so it pushes them to the
+# "upstream-sync" branch and opens a pull request to merge them, which CI then checks. Review it:
+# where the official template changed something this template replaces (ESLint, its build
+# workflow, its README or example), keep this template's version.
+# Needs "Allow GitHub Actions to create and approve pull requests" (Settings -> Actions -> General).
+name: Sync with homebridge/homebridge-plugin-template
+
+on:
+  schedule:
+    - cron: '23 7 * * 1'   # Mondays
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: New commits in the official template?
+        id: upstream
+        run: |
+          git fetch --no-tags https://github.com/homebridge/homebridge-plugin-template latest
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo "Up to date with homebridge/homebridge-plugin-template."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$(git rev-parse --short FETCH_HEAD)" >> "$GITHUB_OUTPUT"
+            git log --oneline HEAD..FETCH_HEAD
+          fi
+      - name: Open a pull request with them
+        if: steps.upstream.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.upstream.outputs.sha }}
+        run: |
+          git push --force origin FETCH_HEAD:refs/heads/upstream-sync
+          if [ "$(gh pr list --head upstream-sync --state open --json number --jq length)" = 0 ]; then
+            gh pr create --head upstream-sync --base main \
+              --title "Sync with homebridge/homebridge-plugin-template ($SHA)" \
+              --body "New commits in the official template. Where it changed something this template replaces (ESLint, its build workflow, its README or example), keep this template's version; the rest can usually be taken as it is."
+          else
+            echo "The open upstream-sync pull request now includes $SHA."
+          fi
