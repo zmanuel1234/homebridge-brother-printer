@@ -5,15 +5,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { API, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
-import { BrotherPrinterPlatform } from '../src/platform';
-import { PrinterAccessory } from '../src/accessory';
+import { BrotherPrinterPlatform } from '../src/platform.js';
+import { PrinterAccessory } from '../src/accessory.js';
 import type * as HapNodejs from '@homebridge/hap-nodejs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 type Hap = typeof HapNodejs;
 let hap: Hap | null = null;
 let loadError = '';
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   hap = require('@homebridge/hap-nodejs') as Hap;
 } catch (err) {
   loadError = (err as Error).message.split('\n')[0];

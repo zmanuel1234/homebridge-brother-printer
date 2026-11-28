@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as d from '../src/decode';
-import { parse } from '../src/snmp';
-import type { RawReadings } from '../src/snmp';
-import fx from './fixtures';
+import * as d from '../src/decode.js';
+import { parse } from '../src/snmp.js';
+import type { RawReadings } from '../src/snmp.js';
+import fx from './fixtures.js';
 
 /** The capture as net-snmp would return it */
 const buffers = (): RawReadings => {

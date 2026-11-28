@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { broadcastAddresses, discover, findResponders, getRequest } from '../src/discover';
-import { testPrinter } from '../src/homebridge-ui/server';
-import * as snmp from '../src/snmp';
-import type { QueryOptions, QueryResult } from '../src/snmp';
-import { startFakePrinter } from './fake-agent';
-import modelsJson from './fixtures/brother-models.json';
+import { broadcastAddresses, discover, findResponders, getRequest } from '../src/discover.js';
+import { testPrinter } from '../src/homebridge-ui/server.js';
+import * as snmp from '../src/snmp.js';
+import type { QueryOptions, QueryResult } from '../src/snmp.js';
+import { startFakePrinter } from './fake-agent.js';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
 
 const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }>;
 const fromModel = (name: string): QueryResult => ({ ...snmp.parse(models[name].raw), snmpVersion: '2c' });
@@ -105,7 +105,7 @@ test('test connection: explains a missing address, bad SNMPv3 settings and a fai
 
 /* --------------------------------------------------------- UI server process */
 
-const server = join(__dirname, '..', 'dist', 'homebridge-ui', 'server.js');
+const server = join(import.meta.dirname, '..', 'dist', 'homebridge-ui', 'server.js');
 
 test('UI server: starts like the Homebridge UI starts it, and answers requests', {
   skip: existsSync(server) ? false : 'dist/ not built; run npm run build', timeout: 20000,

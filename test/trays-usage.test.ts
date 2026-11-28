@@ -7,18 +7,18 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { trayName, traysFromIpp, traysFromTable } from '../src/trays';
-import { INPUT_TABLE, query, readTrays } from '../src/snmp';
+import { trayName, traysFromIpp, traysFromTable } from '../src/trays.js';
+import { INPUT_TABLE, query, readTrays } from '../src/snmp.js';
 import type * as snmpLib from 'net-snmp';
-import { parseResponse, toPrinterData } from '../src/ipp';
+import { parseResponse, toPrinterData } from '../src/ipp.js';
 import { readFileSync } from 'node:fs';
-import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from '../src/usage';
-import type { UsageSample } from '../src/usage';
-import { cachedUsage, testPrinter } from '../src/homebridge-ui/server';
-import { startFakePrinter } from './fake-agent';
-import { parse } from '../src/snmp';
-import type { RawReadings } from '../src/snmp';
-import modelsJson from './fixtures/brother-models.json';
+import { addSample, daysLeft, describeDays, describeLeft, pagesInLast } from '../src/usage.js';
+import type { UsageSample } from '../src/usage.js';
+import { cachedUsage, testPrinter } from '../src/homebridge-ui/server.js';
+import { startFakePrinter } from './fake-agent.js';
+import { parse } from '../src/snmp.js';
+import type { RawReadings } from '../src/snmp.js';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
 
 const models = modelsJson as unknown as Record<string, { raw: RawReadings }>;
 const fromModel = (name: string) => parse(models[name].raw);
@@ -80,13 +80,13 @@ test('trays: type and status (HP marks its bypass tray "on request"; unknown sta
 });
 
 test('trays: from real IPP answers (HP LaserJet M605, Epson XP-6000)', () => {
-  const read = (f: string) => toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', f))).printer).trays!;
+  const read = (f: string) => toPrinterData(parseResponse(readFileSync(join(import.meta.dirname, 'fixtures', 'ipp', f))).printer).trays!;
   assert.equal(show(read('hp-laserjet-m605.bin')), 'Tray 3 ok, Tray 2 ok, Tray 1* empty 0');
   assert.ok(read('epson-xp-6000.bin').every((t) => t.state === 'unknown'));
 });
 
 test('firmware: from IPP printer-firmware-string-version, as the printer gives it', () => {
-  const firmware = (f: string) => toPrinterData(parseResponse(readFileSync(join(__dirname, 'fixtures', 'ipp', f))).printer).firmware;
+  const firmware = (f: string) => toPrinterData(parseResponse(readFileSync(join(import.meta.dirname, 'fixtures', 'ipp', f))).printer).firmware;
   assert.equal(firmware('canon-ts6000.bin'), '2.0');
   assert.equal(firmware('hp-laserjet-m605.bin'), '2307781_551188');
 });

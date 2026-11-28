@@ -6,11 +6,11 @@
 // names and numbers those printers report.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLORANT_VALUES, SUPPLIES_TABLE, modelOf, parse, query, readSupplies, suppliesFromVarbinds } from '../src/snmp';
+import { COLORANT_VALUES, SUPPLIES_TABLE, modelOf, parse, query, readSupplies, suppliesFromVarbinds } from '../src/snmp.js';
 import type * as snmpLib from 'net-snmp';
-import type { RawReadings } from '../src/snmp';
-import { startFakePrinter } from './fake-agent';
-import type { FakeSupply } from './fake-agent';
+import type { RawReadings } from '../src/snmp.js';
+import { startFakePrinter } from './fake-agent.js';
+import type { FakeSupply } from './fake-agent.js';
 
 const levels = (r: { supplies: { color: string; level: number }[] }): string => r.supplies.map((s) => `${s.color} ${s.level}`).join(', ');
 

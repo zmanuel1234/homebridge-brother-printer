@@ -4,7 +4,7 @@
  * Both give a tray's name, its capacity and how much paper is in it: a number of
  * sheets, -3 "some paper", 0 empty, or -2 / -1 unknown.
  */
-import { text } from './text';
+import { text } from './text.js';
 
 export type TrayState = 'empty' | 'low' | 'ok' | 'unknown';
 

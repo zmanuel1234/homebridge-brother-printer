@@ -3,9 +3,9 @@
  * records, the most detail), IPP (AirPrint, when SNMP is off or gives no
  * levels), or auto: SNMP, and IPP when SNMP doesn't answer.
  */
-import { ippQuery } from './ipp';
-import { query } from './snmp';
-import type { QueryOptions, QueryResult } from './snmp';
+import { ippQuery } from './ipp.js';
+import { query } from './snmp.js';
+import type { QueryOptions, QueryResult } from './snmp.js';
 
 /** The IPP address Brother printers use, for a host name or address */
 export function defaultIppUrl(host: string): string {

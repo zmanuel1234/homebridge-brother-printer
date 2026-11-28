@@ -9,7 +9,7 @@
  * listened for there, for responders that only answer the multicast group.
  */
 import dgram from 'node:dgram';
-import { text } from './text';
+import { text } from './text.js';
 
 export const MDNS_ADDRESS = '224.0.0.251';
 export const MDNS_PORT = 5353;

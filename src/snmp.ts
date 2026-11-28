@@ -1,12 +1,13 @@
 import type { EventEmitter } from 'node:events';
-import * as snmp from 'net-snmp';
-import * as decode from './decode';
-import { manufacturerOf, mapMarkers } from './markers';
-import type { Marker } from './markers';
-import { traysFromTable } from './trays';
-import type { Tray } from './trays';
-import type { Color, Drum, Part, PartKey, PrinterError, PrinterType, RawValue, StatusSummary, Supply } from './decode';
-import { text } from './text';
+import snmp from 'net-snmp';
+import type * as Snmp from 'net-snmp';
+import * as decode from './decode.js';
+import { manufacturerOf, mapMarkers } from './markers.js';
+import type { Marker } from './markers.js';
+import { traysFromTable } from './trays.js';
+import type { Tray } from './trays.js';
+import type { Color, Drum, Part, PartKey, PrinterError, PrinterType, RawValue, StatusSummary, Supply } from './decode.js';
+import { text } from './text.js';
 
 export const OID = {
   maintenance: '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.8.0', // brInfoMaintenance
@@ -167,7 +168,7 @@ const NAMES = Object.keys(OID) as OidName[];
 const VERSIONS = { '2c': snmp.Version2c, 1: snmp.Version1 } as const;
 
 /** net-snmp's user for a v3 session; throws on settings that can't work */
-export function v3User(v3: V3User | undefined): snmp.User {
+export function v3User(v3: V3User | undefined): Snmp.User {
   if (!v3 || !v3.user) { throw new Error('SNMPv3 needs a user name'); }
   const auth = v3.authProtocol && v3.authProtocol !== 'none' ? v3.authProtocol : null;
   const priv = v3.privProtocol && v3.privProtocol !== 'none' ? v3.privProtocol : null;
@@ -175,7 +176,7 @@ export function v3User(v3: V3User | undefined): snmp.User {
   // Keys shorter than 8 characters are refused by SNMPv3 (RFC 3414)
   if (auth && (v3.authPassword || '').length < 8) { throw new Error('SNMPv3 authentication password must be at least 8 characters'); }
   if (priv && (v3.privPassword || '').length < 8) { throw new Error('SNMPv3 privacy password must be at least 8 characters'); }
-  const user: snmp.User = {
+  const user: Snmp.User = {
     name: v3.user,
     level: priv ? snmp.SecurityLevel.authPriv : auth ? snmp.SecurityLevel.authNoPriv : snmp.SecurityLevel.noAuthNoPriv,
   };
@@ -197,8 +198,8 @@ export function v3User(v3: V3User | undefined): snmp.User {
  * a time. So a bulk walk that times out is tried again row by row, and once that works,
  * the printer is read row by row from then on (state.noBulk).
  */
-export async function subtree(session: snmp.Session, oid: string, limit: number,
-  state: NonNullable<QueryOptions['state']> = {}): Promise<snmp.Varbind[]> {
+export async function subtree(session: Snmp.Session, oid: string, limit: number,
+  state: NonNullable<QueryOptions['state']> = {}): Promise<Snmp.Varbind[]> {
   // v1 has no bulk requests (net-snmp walks it row by row anyway)
   if (state.noBulk || (session as unknown as { version?: number }).version === snmp.Version1) { return nextWalk(session, oid, limit); }
   try {
@@ -213,9 +214,9 @@ export async function subtree(session: snmp.Session, oid: string, limit: number,
 
 const isTimeout = (err: unknown): boolean => /time(d)? ?out/i.test((err as Error)?.message ?? '');
 
-export function bulkWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
+export function bulkWalk(session: Snmp.Session, oid: string, limit: number): Promise<Snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
-    const out: snmp.Varbind[] = [];
+    const out: Snmp.Varbind[] = [];
     session.subtree(oid, 20, (varbinds) => {
       for (const vb of varbinds) { if (!snmp.isVarbindError(vb)) { out.push(vb); } }
       return out.length >= limit; // true stops the walk
@@ -224,13 +225,13 @@ export function bulkWalk(session: snmp.Session, oid: string, limit: number): Pro
 }
 
 /** Row by row (GETNEXT), until the column ends or `limit` rows */
-export async function nextWalk(session: snmp.Session, oid: string, limit: number): Promise<snmp.Varbind[]> {
-  const out: snmp.Varbind[] = [];
+export async function nextWalk(session: Snmp.Session, oid: string, limit: number): Promise<Snmp.Varbind[]> {
+  const out: Snmp.Varbind[] = [];
   let at = oid;
   while (out.length < limit) {
-    let vb: snmp.Varbind | undefined;
+    let vb: Snmp.Varbind | undefined;
     try {
-      vb = (await new Promise<snmp.Varbind[]>((resolve, reject) => {
+      vb = (await new Promise<Snmp.Varbind[]>((resolve, reject) => {
         session.getNext([at], (err, varbinds) => (err ? reject(err) : resolve(varbinds ?? [])));
       }))[0];
     } catch (err) {
@@ -303,9 +304,9 @@ export function suppliesFromVarbinds(rows: { oid: string; value: unknown }[], co
  * printer that answers everything else isn't offline); a printer whose table never
  * reads is treated as having none.
  */
-export async function readSupplies(session: snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[] | null> {
+export async function readSupplies(session: Snmp.Session, charset: number | null, state: NonNullable<QueryOptions['state']>): Promise<Marker[] | null> {
   try {
-    const rows: snmp.Varbind[] = [];
+    const rows: Snmp.Varbind[] = [];
     for (const col of Object.values(COLUMN)) { rows.push(...await subtree(session, `${SUPPLIES_TABLE}.${col}`, MAX_ROWS, state)); }
     const wantsColorant = rows.some((vb) => vb.oid.startsWith(`${SUPPLIES_TABLE}.${COLUMN.colorant}.`) && typeof vb.value === 'number' && vb.value > 0);
     // Colors may come only from here (supplies named by part number), so once supplies have been
@@ -327,7 +328,7 @@ export async function readSupplies(session: snmp.Session, charset: number | null
  * or the levels there's nothing reliable to show, and a timeout stops the read (rather
  * than waiting on every column): both give undefined. Never fails the poll.
  */
-export async function readTrays(session: snmp.Session, state: NonNullable<QueryOptions['state']> = {}): Promise<{ oid: string; value: unknown }[] | undefined> {
+export async function readTrays(session: Snmp.Session, state: NonNullable<QueryOptions['state']> = {}): Promise<{ oid: string; value: unknown }[] | undefined> {
   const rows: { oid: string; value: unknown }[] = [];
   for (const col of TRAY_COLUMNS) {
     try {
@@ -339,7 +340,7 @@ export async function readTrays(session: snmp.Session, state: NonNullable<QueryO
   return rows;
 }
 
-function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
+function get(session: Snmp.Session, oids: string[]): Promise<Snmp.Varbind[]> {
   return new Promise((resolve, reject) => {
     session.get(oids, (err, varbinds) => (err ? reject(err) : resolve(varbinds || [])));
   });
@@ -350,7 +351,7 @@ function get(session: snmp.Session, oids: string[]): Promise<snmp.Varbind[]> {
  * request (noSuchName), so that OID is dropped and the request repeated.
  */
 /** A session for one printer; close it when done */
-export function openSession(options: QueryOptions, version: SnmpVersion): snmp.Session {
+export function openSession(options: QueryOptions, version: SnmpVersion): Snmp.Session {
   const common = {
     port: options.port || 161,
     timeout: options.timeout ?? 5000,

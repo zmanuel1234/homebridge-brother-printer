@@ -10,6 +10,7 @@
  * Raspberry Pi, so it's only loaded for printers that have history turned on.
  */
 import type { API, PlatformAccessory } from 'homebridge';
+import { createRequire } from 'node:module';
 
 export interface HistoryEntry {
   time: number;
@@ -33,8 +34,7 @@ let FakeGato: FakeGatoHistory | undefined;
 /** fakegato-history's history class, loaded on first use */
 export function fakeGato(api: API): FakeGatoHistory {
   if (!FakeGato) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const factory = require('fakegato-history') as (homebridge: API) => FakeGatoHistory;
+    const factory = createRequire(import.meta.url)('fakegato-history') as (homebridge: API) => FakeGatoHistory;
     FakeGato = factory(api);
   }
   return FakeGato;

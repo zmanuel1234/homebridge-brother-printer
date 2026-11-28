@@ -2,11 +2,11 @@
 // counter record) and IPP (printer-impressions-completed-col), and where they show.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { countsByKind, parseResponse, toPrinterData, REQUESTED } from '../src/ipp';
-import { monoPages, pageDetail, testSummary } from '../src/summary';
-import * as snmp from '../src/snmp';
-import type { QueryResult } from '../src/snmp';
-import modelsJson from './fixtures/brother-models.json';
+import { countsByKind, parseResponse, toPrinterData, REQUESTED } from '../src/ipp.js';
+import { monoPages, pageDetail, testSummary } from '../src/summary.js';
+import * as snmp from '../src/snmp.js';
+import type { QueryResult } from '../src/snmp.js';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
 
 const models = modelsJson as unknown as Record<string, { raw: snmp.RawReadings }>;
 const fromModel = (name: string): QueryResult => ({ ...snmp.parse(models[name].raw), snmpVersion: '2c' });

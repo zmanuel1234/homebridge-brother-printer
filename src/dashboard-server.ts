@@ -28,7 +28,7 @@ const FILES: Record<string, [string, string]> = {
 };
 
 /** The page's files: next to this file in dist/ (and src/ for tests) */
-export const PUBLIC_DIR = join(__dirname, 'homebridge-ui', 'public');
+export const PUBLIC_DIR = join(import.meta.dirname, 'homebridge-ui', 'public');
 
 /** Home network names public DNS doesn't serve: single labels and these endings */
 const LOCAL_NAMES = /\.(local|lan|home|home\.arpa|internal|localdomain)$/;

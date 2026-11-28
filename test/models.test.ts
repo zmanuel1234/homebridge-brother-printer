@@ -4,10 +4,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parse } from '../src/snmp';
-import type { PrinterData, RawReadings } from '../src/snmp';
-import type { Color, PartKey } from '../src/decode';
-import modelsJson from './fixtures/brother-models.json';
+import { parse } from '../src/snmp.js';
+import type { PrinterData, RawReadings } from '../src/snmp.js';
+import type { Color, PartKey } from '../src/decode.js';
+import modelsJson from './fixtures/brother-models.json' with { type: 'json' };
 
 interface ModelFixture {
   type: string;

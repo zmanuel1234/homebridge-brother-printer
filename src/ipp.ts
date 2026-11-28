@@ -10,12 +10,12 @@
  */
 import http from 'node:http';
 import https from 'node:https';
-import { printerType, summarizeStatus } from './decode';
-import type { PrinterError } from './decode';
-import { manufacturerOf, mapMarkers } from './markers';
-import type { Marker } from './markers';
-import { traysFromIpp } from './trays';
-import type { PrinterData } from './snmp';
+import { printerType, summarizeStatus } from './decode.js';
+import type { PrinterError } from './decode.js';
+import { manufacturerOf, mapMarkers } from './markers.js';
+import type { Marker } from './markers.js';
+import { traysFromIpp } from './trays.js';
+import type { PrinterData } from './snmp.js';
 
 /* --------------------------------------------------------------- encoding */
 
@@ -210,7 +210,7 @@ export function reasonErrors(reasons: IppValue[]): PrinterError[] {
   return [...out];
 }
 
-export { manufacturerOf, markerColor } from './markers';
+export { manufacturerOf, markerColor } from './markers.js';
 
 /** The printer's IPP attributes as the plugin's readings */
 export function toPrinterData(a: IppAttributes): PrinterData {

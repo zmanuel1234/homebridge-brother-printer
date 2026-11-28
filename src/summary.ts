@@ -2,11 +2,11 @@
  * A printer's reading in words, as the settings screen's connection test and
  * the dashboards show it.
  */
-import { COLOR_NAMES } from './decode';
-import { readVia } from './snmp';
-import type { PrinterData, QueryResult } from './snmp';
-import { describeLeft, pagesInLast } from './usage';
-import type { UsageSample } from './usage';
+import { COLOR_NAMES } from './decode.js';
+import { readVia } from './snmp.js';
+import type { PrinterData, QueryResult } from './snmp.js';
+import { describeLeft, pagesInLast } from './usage.js';
+import type { UsageSample } from './usage.js';
 
 /**
  * Black-and-white pages, on a printer that counts color ones: as it gives them, or the

@@ -5,19 +5,20 @@
  * settings are open.
  */
 import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-utils';
-import { discover } from '../discover';
-import { queryOptions } from '../accessory';
-import type { PrinterConfig } from '../accessory';
-import { readPrinter } from '../read';
-import type { UsageSample } from '../usage';
-import { testSummary } from '../summary';
-import type { CachedUsage, TestResult } from '../summary';
-import { readFileSync, readdirSync } from 'node:fs';
+import { discover } from '../discover.js';
+import { queryOptions } from '../accessory.js';
+import type { PrinterConfig } from '../accessory.js';
+import { readPrinter } from '../read.js';
+import type { UsageSample } from '../usage.js';
+import { testSummary } from '../summary.js';
+import type { CachedUsage, TestResult } from '../summary.js';
+import { readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { buildReport } from '../report';
+import { buildReport } from '../report.js';
 
-export { testSummary } from '../summary';
-export type { CachedUsage, TestResult } from '../summary';
+export { testSummary } from '../summary.js';
+export type { CachedUsage, TestResult } from '../summary.js';
 
 const errorText = (err: unknown): string => (err as { message?: string } | null)?.message || String(err);
 
@@ -114,6 +115,6 @@ export class BrotherPrinterUiServer extends HomebridgePluginUiServer {
 }
 
 // Started as a process by the Homebridge UI; tests import the functions above
-if (require.main === module) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   new BrotherPrinterUiServer();
 }
