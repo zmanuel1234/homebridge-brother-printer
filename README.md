@@ -62,7 +62,7 @@ and `npm run watch`, `test/hbConfig`, the homebridge-lib Eve types, `.vscode`, A
   at shutdown), and the package loads and registers its platform.
 - **The example is fully typed:** no `any` or `!`; the accessory's context has a type
   (`ExampleDevice`), a restored accessory gets the current device in its context before use,
-  homebridge-lib's Eve types have declarations (`src/types/homebridge-lib.d.ts`), and the motion
+  homebridge-lib's Eve types have strict declarations (`src/@types/homebridge-lib.d.ts`, which in Homebridge's template uses `any`), and the motion
   timer is cleared when Homebridge shuts down.
 - **Workflows:** `ci.yml` (verify, the Node matrix, npm signature audit), `publish.yml`
   (trusted publishing on a GitHub release) and `dependency-review.yml`, shared byte for byte with

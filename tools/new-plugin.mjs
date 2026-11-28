@@ -57,9 +57,10 @@ for (const file of files) {
   }
 }
 
-// A fresh version and changelog.
+// A fresh version, description and changelog.
 const updated = JSON.parse(readFileSync('package.json', 'utf8'))
 updated.version = '0.1.0'
+updated.description = `Homebridge plugin for ${displayName}.`
 writeFileSync('package.json', `${JSON.stringify(updated, null, 2)}\n`)
 writeFileSync('CHANGELOG.md', '# Changelog\n\n## 0.1.0 - unreleased\n\n- First version.\n')
 
